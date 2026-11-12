@@ -1,0 +1,272 @@
+import { AppError } from '../../utils/AppError.js';
+import { logger } from '../../utils/logger.js';
+import { StoredFile } from '../files/file.model.js';
+import { Folder } from '../files/folder.model.js';
+import { hiddenFolderIds } from '../files/folderAccess.js';
+import { toFileDto } from '../files/files.service.js';
+import { ensureDriveFolder } from '../files/folders.service.js';
+import { Project } from '../projects/project.model.js';
+import { Transcript } from './transcript.model.js';
+import { EXPORT_FORMATS } from './transcriptFormats.js';
+import { whisper } from './whisperClient.js';
+
+const TRANSCRIBABLE_CATEGORIES = new Set(['video', 'audio']);
+// Files uploaded on the Transcribe page land in this Drive folder.
+export const TRANSCRIPTIONS_FOLDER_NAME = 'Transcriptions';
+const HISTORY_PAGE_SIZE = 30;
+const PREVIEW_SEGMENTS = 3;
+const PREVIEW_CHARS = 180;
+
+export function isTranscribableCategory(category) {
+  return TRANSCRIBABLE_CATEGORIES.has(category);
+}
+
+function toTranscriptDto(transcript) {
+  return {
+    id: String(transcript._id),
+    fileId: String(transcript.fileId),
+    status: transcript.status,
+    language: transcript.language,
+    task: transcript.task,
+    detectedLanguage: transcript.detectedLanguage,
+    durationSec: transcript.durationSec,
+    progress: transcript.progress,
+    segments: transcript.segments.map(({ start, end, text }) => ({ start, end, text })),
+    error: transcript.error,
+    requestedBy: transcript.requestedBy?.name
+      ? { id: String(transcript.requestedBy._id), name: transcript.requestedBy.name }
+      : null,
+    createdAt: transcript.createdAt,
+    finishedAt: transcript.finishedAt,
+  };
+}
+
+function assertEnabled() {
+  if (!whisper.isEnabled()) {
+    throw AppError.unavailable('Speech-to-text is not set up on this server', 'TRANSCRIPTION_OFF');
+  }
+}
+
+// viewer: who is asking (see folderAccess.js). A file in a folder they can't
+// open looks like it doesn't exist. Internal callers pass none.
+async function findFileOrThrow(workspaceId, fileId, viewer = null) {
+  const file = await StoredFile.findOne({ _id: fileId, workspaceId })
+    .select('category storageKey deletedAt displayName folderId')
+    .lean();
+  const hidden = file ? await hiddenFolderIds(workspaceId, viewer) : null;
+  if (!file || hidden.has(String(file.folderId))) {
+    throw AppError.notFound('File not found', 'FILE_NOT_FOUND');
+  }
+  return file;
+}
+
+export function getTranscriptionConfig() {
+  return { enabled: whisper.isEnabled() };
+}
+
+export async function getTranscript(workspaceId, fileId, viewer = null) {
+  await findFileOrThrow(workspaceId, fileId, viewer);
+  const transcript = await Transcript.findOne({ workspaceId, fileId })
+    .populate('requestedBy', 'name')
+    .lean();
+  return transcript ? toTranscriptDto(transcript) : null;
+}
+
+// Queues a transcript, or starts over a finished or failed one.
+export async function requestTranscript(
+  workspaceId,
+  fileId,
+  userId,
+  { language, task },
+  viewer = null,
+) {
+  assertEnabled();
+  const file = await findFileOrThrow(workspaceId, fileId, viewer);
+  if (file.deletedAt) {
+    throw AppError.badRequest('Restore this file before transcribing it', 'FILE_IN_TRASH');
+  }
+  if (!TRANSCRIBABLE_CATEGORIES.has(file.category)) {
+    throw AppError.badRequest('Only video and audio files can be transcribed', 'NOT_TRANSCRIBABLE');
+  }
+  await queueTranscript(workspaceId, fileId, userId, { language, task });
+  return getTranscript(workspaceId, fileId);
+}
+
+// Called when an upload marked "transcribe" (the Transcribe page) is stored.
+// Never fails the upload: the file is kept, and the transcript can be started by hand.
+export async function queueTranscriptForUpload(file, { userId, language, task }) {
+  if (!whisper.isEnabled() || !TRANSCRIBABLE_CATEGORIES.has(file.category)) return;
+  try {
+    await queueTranscript(file.workspaceId, file._id, userId, { language, task });
+  } catch (err) {
+    logger.warn({ err, fileId: String(file._id) }, 'Could not queue the transcript of an upload');
+  }
+}
+
+async function queueTranscript(workspaceId, fileId, userId, { language, task }) {
+  const fresh = {
+    status: 'queued',
+    language: language ?? null,
+    task,
+    detectedLanguage: null,
+    durationSec: null,
+    progress: 0,
+    segments: [],
+    error: null,
+    whisperJobId: null,
+    attempts: 0,
+    requestedBy: userId,
+    startedAt: null,
+    finishedAt: null,
+  };
+  // Only replaces a transcript that is not being worked on right now.
+  const replaced = await Transcript.findOneAndUpdate(
+    { workspaceId, fileId, status: { $in: ['done', 'failed'] } },
+    { $set: fresh },
+    { new: true },
+  );
+  if (!replaced) {
+    try {
+      await Transcript.create({ workspaceId, fileId, ...fresh });
+    } catch (err) {
+      if (err.code === 11000) {
+        throw AppError.conflict('This file is already being transcribed', 'TRANSCRIPT_IN_PROGRESS');
+      }
+      throw err;
+    }
+  }
+}
+
+// The Drive folder the Transcribe page uploads into, created on first use.
+export async function getTranscriptionsFolder(workspaceId, userId) {
+  return ensureDriveFolder(workspaceId, TRANSCRIPTIONS_FOLDER_NAME, userId);
+}
+
+function previewText(segments) {
+  const text = segments.map((segment) => segment.text).join(' ');
+  return text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS).trimEnd()}…` : text;
+}
+
+async function namesById(Model, workspaceId, ids, field = 'name') {
+  const unique = [...new Set(ids.filter(Boolean).map(String))];
+  if (unique.length === 0) return new Map();
+  const rows = await Model.find({ _id: { $in: unique }, workspaceId })
+    .select(field)
+    .lean();
+  return new Map(rows.map((row) => [String(row._id), row[field]]));
+}
+
+// Every transcript in the workspace, newest first, without the full text: each
+// row carries a short preview, the file (to open it) and where the file lives.
+// Pass the returned nextCursor to get older ones.
+export async function listTranscripts(workspaceId, { cursor } = {}, viewer = null) {
+  const filter = { workspaceId };
+  if (cursor) filter._id = { $lt: cursor };
+  const transcripts = await Transcript.find(filter)
+    .sort({ _id: -1 })
+    .limit(HISTORY_PAGE_SIZE + 1)
+    .select({ segments: { $slice: PREVIEW_SEGMENTS } })
+    .populate('requestedBy', 'name')
+    .lean();
+  const hasMore = transcripts.length > HISTORY_PAGE_SIZE;
+  const page = hasMore ? transcripts.slice(0, HISTORY_PAGE_SIZE) : transcripts;
+
+  const files = await StoredFile.find({ _id: { $in: page.map((t) => t.fileId) }, workspaceId })
+    .populate('uploadedBy', 'name')
+    .lean();
+  const fileById = new Map(files.map((file) => [String(file._id), file]));
+  const hidden = await hiddenFolderIds(workspaceId, viewer);
+  const isHidden = (transcript) => {
+    const file = fileById.get(String(transcript.fileId));
+    return Boolean(file) && hidden.has(String(file.folderId));
+  };
+  const [folderNames, projectNames] = await Promise.all([
+    namesById(
+      Folder,
+      workspaceId,
+      files.map((file) => file.folderId),
+    ),
+    namesById(
+      Project,
+      workspaceId,
+      files.map((file) => file.projectId),
+    ),
+  ]);
+
+  // Transcripts of files in folders the viewer can't open are left out, so a
+  // page can come back shorter than the page size.
+  const items = page
+    .filter((transcript) => !isHidden(transcript))
+    .map((transcript) => {
+      const file = fileById.get(String(transcript.fileId));
+      const { segments, ...dto } = toTranscriptDto(transcript);
+      return {
+        ...dto,
+        preview: previewText(segments),
+        file: file ? toFileDto(file) : null,
+        location: file
+          ? {
+              projectId: file.projectId ? String(file.projectId) : null,
+              projectName: file.projectId
+                ? (projectNames.get(String(file.projectId)) ?? null)
+                : null,
+              folderId: String(file.folderId),
+              folderName: folderNames.get(String(file.folderId)) ?? null,
+            }
+          : null,
+      };
+    });
+  return { transcripts: items, nextCursor: hasMore ? String(page.at(-1)._id) : null };
+}
+
+async function cancelRunningJobs(transcripts) {
+  await Promise.all(
+    transcripts
+      .filter((transcript) => transcript.status === 'processing' && transcript.whisperJobId)
+      .map((transcript) =>
+        whisper
+          .cancelJob(transcript.whisperJobId)
+          .catch((err) => logger.warn({ err }, 'Could not cancel a Whisper job')),
+      ),
+  );
+}
+
+export async function deleteTranscript(workspaceId, fileId, viewer = null) {
+  await findFileOrThrow(workspaceId, fileId, viewer);
+  const transcript = await Transcript.findOneAndDelete({ workspaceId, fileId }).lean();
+  if (transcript) await cancelRunningJobs([transcript]);
+}
+
+// Called when files are deleted for good (one file, a project, a workspace).
+export async function deleteTranscriptsForFiles(workspaceId, fileIds) {
+  if (fileIds.length === 0) return;
+  const filter = { workspaceId, fileId: { $in: fileIds } };
+  const transcripts = await Transcript.find(filter).select('status whisperJobId').lean();
+  if (transcripts.length === 0) return;
+  await Transcript.deleteMany(filter);
+  await cancelRunningJobs(transcripts);
+}
+
+function baseName(displayName) {
+  return displayName.replace(/\.[^.]+$/, '') || 'transcript';
+}
+
+export async function exportTranscript(workspaceId, fileId, format, viewer = null) {
+  const file = await findFileOrThrow(workspaceId, fileId, viewer);
+  const transcript = await Transcript.findOne({ workspaceId, fileId }).lean();
+  if (!transcript || transcript.segments.length === 0) {
+    throw AppError.notFound('This file has no transcript yet', 'TRANSCRIPT_NOT_FOUND');
+  }
+  const { mime, render } = EXPORT_FORMATS[format];
+  return {
+    fileName: `${baseName(file.displayName)}.${format}`,
+    mime,
+    content: render(transcript.segments),
+  };
+}
+
+export async function transcribeDictation(audio, { mime, language }) {
+  assertEnabled();
+  if (!audio?.length) throw AppError.badRequest('The recording is empty', 'EMPTY_RECORDING');
+  return whisper.transcribeClip(audio, { mime, language });
+}

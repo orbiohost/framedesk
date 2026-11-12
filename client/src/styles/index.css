@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Soft lavender canvas, white cards, near-black pills; violet, pink and peach pastels. */
+  :root {
+    --color-bg: 245 244 248;
+    --color-surface: 255 255 255;
+    --color-subtle: 240 238 246;
+    --color-line: 232 229 239;
+    --color-ink: 22 21 27;
+    --color-muted: 112 109 124;
+    --color-accent: 139 84 232;
+    --color-accent-ink: 255 255 255;
+    --color-danger: 225 62 50;
+    --color-success: 34 140 84;
+    --color-warning: 214 140 20;
+    /* Pastel fills for chips, calendar ranges and widgets. */
+    --color-lavender: 226 210 252;
+    --color-pink: 252 214 226;
+    --color-peach: 254 226 178;
+    --color-mint: 206 240 222;
+    --color-canvas-from: 238 234 248;
+    --color-canvas-to: 247 240 246;
+    /* Single-series chart fill. */
+    --color-chart: 139 84 232;
+    color-scheme: light;
+  }
+
+  .dark {
+    --color-bg: 22 21 28;
+    --color-surface: 31 30 39;
+    --color-subtle: 40 38 50;
+    --color-line: 52 50 64;
+    --color-ink: 241 239 247;
+    --color-muted: 162 158 180;
+    --color-accent: 186 150 255;
+    --color-accent-ink: 22 21 28;
+    --color-danger: 255 120 104;
+    --color-success: 112 204 150;
+    --color-warning: 240 184 90;
+    --color-lavender: 74 56 118;
+    --color-pink: 104 48 72;
+    --color-peach: 102 74 34;
+    --color-mint: 36 82 62;
+    --color-canvas-from: 16 15 21;
+    --color-canvas-to: 24 20 30;
+    --color-chart: 186 150 255;
+    color-scheme: dark;
+  }
+
+  html {
+    @apply bg-bg text-ink antialiased;
+  }
+
+  body {
+    @apply font-sans text-[15px] leading-6;
+    min-height: 100vh;
+    background-color: rgb(var(--color-canvas-from));
+    background-image:
+      radial-gradient(60rem 40rem at 0% 0%, rgb(var(--color-lavender) / 0.55), transparent 60%),
+      radial-gradient(50rem 36rem at 100% 100%, rgb(var(--color-pink) / 0.45), transparent 60%),
+      linear-gradient(180deg, rgb(var(--color-canvas-from)), rgb(var(--color-canvas-to)));
+    background-attachment: fixed;
+  }
+
+  /* Display type: Plus Jakarta Sans, semibold and slightly tightened. */
+  .font-display {
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  :focus-visible {
+    @apply ring-accent ring-offset-bg outline-none ring-2 ring-offset-2;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* The dark glossy pill used for the active nav item, tabs and primary buttons. */
+  .pill-active {
+    color: rgb(var(--color-bg));
+    background-image: linear-gradient(180deg, rgb(var(--color-ink) / 0.78), rgb(var(--color-ink)));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      0 6px 14px -6px rgb(var(--color-ink) / 0.55);
+  }
+
+  .widget-lavender {
+    background-image: linear-gradient(
+      160deg,
+      rgb(var(--color-lavender) / 0.55),
+      rgb(var(--color-lavender))
+    );
+  }
+
+  .widget-pink {
+    background-image: linear-gradient(160deg, rgb(var(--color-pink) / 0.5), rgb(var(--color-pink)));
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--color-line)) transparent;
+  }
+}
+
+/* Media player: the audio "equaliser" bars and the play/pause flash. */
+@keyframes eq {
+  0%,
+  100% {
+    height: 4px;
+  }
+  50% {
+    height: 18px;
+  }
+}
+
+@keyframes flash {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.85);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.35);
+  }
+}
+
+/* The buffering spinner stays hidden for the first moments of a stall. It is an
+   opacity fade only, so it is fine with reduced motion too. */
+@keyframes spinner-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*='animate-[eq'],
+  [class*='animate-[flash'] {
+    animation: none !important;
+  }
+}
+
+/* Media player volume slider: a thin track filled up to --fill, white on the
+   dark video chrome, accent on the light audio card. */
+.player-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    rgb(255 255 255) var(--fill, 100%),
+    rgb(255 255 255 / 0.25) var(--fill, 100%)
+  );
+}
+.player-range-light {
+  background: linear-gradient(
+    to right,
+    rgb(var(--color-accent)) var(--fill, 100%),
+    rgb(var(--color-ink) / 0.12) var(--fill, 100%)
+  );
+}
+.player-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  width: 12px;
+  border-radius: 9999px;
+  background: white;
+  box-shadow:
+    0 0 0 3px rgb(var(--color-accent)),
+    0 1px 3px rgb(0 0 0 / 0.4);
+}
+.player-range::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  border: 0;
+  border-radius: 9999px;
+  background: white;
+  box-shadow:
+    0 0 0 3px rgb(var(--color-accent)),
+    0 1px 3px rgb(0 0 0 / 0.4);
+}
+.player-range:focus-visible {
+  --tw-ring-offset-width: 0px;
+}
+
+/* White hover washes vanish on the light audio card; use the theme's tint. */
+.player-light .player-btn:hover,
+.player-light .player-btn[aria-pressed='true'] {
+  background-color: rgb(var(--color-subtle));
+}
+
+/* "⋯" menus: a quick scale-in popover, and a bottom sheet that slides up on phones. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

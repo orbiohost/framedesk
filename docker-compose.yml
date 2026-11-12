@@ -1,0 +1,55 @@
+# docker compose up -d --build
+# App settings live in ./server/.env; the values below override it for the container.
+services:
+  api:
+    build:
+      context: .
+      target: api
+    restart: unless-stopped
+    env_file: ./server/.env
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      TZ: Asia/Kolkata
+      # Host LiteSpeed -> nginx container -> API
+      TRUST_PROXY: 2
+      COOKIE_SECURE: 'true'
+      CLIENT_URL: https://${DOMAIN:?Set DOMAIN in .env next to docker-compose.yml}
+      # Files live in S3 (S3_* in server/.env); this volume only holds unfinished uploads.
+      UPLOAD_STAGING_DIR: /data/upload-staging
+      # Speech-to-text (transcripts, dictation). Remove both lines to turn it off.
+      WHISPER_URL: http://whisper:9000
+      WHISPER_API_KEY: ${WHISPER_API_KEY:?Set WHISPER_API_KEY in .env next to docker-compose.yml}
+    volumes:
+      - framedesk_data:/data
+
+  # Free, self-hosted OpenAI Whisper (faster-whisper). No ports: only the API reaches it.
+  whisper:
+    build: ./whisper
+    restart: unless-stopped
+    environment:
+      WHISPER_API_KEY: ${WHISPER_API_KEY}
+      # large-v3 = best accuracy. large-v3-turbo is ~6x faster with nearly the same
+      # quality, and is the better pick on a CPU-only server.
+      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
+      WHISPER_DEVICE: cpu
+      # 0 = use every core. Lower it to leave CPU for the API and Nginx.
+      WHISPER_CPU_THREADS: ${WHISPER_CPU_THREADS:-0}
+    # Downloads each file from a signed S3 link, so it needs outbound internet access.
+    volumes:
+      # Downloaded model weights (~3 GB for large-v3), kept across rebuilds.
+      - whisper_models:/models
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '${HTTP_BIND:-127.0.0.1:8086}:80'
+
+volumes:
+  framedesk_data:
+  whisper_models:

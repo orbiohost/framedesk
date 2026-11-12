@@ -1,0 +1,169 @@
+import { AppError } from '../../utils/AppError.js';
+import { containsInsensitive } from '../../utils/objects.js';
+import { Payment } from '../billing/payment.model.js';
+import { findPlan, planStorageBytes } from '../plans/plans.service.js';
+import { User } from '../users/user.model.js';
+import { findPoolWorkspace } from '../workspaces/storagePool.js';
+import { Workspace, storageLimitBytes } from '../workspaces/workspace.model.js';
+import { recordAudit } from './auditLog.service.js';
+
+const PAYING_STATUSES = ['active', 'past_due'];
+
+function addInterval(from, interval) {
+  const end = new Date(from);
+  end.setMonth(end.getMonth() + (interval === 'yearly' ? 12 : 1));
+  return end;
+}
+
+// Monthly value of a subscription: yearly plans count as a twelfth per month.
+export function monthlyValue(billing) {
+  if (!PAYING_STATUSES.includes(billing.status) || !billing.amount) return 0;
+  return billing.interval === 'yearly' ? billing.amount / 12 : billing.amount;
+}
+
+function toSubscriptionDto(workspace, owner) {
+  return {
+    workspaceId: String(workspace._id),
+    workspaceName: workspace.name,
+    owner: owner ? { id: String(owner._id), name: owner.name, email: owner.email } : null,
+    billing: workspace.billing,
+    monthlyValue: Math.round(monthlyValue(workspace.billing)),
+    storage: { usedBytes: workspace.storage.usedBytes, limitBytes: storageLimitBytes(workspace) },
+    createdAt: workspace.createdAt,
+  };
+}
+
+// Plans live on the owner's account workspace; a workspace that shares it
+// resolves to that account, so a payment there covers all of the owner's workspaces.
+async function findWorkspaceOrThrow(workspaceId) {
+  const workspace = await Workspace.findById(workspaceId).lean();
+  if (!workspace) throw AppError.notFound('Workspace not found');
+  return findPoolWorkspace(workspace);
+}
+
+export async function listSubscriptions({ status, plan, q }) {
+  // Workspaces sharing an owner's account have no subscription of their own.
+  const filter = { storagePoolId: null };
+  if (status) filter['billing.status'] = status;
+  if (plan) filter['billing.planCode'] = plan;
+  if (q) {
+    const owners = await User.find({ email: containsInsensitive(q) })
+      .select('_id')
+      .lean();
+    filter.$or = [
+      { name: containsInsensitive(q) },
+      { ownerId: { $in: owners.map((user) => user._id) } },
+    ];
+  }
+
+  const workspaces = await Workspace.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(300)
+    .populate('ownerId', 'name email')
+    .lean();
+  return workspaces.map((workspace) => toSubscriptionDto(workspace, workspace.ownerId));
+}
+
+// Puts a workspace on a paid plan until `periodEnd`, with that plan's storage.
+async function applyPlan(workspaceId, { planCode, interval, amount, periodEnd }) {
+  const plan = findPlan(planCode);
+  await Workspace.updateOne(
+    { _id: workspaceId },
+    {
+      $set: {
+        'billing.planCode': plan.code,
+        'billing.status': 'active',
+        'billing.interval': interval,
+        'billing.amount': amount,
+        'billing.trialEndsAt': null,
+        'billing.canceledAt': null,
+        'billing.currentPeriodEnd': periodEnd,
+        'storage.planLimitBytes': planStorageBytes(plan),
+      },
+    },
+  );
+}
+
+// A payment starts a new paid period, or extends the current one if it hasn't ended.
+export async function recordPayment(requestedWorkspaceId, adminId, input) {
+  const workspace = await findWorkspaceOrThrow(requestedWorkspaceId);
+  const workspaceId = workspace._id;
+  const paidAt = input.paidAt ?? new Date();
+  const periodStart =
+    workspace.billing.status === 'active' && workspace.billing.currentPeriodEnd > paidAt
+      ? workspace.billing.currentPeriodEnd
+      : paidAt;
+  const periodEnd = addInterval(periodStart, input.interval);
+
+  const payment = await Payment.create({
+    workspaceId,
+    amount: input.amount,
+    planCode: input.planCode,
+    interval: input.interval,
+    method: input.method,
+    reference: input.reference || null,
+    offerCode: input.offerCode ?? null,
+    paidAt,
+    periodEnd,
+    recordedBy: adminId,
+    upgradeRequestId: input.upgradeRequestId ?? null,
+  });
+  await applyPlan(workspaceId, {
+    planCode: input.planCode,
+    interval: input.interval,
+    amount: input.amount,
+    periodEnd,
+  });
+  await recordAudit({
+    actorId: adminId,
+    action: 'payment.record',
+    workspaceId,
+    details: {
+      amount: input.amount,
+      planCode: input.planCode,
+      interval: input.interval,
+      method: input.method,
+      reference: input.reference ?? null,
+    },
+  });
+  return payment;
+}
+
+function trialExtension(workspace, days) {
+  if (workspace.billing.status !== 'trialing') {
+    throw AppError.badRequest('Only workspaces on a trial can have it extended', 'NOT_ON_TRIAL');
+  }
+  const from =
+    workspace.billing.trialEndsAt > new Date() ? workspace.billing.trialEndsAt : new Date();
+  return { 'billing.trialEndsAt': new Date(from.getTime() + days * 24 * 60 * 60 * 1000) };
+}
+
+function statusChange(status) {
+  return {
+    'billing.status': status,
+    'billing.canceledAt': status === 'canceled' ? new Date() : null,
+  };
+}
+
+// Manual adjustments: extend a trial, change status (e.g. after a failed payment), or switch plan.
+export async function adjustSubscription(requestedWorkspaceId, adminId, change) {
+  const workspace = await findWorkspaceOrThrow(requestedWorkspaceId);
+  const workspaceId = workspace._id;
+  let update;
+  if (change.action === 'extend_trial') update = trialExtension(workspace, change.days);
+  if (change.action === 'set_status') update = statusChange(change.status);
+  if (change.action === 'change_plan') {
+    const plan = findPlan(change.planCode);
+    update = { 'billing.planCode': plan.code, 'storage.planLimitBytes': planStorageBytes(plan) };
+  }
+
+  await Workspace.updateOne({ _id: workspaceId }, { $set: update });
+  await recordAudit({
+    actorId: adminId,
+    action: `subscription.${change.action}`,
+    workspaceId,
+    details: change,
+  });
+  const updated = await Workspace.findById(workspaceId).populate('ownerId', 'name email').lean();
+  return toSubscriptionDto(updated, updated.ownerId);
+}

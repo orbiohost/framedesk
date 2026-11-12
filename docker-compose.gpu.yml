@@ -1,0 +1,18 @@
+# Runs Whisper on an NVIDIA GPU (needs the NVIDIA Container Toolkit on the host):
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+services:
+  whisper:
+    build:
+      context: ./whisper
+      args:
+        WITH_CUDA: 'true'
+    environment:
+      WHISPER_DEVICE: cuda
+      WHISPER_COMPUTE_TYPE: float16
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

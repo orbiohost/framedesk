@@ -119,6 +119,13 @@ export const router = createBrowserRouter([
                 ),
               },
               {
+                path: 'support',
+                lazy: page(
+                  () => import('../pages/admin/SupportTicketsPage.jsx'),
+                  'SupportTicketsPage',
+                ),
+              },
+              {
                 path: 'audit-log',
                 lazy: page(() => import('../pages/admin/AdminAuditPage.jsx'), 'AdminAuditPage'),
               },
@@ -237,6 +244,10 @@ export const router = createBrowserRouter([
           {
             path: 'account',
             lazy: page(() => import('../pages/app/AccountPage.jsx'), 'AccountPage'),
+          },
+          {
+            path: 'support',
+            lazy: page(() => import('../pages/app/SupportPage.jsx'), 'SupportPage'),
           },
         ],
       },

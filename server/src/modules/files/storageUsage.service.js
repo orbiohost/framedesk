@@ -2,6 +2,7 @@ import { findPoolWorkspace } from '../workspaces/storagePool.js';
 import { Workspace, poolIdOf, storageLimitBytes } from '../workspaces/workspace.model.js';
 import { StoredFile } from './file.model.js';
 import { FILE_CATEGORIES } from './fileTypes.js';
+import { scheduleReconcile } from './storageReconcile.service.js';
 
 // How the account's storage is split by file type (video, image, ...), across
 // every workspace that shares this one's storage pool. Only totals leave here,
@@ -38,8 +39,16 @@ export async function getStorageUsage(workspace) {
     .map(([category, totals]) => ({ category, ...totals }))
     .sort((a, b) => b.bytes - a.bytes);
 
+  // Shown from the files themselves, so the meter is right even if the running
+  // counter has drifted; a drifted counter is then repaired in the background.
+  let usedBytes = 0;
+  for (const totals of byCategory.values()) usedBytes += totals.bytes;
+  for (const row of rows)
+    if (!row._id.trashed && !byCategory.has(row._id.category)) usedBytes += row.bytes;
+  if (usedBytes !== pool.storage.usedBytes) scheduleReconcile(poolId);
+
   return {
-    usedBytes: pool.storage.usedBytes,
+    usedBytes,
     limitBytes: storageLimitBytes(pool),
     workspaceCount: workspaceIds.length,
     categories,

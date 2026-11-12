@@ -263,7 +263,7 @@ async function prepareFile(ctx, zip, record, doc) {
       linkedProjectIds,
       folderId,
       category,
-      size,
+      size: stored.size,
       mime: stored.mime,
       storageKey: stored.storageKey,
       uploadedBy: doc.uploadedBy ?? ctx.userId,

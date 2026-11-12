@@ -24,12 +24,20 @@ async function fetchCurrentUserOrNull() {
   }
 }
 
+const currentUserQuery = {
+  queryKey: currentUserKey,
+  queryFn: fetchCurrentUserOrNull,
+  staleTime: 5 * 60 * 1000,
+};
+
 export function useCurrentUser() {
-  return useQuery({
-    queryKey: currentUserKey,
-    queryFn: fetchCurrentUserOrNull,
-    staleTime: 5 * 60 * 1000,
-  });
+  return useQuery(currentUserQuery);
+}
+
+// Called once at startup, so "who is signed in" is asked while the page's code
+// is still downloading, instead of only after it has loaded and rendered.
+export function prefetchCurrentUser(queryClient) {
+  queryClient.prefetchQuery(currentUserQuery);
 }
 
 function useSignInMutation(mutationFn) {

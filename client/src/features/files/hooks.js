@@ -19,6 +19,11 @@ function foldersPath(workspaceId) {
 // workspaces share one storage pool, so every workspace's meter is refreshed.
 export function refreshAfterFileChange(queryClient, workspaceId) {
   queryClient.invalidateQueries({ queryKey: workspaceKeys.all });
+  // Every workspace's storage breakdown, since they may all draw on this pool.
+  queryClient.invalidateQueries({
+    predicate: ({ queryKey }) =>
+      queryKey[0] === 'ws' && queryKey[2] === 'files' && queryKey[3] === 'storage-usage',
+  });
   return invalidateFeatures(queryClient, workspaceId, ['files', 'folders']);
 }
 

@@ -29,6 +29,9 @@ const SKIP_SECONDS = 10;
 const ARROW_SECONDS = 5;
 const FRAME_SECONDS = 1 / 30;
 const HIDE_CONTROLS_MS = 2500;
+// Two taps this close together on the left/right of a video skip back/forward.
+const DOUBLE_TAP_MS = 280;
+const SIDE_ZONE = 0.35;
 
 export function formatTime(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -403,8 +406,17 @@ export function MediaPlayer({
   const wantsPlay = useRef(autoPlay);
   // Where to pick up once a renewed link has loaded: { time, play }.
   const resume = useRef(null);
+  // Set while the real length of a file without a duration is being found.
+  const probe = useRef(null);
   const hideTimer = useRef(null);
+  const tapTimer = useRef(null);
+  const lastTap = useRef(null);
+  // "touch" when the last press on the player came from a finger.
+  const pointerType = useRef('mouse');
   const [prefs, setPrefs] = usePlayerPrefs();
+  // The browser only allowed autoplay without sound; the viewer's own mute
+  // setting is untouched, and one tap brings the sound back.
+  const [autoMuted, setAutoMuted] = useState(false);
   const [loop, setLoop] = useState(false);
   const [status, setStatus] = useState({ playing: false, waiting: true, ended: false });
   const [time, setTime] = useState(0);
@@ -442,18 +454,82 @@ export function MediaPlayer({
     const media = mediaRef.current;
     if (!media) return;
     media.volume = prefs.volume;
-    media.muted = prefs.muted;
+    media.muted = prefs.muted || autoMuted;
     media.playbackRate = prefs.rate;
     media.defaultPlaybackRate = prefs.rate;
-  }, [prefs]);
+  }, [prefs, autoMuted]);
 
   useEffect(() => {
-    const onChange = () => setIsFullscreen(document.fullscreenElement === containerRef.current);
+    const onChange = () => {
+      const active =
+        (document.fullscreenElement ?? document.webkitFullscreenElement) === containerRef.current;
+      setIsFullscreen(active);
+      // Phones: a landscape video fills the screen sideways in full screen.
+      const media = mediaRef.current;
+      const orientation = typeof screen !== 'undefined' ? screen.orientation : null;
+      if (!orientation?.lock) return;
+      if (active && media && media.videoWidth > media.videoHeight) {
+        orientation.lock('landscape').catch(() => {});
+      } else if (!active) {
+        try {
+          orientation.unlock();
+        } catch {
+          // Nothing was locked.
+        }
+      }
+    };
     document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
   }, []);
 
-  useEffect(() => () => clearTimeout(hideTimer.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(hideTimer.current);
+      clearTimeout(tapTimer.current);
+    },
+    [],
+  );
+
+  // Starts playback, falling back to muted playback where the browser blocks
+  // sound without a tap (iPhone, some Android browsers). If even that is
+  // refused, the big play button shows instead of a spinner.
+  const startPlayback = useCallback((media) => {
+    const showPaused = () => setStatus((s) => ({ ...s, playing: false, waiting: false }));
+    media.play().catch((error) => {
+      if (error?.name !== 'NotAllowedError' || media.muted) {
+        if (error?.name !== 'AbortError') showPaused();
+        return;
+      }
+      media.muted = true;
+      setAutoMuted(true);
+      media.play().catch(() => {
+        setAutoMuted(false);
+        showPaused();
+      });
+    });
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    if (autoMuted) {
+      setAutoMuted(false);
+      if (prefs.muted || prefs.volume === 0)
+        setPrefs({ muted: false, volume: prefs.volume || 0.5 });
+      return;
+    }
+    setPrefs({ muted: !prefs.muted });
+  }, [autoMuted, prefs.muted, prefs.volume, setPrefs]);
+
+  const changePrefs = useCallback(
+    (change) => {
+      setAutoMuted(false);
+      setPrefs(change);
+    },
+    [setPrefs],
+  );
 
   const showFlash = useCallback((value, seconds) => {
     setFlash({ value, seconds, key: Date.now() });
@@ -488,8 +564,12 @@ export function MediaPlayer({
     const media = mediaRef.current;
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
+    } else if (document.webkitFullscreenElement) {
+      document.webkitExitFullscreen?.();
     } else if (container?.requestFullscreen) {
-      container.requestFullscreen().catch(() => {});
+      container.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+    } else if (container?.webkitRequestFullscreen) {
+      container.webkitRequestFullscreen(); // iPad / older Safari
     } else if (media?.webkitEnterFullscreen) {
       media.webkitEnterFullscreen(); // iPhone Safari
     }
@@ -508,9 +588,9 @@ export function MediaPlayer({
   const changeVolume = useCallback(
     (delta) => {
       const volume = Math.min(1, Math.max(0, Math.round((prefs.volume + delta) * 20) / 20));
-      setPrefs({ volume, muted: volume === 0 });
+      changePrefs({ volume, muted: volume === 0 });
     },
-    [prefs.volume, setPrefs],
+    [prefs.volume, changePrefs],
   );
 
   // Keyboard shortcuts while the player is on screen.
@@ -534,7 +614,7 @@ export function MediaPlayer({
           onOwnControl?.getAttribute('type') === 'range' ? null : () => skip(ARROW_SECONDS),
         ArrowUp: () => changeVolume(0.05),
         ArrowDown: () => changeVolume(-0.05),
-        m: () => setPrefs({ muted: !prefs.muted }),
+        m: toggleMute,
         f: isVideo ? toggleFullscreen : null,
         ',': () => media.paused && skip(-FRAME_SECONDS),
         '.': () => media.paused && skip(FRAME_SECONDS),
@@ -556,7 +636,17 @@ export function MediaPlayer({
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [togglePlay, skip, changeVolume, toggleFullscreen, isVideo, prefs, setPrefs, paintProgress]);
+  }, [
+    togglePlay,
+    skip,
+    changeVolume,
+    toggleFullscreen,
+    toggleMute,
+    isVideo,
+    prefs,
+    setPrefs,
+    paintProgress,
+  ]);
 
   function wakeControls() {
     setControlsVisible(true);
@@ -567,6 +657,49 @@ export function MediaPlayer({
     }, HIDE_CONTROLS_MS);
   }
 
+  // Touch: a tap shows or hides the controls (it doesn't pause), and a double
+  // tap on the left or right skips back or forward. Mouse: a click plays/pauses.
+  function onVideoClick(event) {
+    if (pointerType.current !== 'touch') {
+      togglePlay();
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = rect.width ? (event.clientX - rect.left) / rect.width : 0.5;
+    const side = x < SIDE_ZONE ? -1 : x > 1 - SIDE_ZONE ? 1 : 0;
+    const now = Date.now();
+    const previous = lastTap.current;
+    lastTap.current = { at: now, side };
+    clearTimeout(tapTimer.current);
+    if (side !== 0 && previous && previous.side === side && now - previous.at < DOUBLE_TAP_MS) {
+      skip(side * SKIP_SECONDS);
+      return;
+    }
+    const toggleControls = () => {
+      if (!controlsVisible) wakeControls();
+      else if (status.playing && !menuOpen) setControlsVisible(false);
+    };
+    // The middle can't be double-tapped, so it answers at once.
+    if (side === 0) toggleControls();
+    else tapTimer.current = setTimeout(toggleControls, DOUBLE_TAP_MS);
+  }
+
+  // Goes to the starting spot and plays (or shows the play button) once the
+  // duration is known.
+  function begin(media, target, shouldPlay) {
+    setDuration(media.duration);
+    if (target > 0 && target < media.duration) media.currentTime = target;
+    else if (media.currentTime > 0 && target === 0) media.currentTime = 0;
+    // Playing is started here rather than with the autoplay attribute, which
+    // browsers ignore on phones and which a renewed link would re-trigger.
+    // A renewed link only resumes if the viewer was watching.
+    if (shouldPlay) startPlayback(media);
+    // Phones (iPhone especially) load nothing more until the viewer taps,
+    // so show the play button instead of a spinner that never ends.
+    else setStatus((s) => ({ ...s, waiting: false }));
+    paintProgress();
+  }
+
   const mediaEvents = {
     onLoadedMetadata: (event) => {
       const media = event.currentTarget;
@@ -574,20 +707,35 @@ export function MediaPlayer({
       const pending = resume.current;
       hasLoaded.current = true;
       resume.current = null;
-      // From here on, playing follows the viewer, not the autoplay attribute,
-      // so a renewed link doesn't start a video the viewer had paused.
-      media.autoplay = false;
-      setDuration(media.duration);
       const target = pending ? pending.time : isFirstLoad ? startAt : 0;
-      if (target > 0 && target < media.duration) media.currentTime = target;
-      if (pending?.play) media.play().catch(() => {});
+      const shouldPlay = pending ? pending.play : isFirstLoad && autoPlay;
       if (isFirstLoad && isVideo && media.videoWidth === 0 && media.videoHeight === 0) {
         onIssue?.('no-picture');
       }
-      paintProgress();
+      if (Number.isFinite(media.duration) && media.duration > 0) {
+        begin(media, target, shouldPlay);
+        return;
+      }
+      // Browser recordings (WebM) often carry no duration, so the player would
+      // show 0:00 and a bar that can't seek. Asking for a time far past the
+      // end makes the browser read the file's last cluster and report the
+      // real length; durationchange then picks up from there.
+      probe.current = { target, shouldPlay };
+      media.currentTime = Number.MAX_SAFE_INTEGER;
     },
-    onDurationChange: (event) => setDuration(event.currentTarget.duration),
+    onDurationChange: (event) => {
+      const media = event.currentTarget;
+      if (!Number.isFinite(media.duration)) return;
+      const probing = probe.current;
+      if (probing) {
+        probe.current = null;
+        begin(media, probing.target, probing.shouldPlay);
+        return;
+      }
+      setDuration(media.duration);
+    },
     onTimeUpdate: (event) => {
+      if (probe.current) return; // parked at the end while the length is found
       setTime(event.currentTarget.currentTime);
       if (!status.playing) paintProgress();
     },
@@ -595,7 +743,18 @@ export function MediaPlayer({
       const media = event.currentTarget;
       if (media.duration) setBufferedRatio(bufferedEnd(media) / media.duration);
     },
-    onSeeked: paintProgress,
+    onSeeked: (event) => {
+      const media = event.currentTarget;
+      // The far seek finished without a length turning up: play anyway.
+      if (probe.current && !Number.isFinite(media.duration)) {
+        const { shouldPlay } = probe.current;
+        probe.current = null;
+        media.currentTime = 0;
+        if (shouldPlay) startPlayback(media);
+        else setStatus((s) => ({ ...s, waiting: false }));
+      }
+      paintProgress();
+    },
     onPlay: () => {
       wantsPlay.current = true;
       setStatus((s) => ({ ...s, playing: true, ended: false }));
@@ -655,13 +814,26 @@ export function MediaPlayer({
             <Play className="h-5 w-5" fill="currentColor" aria-hidden="true" />
           )}
         </ControlButton>
-        <ControlButton label="Back 10 seconds (j)" onClick={() => skip(-SKIP_SECONDS)}>
+        <ControlButton
+          label="Back 10 seconds (j)"
+          onClick={() => skip(-SKIP_SECONDS)}
+          className={isVideo && 'hidden sm:grid'}
+        >
           <RotateCcw className="h-[18px] w-[18px]" aria-hidden="true" />
         </ControlButton>
-        <ControlButton label="Forward 10 seconds (l)" onClick={() => skip(SKIP_SECONDS)}>
+        <ControlButton
+          label="Forward 10 seconds (l)"
+          onClick={() => skip(SKIP_SECONDS)}
+          className={isVideo && 'hidden sm:grid'}
+        >
           <RotateCw className="h-[18px] w-[18px]" aria-hidden="true" />
         </ControlButton>
-        <VolumeControl volume={prefs.volume} muted={prefs.muted} onChange={setPrefs} tone={tone} />
+        <VolumeControl
+          volume={prefs.volume}
+          muted={prefs.muted || autoMuted}
+          onChange={changePrefs}
+          tone={tone}
+        />
         <button
           type="button"
           data-player-control
@@ -672,8 +844,11 @@ export function MediaPlayer({
             tone === 'light' ? 'hover:bg-subtle' : 'hover:bg-white/15',
           )}
         >
-          {showRemaining ? `-${formatTime(remaining)}` : formatTime(time)}
-          <span className="opacity-55"> / {formatTime(duration)}</span>
+          {showRemaining && Number.isFinite(duration) && duration > 0 ? `-${formatTime(remaining)}` : formatTime(time)}
+          <span className="opacity-55">
+            {' '}
+            / {Number.isFinite(duration) && duration > 0 ? formatTime(duration) : '--:--'}
+          </span>
         </button>
         <div className="flex-1" />
         {prefs.rate !== 1 && (
@@ -696,7 +871,7 @@ export function MediaPlayer({
           tone={tone}
         />
         {canPip && (
-          <ControlButton label="Picture in picture" onClick={togglePip}>
+          <ControlButton label="Picture in picture" onClick={togglePip} className="hidden sm:grid">
             <PictureInPicture2 className="h-[18px] w-[18px]" aria-hidden="true" />
           </ControlButton>
         )}
@@ -722,14 +897,7 @@ export function MediaPlayer({
         ref={containerRef}
         className="player-light bg-surface text-ink border-line/80 shadow-lift rounded-3xl border p-4 sm:p-6"
       >
-        <audio
-          ref={mediaRef}
-          src={src}
-          preload="auto"
-          autoPlay={autoPlay}
-          loop={loop}
-          {...mediaEvents}
-        />
+        <audio ref={mediaRef} src={src} preload="auto" loop={loop} {...mediaEvents} />
         <div className="mb-4 flex items-center gap-4">
           <div className="widget-lavender text-accent grid h-20 w-20 shrink-0 place-items-center rounded-2xl sm:h-24 sm:w-24">
             <Music2
@@ -788,8 +956,18 @@ export function MediaPlayer({
   return (
     <div
       ref={containerRef}
-      onPointerMove={wakeControls}
-      onPointerLeave={() => status.playing && !menuOpen && setControlsVisible(false)}
+      onPointerDown={(event) => {
+        pointerType.current = event.pointerType;
+        // Fingers on the controls keep them up; taps on the picture toggle them.
+        if (event.pointerType === 'touch' && event.target.closest?.('[data-player-control]')) {
+          wakeControls();
+        }
+      }}
+      onPointerMove={(event) => event.pointerType !== 'touch' && wakeControls()}
+      // Touch fires pointerleave after every tap, which would hide the controls at once.
+      onPointerLeave={(event) =>
+        event.pointerType === 'mouse' && status.playing && !menuOpen && setControlsVisible(false)
+      }
       className={cn(
         'group/player relative overflow-hidden bg-black text-white',
         isFullscreen
@@ -804,12 +982,12 @@ export function MediaPlayer({
         src={src}
         // The viewer opened this file: buffer ahead, not just the header.
         preload="auto"
-        autoPlay={autoPlay}
         playsInline
         loop={loop}
-        onClick={togglePlay}
-        onDoubleClick={toggleFullscreen}
-        className="h-full w-full object-contain"
+        onClick={onVideoClick}
+        onDoubleClick={() => pointerType.current !== 'touch' && toggleFullscreen()}
+        // No double-tap zoom or 300 ms tap delay on phones.
+        className="h-full w-full touch-manipulation object-contain"
         {...mediaEvents}
       />
 
@@ -836,6 +1014,17 @@ export function MediaPlayer({
           ) : (
             <Play className="ml-1 h-7 w-7 sm:h-8 sm:w-8" fill="currentColor" aria-hidden="true" />
           )}
+        </button>
+      )}
+
+      {autoMuted && (
+        <button
+          type="button"
+          data-player-control
+          onClick={toggleMute}
+          className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-xs font-semibold text-white shadow-lg ring-1 ring-white/20 backdrop-blur-sm transition-colors hover:bg-black/80"
+        >
+          <VolumeX className="h-4 w-4" aria-hidden="true" /> Tap to unmute
         </button>
       )}
 

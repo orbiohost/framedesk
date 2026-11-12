@@ -71,15 +71,16 @@ Throw `AppError` from services (`AppError.notFound()`, `AppError.forbidden()`…
 All uploaded files live in an Amazon S3 bucket. S3-compatible stores (Cloudflare R2, MinIO, Wasabi) work too through `S3_ENDPOINT`. `S3_BUCKET` and `S3_REGION` are required; the API refuses to start without them.
 
 - Files are stored under `<workspaceId>/<yyyy-mm>/<uuid>` (plus `S3_KEY_PREFIX`). The original file name is only kept in the database.
-- Uploads use the tus protocol (`/api/uploads`): 50 MB chunks, resumable after a dropped connection or a page reload. Unfinished uploads wait in `UPLOAD_STAGING_DIR`; when one finishes it is streamed into the bucket in 16 MB parts and the local copy is removed.
+- Uploads go **straight from the browser into S3** as a multipart upload (`/api/uploads`): the API checks permission, type, size and quota, hands out presigned part links (16 MB parts, 4 in parallel), and when every part is in it joins them, checks the real file type from the first bytes and creates the file. The bytes never pass through the server or touch its disk. Uploads resume after a dropped connection, a pause or a page reload (for a day); abandoned ones are aborted in S3 by an hourly sweep.
+- Before upload, MP4/MOV/M4A files get their index moved to the front in the browser (no re-encode, same size), so videos start playing at once. Files uploaded earlier can be fixed with `docker compose exec api npm run optimize:media` (add `-- --dry` to just list them).
 - Quota is checked before the first byte and claimed atomically when the upload completes. Files in Trash still count until they are deleted for good.
 - Downloads and previews are short-lived signed S3 links (15 minutes), so video streams straight from S3, with Range support, and never passes through the API. The bucket stays private.
-- Behind Nginx, allow chunk-sized request bodies on the upload route: `location /api/uploads/ { client_max_body_size 60m; proxy_request_buffering off; ... }`.
 
 ### Setting up the bucket
 
 - **1. Create the bucket:** in the region you set as `S3_REGION`, leave "Block all public access" on.
-- **2. Add a CORS rule:** start from [deploy/s3-cors.json](deploy/s3-cors.json) and replace the origin with your `CLIENT_URL`. Video thumbnails and in-browser conversion read files from S3 directly and need it.
+- **2. Add a CORS rule:** start from [deploy/s3-cors.json](deploy/s3-cors.json) and replace the origin with your `CLIENT_URL`. Uploads (PUT, with the ETag header exposed), video thumbnails and in-browser conversion talk to S3 directly and need it. Without it uploads fail with "Storage is not set up for direct uploads".
+- **2b. Clean up abandoned uploads (recommended):** add a lifecycle rule to the bucket: "Delete expired object delete markers or incomplete multipart uploads", incomplete multipart uploads after 2 days. The API aborts them itself, but this catches any it missed.
 - **3. Give the API access:** use an IAM user or role with [deploy/s3-iam-policy.json](deploy/s3-iam-policy.json), with your bucket name filled in. On EC2 or ECS, attach it to the instance or task role and leave `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` empty.
 - **4. Files from older versions:** earlier versions could keep files on the server disk. Copy them into the bucket with `npm run migrate:local-to-s3 -w server -- --dry`, then again without `--dry` (add `--from <dir>` if they are not in `server/data/uploads`). It is safe to re-run and never deletes local files.
 - **Transcripts:** Whisper can't read the bucket, so the API sends it a signed link that lasts 24 hours, and Whisper downloads the file to a temporary file when the job starts. The Whisper container needs outbound internet access to S3.
@@ -96,14 +97,16 @@ How it fits together: the API stores each transcript in MongoDB (`transcripts` m
 
 Local development (with `npm run dev`): put `WHISPER_API_KEY` (and optionally `WHISPER_MODEL`) in the `.env` next to `docker-compose.yml`, set `WHISPER_URL=http://localhost:9000` plus the same `WHISPER_API_KEY` in `server/.env`, then run `docker compose -f docker-compose.dev.yml up -d --build` and restart `npm run dev`. That file runs only Whisper, on 127.0.0.1:9000, downloading files from signed S3 links.
 
-Production setup: add `WHISPER_API_KEY=<random 32+ chars>` to the `.env` next to `docker-compose.yml`, then `docker compose up -d --build`. The first start downloads the model (~3 GB for large-v3) into the `whisper_models` volume, and transcription waits until it is loaded. Without `WHISPER_URL` set (e.g. local `npm run dev`) the feature is hidden.
+Production setup: add `WHISPER_API_KEY=<random 32+ chars>` to the `.env` next to `docker-compose.yml`, then `docker compose up -d --build`. The first start downloads the model (~1.6 GB for large-v3-turbo) into the `whisper_models` volume, and transcription waits until it is loaded. Without `WHISPER_URL` set (e.g. local `npm run dev`) the feature is hidden.
 
-| Setting (compose `.env`) | Default         | Notes                                                                                           |
-| ------------------------ | --------------- | ----------------------------------------------------------------------------------------------- |
-| `WHISPER_MODEL`          | `large-v3`      | `large-v3-turbo` is ~6x faster with near-identical accuracy; `medium`/`small` are lighter still |
-| `WHISPER_CPU_THREADS`    | `0` (all cores) | lower it to leave CPU for the app                                                               |
+| Setting (compose `.env`) | Default          | Notes                                                                                     |
+| ------------------------ | ---------------- | ----------------------------------------------------------------------------------------- |
+| `WHISPER_MODEL`          | `large-v3-turbo` | `large-v3` is slightly more accurate but several times slower on a CPU                    |
+| `WHISPER_CPU_THREADS`    | `0` (all cores)  | Whisper runs at low CPU priority (`WHISPER_NICE`, default 10), so the app stays responsive |
+| `WHISPER_BEAM_SIZE`      | `1` on CPU       | `5` = beam search: a little more accurate, roughly 2x slower                              |
+| `WHISPER_BATCH_SIZE`     | `8` on CPU       | 30 s pieces decoded at once; `0` turns batching off (less RAM, slower)                    |
 
-**Hardware.** `large-v3` on CPU needs about 4–5 GB RAM and runs slower than real time on a typical VPS (roughly 1–3 hours for a 1-hour video on 4–8 cores). `large-v3-turbo` is the practical choice for CPU-only servers. With an NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` (needs the NVIDIA Container Toolkit), where an hour of video takes a few minutes.
+**Hardware.** With the defaults (`large-v3-turbo`, greedy, batched) a 1-hour video takes very roughly 10–30 minutes on 4–8 CPU cores and about 2–3 GB of RAM. `large-v3` with beam search needs 4–5 GB RAM and can take 1–3 hours for the same file. With an NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` (needs the NVIDIA Container Toolkit), where an hour of video takes a few minutes.
 
 Transcripts are not yet part of workspace backups.
 
@@ -150,7 +153,10 @@ server {
 
 ## Scaling notes
 
-- The API is stateless. To run several instances, raise `instances` in `ecosystem.config.cjs` and move rate limiting to a shared Redis store (`rate-limit-redis`). Redis comes in with the job queue in Phase 4.
+- Redis (the `redis` service in `docker-compose.yml`, `REDIS_URL` in the API) caches the lookups every request makes: session user, session liveness, workspace, membership and storage pool. Without it, that's three sequential MongoDB round trips per request. Writes made through Mongoose (and session revocations) invalidate the cache straight away, using per-document generation counters (`server/src/utils/cache.js`), so logouts, suspensions and plan changes still apply at once. Writes from another process (the `server/scripts`) show up within the 60-second TTL.
+- Rate limits are counted in Redis too, so they're shared across instances and survive restarts.
+- Redis is optional: if `REDIS_URL` is empty or Redis is down, the cache is skipped and rate limits are counted in memory. After a reconnect the whole cache is invalidated, because writes may have been missed meanwhile.
+- The API is stateless. To run several instances, raise `instances` in `ecosystem.config.cjs` (Redis already holds the shared state).
 - Background work (emails, previews, trash cleanup, AI suggestions) moves to a BullMQ worker process in Phase 4. Emails already go through a single function, `deliverEmailInBackground`, so only that function changes.
 - File storage will sit behind a driver interface (Phase 4), so moving from local disk to S3/R2 plus a CDN needs no service changes.
 

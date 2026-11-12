@@ -5,6 +5,12 @@ import { AppError } from '../../utils/AppError.js';
 import * as admin from './admin.controller.js';
 import * as billing from './adminBilling.controller.js';
 import * as users from './adminUsers.controller.js';
+import * as support from '../support/support.controller.js';
+import {
+  adminTicketsQuerySchema,
+  adminUpdateTicketSchema,
+  ticketIdParam,
+} from '../support/support.validation.js';
 import {
   activateRequestSchema,
   adjustSubscriptionSchema,
@@ -67,6 +73,13 @@ router.post(
   '/upgrade-requests/:requestId/activate',
   validate({ params: idParam('requestId'), body: activateRequestSchema }),
   admin.activateUpgradeRequest,
+);
+
+router.get('/support', validate({ query: adminTicketsQuerySchema }), support.adminList);
+router.patch(
+  '/support/:ticketId',
+  validate({ params: ticketIdParam, body: adminUpdateTicketSchema }),
+  support.adminUpdate,
 );
 
 export default router;

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
+import { cached, invalidate } from '../../utils/cache.js';
 import { randomToken, sha256 } from '../../utils/crypto.js';
 import { logger } from '../../utils/logger.js';
 import { daysFromNow } from '../../utils/time.js';
@@ -32,11 +33,16 @@ async function issueTokens({ userId, familyId, meta }) {
   return { accessToken, refreshToken, refreshExpiresAt };
 }
 
-async function revokeFamily(familyId, reason) {
+// Session liveness is cached per user (resolveSessionUser), so every
+// revocation clears that user's cache.
+const userScope = (userId) => `user:${userId}`;
+
+async function revokeFamily(familyId, userId, reason) {
   await RefreshToken.updateMany(
     { familyId, revokedAt: null },
     { $set: { revokedAt: new Date(), revokedReason: reason } },
   );
+  await invalidate([userScope(userId)]);
 }
 
 export function createSession(userId, meta) {
@@ -54,14 +60,14 @@ export async function rotateSession(rawRefreshToken, meta) {
     { $set: { replacedAt: new Date() } },
   );
   if (!claimed) {
-    await revokeFamily(stored.familyId, 'reuse_detected');
+    await revokeFamily(stored.familyId, stored.userId, 'reuse_detected');
     logger.warn({ userId: String(stored.userId) }, 'Refresh token reuse detected, session revoked');
     throw sessionExpired();
   }
 
   const user = await User.findById(stored.userId).select('status');
   if (!user || user.status !== 'active') {
-    await revokeFamily(stored.familyId, 'user_inactive');
+    await revokeFamily(stored.familyId, stored.userId, 'user_inactive');
     throw sessionExpired();
   }
 
@@ -71,23 +77,35 @@ export async function rotateSession(rawRefreshToken, meta) {
 
 export async function revokeSessionByToken(rawRefreshToken) {
   const stored = await RefreshToken.findOne({ tokenHash: sha256(rawRefreshToken) }).select(
-    'familyId',
+    'familyId userId',
   );
-  if (stored) await revokeFamily(stored.familyId, 'logout');
+  if (stored) await revokeFamily(stored.familyId, stored.userId, 'logout');
 }
 
 export async function revokeAllSessions(userId, reason, { exceptSessionId } = {}) {
   const filter = { userId, revokedAt: null };
   if (exceptSessionId) filter.familyId = { $ne: exceptSessionId };
   await RefreshToken.updateMany(filter, { $set: { revokedAt: new Date(), revokedReason: reason } });
+  await invalidate([userScope(userId)]);
 }
 
 // Called on every authenticated request. Checking the session family (not just
 // the JWT signature) makes logout and reuse-revocation take effect immediately.
+// Both lookups are cached in Redis; user writes and session revocations clear
+// the cache, so that still holds.
 export async function resolveSessionUser({ userId, sessionId }) {
+  const scopes = [userScope(userId)];
   const [user, sessionIsLive] = await Promise.all([
-    User.findById(userId).lean(),
-    RefreshToken.exists({ familyId: sessionId, revokedAt: null, expiresAt: { $gt: new Date() } }),
+    cached(`user:${userId}`, scopes, () => User.findById(userId).lean()),
+    cached(`session:${userId}:${sessionId}`, scopes, async () =>
+      Boolean(
+        await RefreshToken.exists({
+          familyId: sessionId,
+          revokedAt: null,
+          expiresAt: { $gt: new Date() },
+        }),
+      ),
+    ),
   ]);
   if (!user || !sessionIsLive) throw sessionExpired();
   if (user.status !== 'active') {

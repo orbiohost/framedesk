@@ -1,12 +1,21 @@
+import { cached } from '../../utils/cache.js';
 import { Workspace, poolIdOf } from './workspace.model.js';
 
 // Every workspace an owner creates draws on one account: the owner's first
 // workspace holds the plan, the storage limit and the bytes used by all of them.
 
+// Read on every workspace request, so cached; any write to the workspace
+// (including storage usage) clears it (see workspace.model.js).
+export function findWorkspaceCached(workspaceId) {
+  return cached(`workspace:${workspaceId}`, [`workspace:${workspaceId}`], () =>
+    Workspace.findById(workspaceId).lean(),
+  );
+}
+
 // The workspace that holds the plan and storage for `workspace` (often itself).
 export async function findPoolWorkspace(workspace) {
   if (!workspace.storagePoolId) return workspace;
-  const pool = await Workspace.findById(workspace.storagePoolId).lean();
+  const pool = await findWorkspaceCached(workspace.storagePoolId);
   return pool ?? workspace;
 }
 

@@ -2,10 +2,15 @@ import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import { PassThrough } from 'node:stream';
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListPartsCommand,
   S3Client,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -141,5 +146,86 @@ export class S3Driver {
   async createWorkerUrl(key, expiresInSeconds) {
     const command = new GetObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key) });
     return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
+  }
+
+  // ---- Direct browser uploads (S3 multipart with presigned part links) ----
+  // The browser PUTs each part straight to S3; the bytes never reach this
+  // server or its disk. The bucket needs a CORS rule that allows PUT from the
+  // app's origin and exposes the ETag header (see README).
+
+  async createMultipartUpload(key, contentType) {
+    const { UploadId } = await this.client.send(
+      new CreateMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: this.objectKey(key),
+        ContentType: contentType || 'application/octet-stream',
+      }),
+    );
+    return UploadId;
+  }
+
+  async signUploadPart(key, uploadId, partNumber, expiresInSeconds) {
+    const command = new UploadPartCommand({
+      Bucket: this.bucket,
+      Key: this.objectKey(key),
+      UploadId: uploadId,
+      PartNumber: partNumber,
+    });
+    return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
+  }
+
+  // Every part S3 has received so far: [{ partNumber, etag, size }].
+  async listParts(key, uploadId) {
+    const parts = [];
+    let marker;
+    do {
+      const page = await this.client.send(
+        new ListPartsCommand({
+          Bucket: this.bucket,
+          Key: this.objectKey(key),
+          UploadId: uploadId,
+          PartNumberMarker: marker,
+        }),
+      );
+      for (const part of page.Parts ?? []) {
+        parts.push({ partNumber: part.PartNumber, etag: part.ETag, size: part.Size });
+      }
+      marker = page.IsTruncated ? page.NextPartNumberMarker : undefined;
+    } while (marker);
+    return parts;
+  }
+
+  async completeMultipartUpload(key, uploadId, parts) {
+    await this.client.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: this.objectKey(key),
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: parts.map((part) => ({ PartNumber: part.partNumber, ETag: part.etag })),
+        },
+      }),
+    );
+  }
+
+  async abortMultipartUpload(key, uploadId) {
+    try {
+      await this.client.send(
+        new AbortMultipartUploadCommand({
+          Bucket: this.bucket,
+          Key: this.objectKey(key),
+          UploadId: uploadId,
+        }),
+      );
+    } catch (err) {
+      if (err?.name !== 'NoSuchUpload' && !isNotFound(err)) throw err;
+    }
+  }
+
+  // The first bytes of a stored object (for checking what the file really is).
+  async readStart(key, bytes) {
+    const chunks = [];
+    for await (const chunk of this.readStream(key, { start: 0, end: bytes - 1 })) chunks.push(chunk);
+    return Buffer.concat(chunks);
   }
 }

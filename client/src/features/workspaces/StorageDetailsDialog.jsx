@@ -19,7 +19,7 @@ const CATEGORY_LOOK = {
   archive: { label: 'Archives', bar: 'bg-warning' },
 };
 
-function lookOf(category) {
+export function lookOf(category) {
   return CATEGORY_LOOK[category] ?? { label: 'Other', bar: 'bg-muted' };
 }
 
@@ -34,7 +34,7 @@ function filesLabel(count) {
 }
 
 // One bar for the whole allowance, split into a coloured part per file type.
-function UsageBar({ categories, limitBytes, usedBytes }) {
+export function UsageBar({ categories, limitBytes, usedBytes }) {
   // Over the limit (or no plan yet), the bar is scaled to what is used instead.
   const scale = Math.max(limitBytes, usedBytes, 1);
   return (

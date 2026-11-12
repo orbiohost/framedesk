@@ -16,6 +16,10 @@ RUN npm run build -w client
 # ---- API ----
 FROM node:22-bookworm-slim AS api
 ENV NODE_ENV=production
+# ffmpeg remuxes uploaded video (no re-encode) so it starts streaming at once.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY client/package.json client/

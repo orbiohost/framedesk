@@ -9,6 +9,7 @@ import {
   FolderOpen,
   HardDrive,
   LayoutGrid,
+  LifeBuoy,
   ListTodo,
   LogOut,
   NotebookPen,
@@ -80,7 +81,7 @@ function CountBadge({ count, active }) {
   return (
     <span
       className={cn(
-        'ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10px] font-semibold tabular-nums',
+        'ml-auto grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
         active ? 'bg-surface/20 text-current' : 'bg-lavender text-accent dark:text-ink',
       )}
     >
@@ -99,7 +100,7 @@ function NavItem({ to, label, icon: Icon, end, count, compact }) {
       className={({ isActive }) =>
         cn(
           'relative flex items-center rounded-full text-[13px] transition-colors',
-          compact ? 'mx-auto h-9 w-9 justify-center' : 'gap-2.5 px-3 py-2',
+          compact ? 'mx-auto h-9 w-9 justify-center' : 'gap-2.5 py-2 pl-3 pr-2',
           isActive ? 'pill-active font-medium' : 'text-ink/75 hover:bg-surface hover:text-ink',
         )
       }
@@ -164,22 +165,22 @@ function WorkspaceProjects({ workspace, openProjects }) {
         type="button"
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
-        className="hover:bg-surface flex w-full items-center gap-2 rounded-full px-3 py-2 text-[13px]"
+        className="hover:bg-surface flex w-full items-center gap-2 rounded-full py-2 pl-3 pr-2 text-left text-[13px]"
       >
         {expanded ? (
-          <ChevronDown className="text-muted h-3.5 w-3.5" aria-hidden="true" />
+          <ChevronDown className="text-muted h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         ) : (
-          <ChevronRight className="text-muted h-3.5 w-3.5" aria-hidden="true" />
+          <ChevronRight className="text-muted h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         )}
-        <FolderOpen className="h-4 w-4" aria-hidden="true" />
-        <span className="font-medium">Ongoing projects</span>
+        <FolderOpen className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 truncate font-medium">Ongoing projects</span>
         <CountBadge count={openProjects.length} />
       </button>
 
       {expanded && (
         <ul className="border-line ml-5 mt-0.5 space-y-0.5 border-l pl-2">
           {openProjects.length === 0 && (
-            <li className="text-muted px-3 py-1.5 text-xs">No open projects</li>
+            <li className="text-muted px-2.5 py-1 text-xs">No open projects</li>
           )}
           {openProjects.slice(0, PROJECT_LINKS_SHOWN).map((project) => (
             <li key={project.id}>
@@ -202,7 +203,7 @@ function WorkspaceProjects({ workspace, openProjects }) {
             <li>
               <Link
                 to={`${base}/projects`}
-                className="text-accent block px-3 py-1.5 text-xs font-medium hover:underline"
+                className="text-accent block px-2.5 py-1 text-xs font-medium hover:underline"
               >
                 View all {openProjects.length}
               </Link>
@@ -290,6 +291,10 @@ function AccountFooter({ workspace, compact }) {
               </Link>
             </>
           )}
+          <Link to={`${base}/support`} onClick={close} role="menuitem" className={MENU_LINK}>
+            <LifeBuoy className="h-4 w-4" aria-hidden="true" />
+            Help &amp; support
+          </Link>
           {user?.isSuperadmin && (
             <Link to="/admin" onClick={close} role="menuitem" className={MENU_LINK}>
               <ShieldCheck className="h-4 w-4" aria-hidden="true" />

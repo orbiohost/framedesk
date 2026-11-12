@@ -39,7 +39,9 @@ function UploadRow({ item }) {
             {item.status === 'error' && item.error}
             {item.status === 'done' && `Uploaded to ${item.folderName}`}
             {item.status === 'paused' && `Paused · ${percent}%`}
+            {item.status === 'uploading' && item.saving && 'Saving…'}
             {item.status === 'uploading' &&
+              !item.saving &&
               `${formatBytes(item.uploadedBytes)} of ${formatBytes(item.size)} · ${percent}%`}
           </p>
         </div>

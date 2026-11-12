@@ -15,3 +15,11 @@ export function writeLocal(key, value) {
     // Storage blocked; the preference just won't be remembered.
   }
 }
+
+export function removeLocal(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Storage blocked; nothing was stored.
+  }
+}

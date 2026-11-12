@@ -1,4 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
+import { cacheInvalidationPlugin, idsIn } from '../../utils/cacheInvalidation.plugin.js';
 
 export const BILLING_STATUSES = ['none', 'trialing', 'active', 'past_due', 'read_only', 'canceled'];
 
@@ -52,5 +53,10 @@ export function storageLimitBytes(workspace) {
 export function poolIdOf(workspace) {
   return workspace.storagePoolId ?? workspace._id;
 }
+
+// Workspaces are cached per request (storagePool.js); writes clear them.
+workspaceSchema.plugin(cacheInvalidationPlugin, {
+  scopesFor: (source) => idsIn(source._id)?.map((id) => `workspace:${id}`) ?? null,
+});
 
 export const Workspace = mongoose.model('Workspace', workspaceSchema);

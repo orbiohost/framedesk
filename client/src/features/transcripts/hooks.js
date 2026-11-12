@@ -53,13 +53,21 @@ export function useTranscriptHistory(workspaceId) {
 }
 
 // The Drive folder uploads from the Transcribe page go to; created on first use.
-export function useTranscriptionsFolder(workspaceId, { enabled = true } = {}) {
-  return useQuery({
+function transcriptionsFolderQuery(workspaceId) {
+  return {
     queryKey: featureKey(workspaceId, 'transcripts', 'folder'),
     queryFn: async () => (await api.post(`${path(workspaceId)}/folder`)).folder,
-    enabled,
     staleTime: Infinity,
-  });
+  };
+}
+
+export function useTranscriptionsFolder(workspaceId, { enabled = true } = {}) {
+  return useQuery({ ...transcriptionsFolderQuery(workspaceId), enabled });
+}
+
+// The same folder on demand, for places that only need it once files are picked.
+export function fetchTranscriptionsFolder(queryClient, workspaceId) {
+  return queryClient.fetchQuery(transcriptionsFolderQuery(workspaceId));
 }
 
 export function useRequestTranscript(workspaceId, fileId) {

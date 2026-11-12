@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  Captions,
   FolderKanban,
   HardDrive,
   KanbanSquare,
@@ -98,11 +99,21 @@ export const WIDGETS = [
   },
   {
     id: 'storage',
-    title: 'Storage',
-    description: 'How much of the workspace’s storage is used.',
+    title: 'Drive storage',
+    description: 'How much space is used, split by videos, images, audio and more.',
     icon: HardDrive,
-    spans: [3, 4],
+    spans: [3, 4, 5, 6],
     tall: false,
+  },
+  {
+    id: 'transcribe',
+    title: 'Transcribe',
+    description: 'Recent transcripts with live progress. Drop a recording to transcribe it.',
+    icon: Captions,
+    spans: [4, 5, 6, 8],
+    tall: true,
+    // Only offered when the server has speech-to-text.
+    needsTranscription: true,
   },
 ];
 

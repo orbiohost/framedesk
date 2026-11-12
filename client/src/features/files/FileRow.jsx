@@ -90,8 +90,6 @@ export function FileRow({
   // Under a project it is only linked to, a file can't be renamed or trashed.
   const shortcutEdit = canEdit && !linked;
   const warmHandlers = useWarmHandlers(file, onWarm, !inTrash);
-  // Touch opens on a single tap (double-tap zooms); a mouse double-clicks.
-  const pointerType = useRef('mouse');
   const date = formatDate(inTrash ? file.deletedAt : file.createdAt);
 
   return (
@@ -100,11 +98,8 @@ export function FileRow({
       onKeyDown={(event) =>
         handleFileShortcut(event, { file, inTrash, canEdit: shortcutEdit, onAction })
       }
-      onPointerDown={(event) => {
-        pointerType.current = event.pointerType;
-      }}
-      onClick={() => !inTrash && pointerType.current !== 'mouse' && onAction('open', file)}
-      onDoubleClick={inTrash ? undefined : () => onAction('open', file)}
+      // One click or tap opens the file (the ⋯ menu and checkbox stop their own clicks).
+      onClick={inTrash ? undefined : () => onAction('open', file)}
       {...warmHandlers}
       className={cn(
         'border-line/70 hover:bg-subtle/50 focus-visible:bg-subtle/60 group border-b transition-colors last:border-b-0 focus-visible:ring-inset',
@@ -117,7 +112,6 @@ export function FileRow({
         <td
           className="py-2 pl-4 pr-0"
           onClick={(event) => event.stopPropagation()}
-          onDoubleClick={(event) => event.stopPropagation()}
         >
           <input
             type="checkbox"

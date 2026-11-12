@@ -1,4 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
+import { cacheInvalidationPlugin, idsIn } from '../../utils/cacheInvalidation.plugin.js';
 
 const oneTimeTokenSchema = new Schema(
   {
@@ -36,5 +37,10 @@ const userSchema = new Schema(
 userSchema.index({ 'emailVerification.tokenHash': 1 }, { sparse: true });
 userSchema.index({ 'passwordReset.tokenHash': 1 }, { sparse: true });
 userSchema.index({ lastActiveAt: -1 });
+
+// Each request's session user is cached (session.service.js); writes clear it.
+userSchema.plugin(cacheInvalidationPlugin, {
+  scopesFor: (source) => idsIn(source._id)?.map((id) => `user:${id}`) ?? null,
+});
 
 export const User = mongoose.model('User', userSchema);

@@ -39,7 +39,7 @@ export function createApp() {
 
   app.get('/api/health', (req, res) => sendSuccess(res, { status: 'ok' }));
 
-  // Mounted ahead of the main router: uploads stream raw bytes and need their own rate limit.
+  // Mounted ahead of the main router: an upload asks for many part links, so it has its own rate limit.
   app.use('/api/uploads', uploadLimiter, csrfProtection, uploadsRoutes);
 
   app.use('/api', globalLimiter, csrfProtection, apiRouter);

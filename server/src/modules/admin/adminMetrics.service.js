@@ -1,5 +1,6 @@
 import { Payment } from '../billing/payment.model.js';
 import { UpgradeRequest } from '../billing/upgradeRequest.model.js';
+import { countOpenTickets } from '../support/support.service.js';
 import { User } from '../users/user.model.js';
 import { Workspace, storageLimitBytes } from '../workspaces/workspace.model.js';
 import { monthlyValue } from './adminSubscriptions.service.js';
@@ -136,13 +137,15 @@ async function signupsByDay(now) {
 }
 
 export async function getDashboardMetrics(now = new Date()) {
-  const [users, subscriptions, revenue, signups, openUpgradeRequests] = await Promise.all([
-    userMetrics(now),
-    subscriptionMetrics(now),
-    revenueMetrics(now),
-    signupsByDay(now),
-    UpgradeRequest.countDocuments({ status: 'open' }).setOptions(ALL_WORKSPACES),
-  ]);
+  const [users, subscriptions, revenue, signups, openUpgradeRequests, openSupportTickets] =
+    await Promise.all([
+      userMetrics(now),
+      subscriptionMetrics(now),
+      revenueMetrics(now),
+      signupsByDay(now),
+      UpgradeRequest.countDocuments({ status: 'open' }).setOptions(ALL_WORKSPACES),
+      countOpenTickets(),
+    ]);
   // Files live in S3, which has no fixed size, so there is no server-disk card.
   return {
     users,
@@ -151,6 +154,7 @@ export async function getDashboardMetrics(now = new Date()) {
     signups,
     disk: null,
     openUpgradeRequests,
+    openSupportTickets,
     generatedAt: now,
   };
 }

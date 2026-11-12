@@ -35,7 +35,7 @@ from urllib.parse import urlparse
 import requests
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from faster_whisper import WhisperModel
+from faster_whisper import BatchedInferencePipeline, WhisperModel
 from faster_whisper.tokenizer import _LANGUAGE_CODES
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -48,11 +48,27 @@ if len(API_KEY) < 24:
     raise SystemExit("WHISPER_API_KEY must be set (at least 24 characters)")
 
 STORAGE_DIR = os.path.realpath(os.environ.get("STORAGE_DIR", "/data/uploads"))
-MODEL_NAME = os.environ.get("WHISPER_MODEL", "large-v3")
+# large-v3-turbo: large-v3's encoder with a 4-layer decoder. Several times
+# faster than large-v3 on a CPU with nearly the same accuracy.
+MODEL_NAME = os.environ.get("WHISPER_MODEL", "large-v3-turbo")
 DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 COMPUTE_TYPE = os.environ.get("WHISPER_COMPUTE_TYPE") or ("int8" if DEVICE == "cpu" else "float16")
-CPU_THREADS = int(os.environ.get("WHISPER_CPU_THREADS", "0"))  # 0 = all cores
-BEAM_SIZE = int(os.environ.get("WHISPER_BEAM_SIZE", "5"))
+
+
+def usable_cores() -> int:
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:  # not Linux
+        return os.cpu_count() or 4
+
+
+# faster-whisper treats 0 as "4 threads", not "all cores", so resolve it here.
+CPU_THREADS = int(os.environ.get("WHISPER_CPU_THREADS", "0")) or usable_cores()
+# Greedy decoding (1) is much faster on a CPU; beam search (5) is slightly more accurate.
+BEAM_SIZE = int(os.environ.get("WHISPER_BEAM_SIZE", "1" if DEVICE == "cpu" else "5"))
+# Long files are cut at pauses into ~30 s pieces that are decoded several at a
+# time, which keeps every core busy. 0 turns batching off (one piece after another).
+BATCH_SIZE = int(os.environ.get("WHISPER_BATCH_SIZE", "8" if DEVICE == "cpu" else "16"))
 MAX_DICTATION_BYTES = 25 * 1024 * 1024
 MAX_DICTATION_SECONDS = 5 * 60
 # Downloads of S3 files: connect quickly, then allow slow chunks of a big video.
@@ -69,13 +85,17 @@ app = FastAPI(title="FrameDesk Whisper", docs_url=None, redoc_url=None, openapi_
 # ---- Model ---------------------------------------------------------------
 
 model: Optional[WhisperModel] = None
+batched: Optional[BatchedInferencePipeline] = None
 model_state = {"status": "loading", "error": None}
 
 
 def load_model():
-    global model
+    global model, batched
     try:
-        log.info("Loading %s on %s (%s); the first start downloads it", MODEL_NAME, DEVICE, COMPUTE_TYPE)
+        log.info(
+            "Loading %s on %s (%s, %d threads, beam %d, batch %d); the first start downloads it",
+            MODEL_NAME, DEVICE, COMPUTE_TYPE, CPU_THREADS, BEAM_SIZE, BATCH_SIZE,
+        )
         # Two workers: one for queued files, one for dictation, so a short voice
         # note isn't stuck behind a two-hour video.
         model = WhisperModel(
@@ -86,6 +106,8 @@ def load_model():
             num_workers=2,
             download_root=os.environ.get("WHISPER_MODEL_DIR", "/models"),
         )
+        if BATCH_SIZE > 0:
+            batched = BatchedInferencePipeline(model=model)
         model_state["status"] = "ready"
         log.info("Model ready")
     except Exception as exc:  # noqa: BLE001 - surfaced through /health
@@ -169,13 +191,20 @@ def run_job(job: Job):
 
 
 def transcribe(job: Job, path: str):
-    segments, info = require_model().transcribe(
-        path,
+    whisper = require_model()
+    options = dict(
         language=job.language,
         task=job.task,
         beam_size=BEAM_SIZE,
         vad_filter=True,  # skips silence: faster, and fewer made-up lines
     )
+    if batched is not None:
+        # Keep timestamps inside each piece, so lines stay short for subtitles.
+        segments, info = batched.transcribe(
+            path, batch_size=BATCH_SIZE, without_timestamps=False, **options
+        )
+    else:
+        segments, info = whisper.transcribe(path, **options)
     job.detected_language = info.language
     job.duration = info.duration
     for segment in segments:  # lazy: each step decodes the next piece

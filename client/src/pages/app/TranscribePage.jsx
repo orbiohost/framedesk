@@ -6,7 +6,6 @@ import {
   Download,
   FolderOpen,
   Languages,
-  Loader2,
   Play,
   RefreshCw,
   Trash2,
@@ -16,7 +15,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { Alert } from '../../components/ui/Alert.jsx';
-import { Badge } from '../../components/ui/Badge.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Card } from '../../components/ui/Card.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
@@ -44,18 +42,18 @@ import {
   useTranscriptionEnabled,
   useTranscriptionsFolder,
 } from '../../features/transcripts/hooks.js';
+import {
+  locationHref,
+  locationLabel,
+  splitTranscribable,
+  TRANSCRIBE_ACCEPT,
+} from '../../features/transcripts/transcribeFiles.js';
+import { TranscriptStatusBadge } from '../../features/transcripts/TranscriptStatusBadge.jsx';
 import { canEdit as canEditWorkspace } from '../../features/workspaces/roles.js';
 import { cn } from '../../lib/cn.js';
 import { formatDate } from '../../lib/dates.js';
 import { formatBytes } from '../../lib/format.js';
 import { featureKey } from '../../lib/workspaceKeys.js';
-
-// What Whisper can read and the viewer can play. Camera RAW (.r3d, .braw) and
-// .mxf are left out: they upload fine to the Drive but can't be transcribed here.
-const AUDIO = 'wav mp3 aac m4a aif aiff flac ogg oga opus weba wma amr ac3 mka';
-const VIDEO = 'mp4 mov m4v avi mkv webm mts m2ts ts mpeg mpg m2v vob 3gp 3g2 ogv wmv flv';
-const EXTENSIONS = new Set(`${AUDIO} ${VIDEO}`.split(' '));
-const ACCEPT = ['audio/*', 'video/*', ...[...EXTENSIONS].map((ext) => `.${ext}`)].join(',');
 
 const FILTERS = [
   { value: 'all', label: 'All' },
@@ -63,11 +61,6 @@ const FILTERS = [
   { value: 'done', label: 'Done' },
   { value: 'failed', label: 'Failed' },
 ];
-
-function extensionOf(name) {
-  const dot = name.lastIndexOf('.');
-  return dot === -1 ? '' : name.slice(dot + 1).toLowerCase();
-}
 
 function UploadCard({ workspaceId, folder }) {
   const inputRef = useRef(null);
@@ -77,9 +70,8 @@ function UploadCard({ workspaceId, folder }) {
   const [rejected, setRejected] = useState([]);
 
   function upload(fileList) {
-    const files = [...fileList];
-    const accepted = files.filter((file) => EXTENSIONS.has(extensionOf(file.name)));
-    setRejected(files.filter((file) => !accepted.includes(file)).map((file) => file.name));
+    const { accepted, rejected: skipped } = splitTranscribable(fileList);
+    setRejected(skipped.map((file) => file.name));
     if (accepted.length === 0 || !folder.data) return;
     addUploads({
       workspaceId,
@@ -133,7 +125,7 @@ function UploadCard({ workspaceId, folder }) {
         ref={inputRef}
         type="file"
         multiple
-        accept={ACCEPT}
+        accept={TRANSCRIBE_ACCEPT}
         className="hidden"
         onChange={(event) => {
           upload(event.target.files);
@@ -209,34 +201,6 @@ function PendingUploads({ workspaceId }) {
       })}
     </ul>
   );
-}
-
-function StatusBadge({ transcript }) {
-  if (transcript.file?.deletedAt) return <Badge tone="muted">In Trash</Badge>;
-  if (transcript.status === 'queued') return <Badge tone="muted">Waiting</Badge>;
-  if (transcript.status === 'processing') {
-    return (
-      <Badge tone="accent">
-        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-        {Math.round(transcript.progress * 100)}%
-      </Badge>
-    );
-  }
-  if (transcript.status === 'failed') return <Badge tone="danger">Failed</Badge>;
-  return <Badge tone="success">Done</Badge>;
-}
-
-function locationLabel(location) {
-  if (!location) return null;
-  const space = location.projectId ? (location.projectName ?? 'Project') : 'Drive';
-  return location.folderName ? `${space} › ${location.folderName}` : space;
-}
-
-function locationHref(workspaceId, location) {
-  const base = location.projectId
-    ? `/w/${workspaceId}/projects/${location.projectId}/files`
-    : `/w/${workspaceId}/drive`;
-  return `${base}?folder=${location.folderId}`;
 }
 
 function downloadFrom(href) {
@@ -376,7 +340,7 @@ function HistoryRow({ workspaceId, transcript, editable, enabled, onOpen, onActi
           >
             {file?.name ?? 'Deleted file'}
           </button>
-          <StatusBadge transcript={transcript} />
+          <TranscriptStatusBadge transcript={transcript} />
         </div>
         {transcript.status === 'failed' && transcript.error ? (
           <p className="text-danger mt-0.5 line-clamp-1 text-sm">{transcript.error}</p>

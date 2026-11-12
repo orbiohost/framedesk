@@ -17,6 +17,7 @@ import notesRoutes from './notes/notes.routes.js';
 import plansRoutes from './plans/plans.routes.js';
 import { publicShareRouter } from './projectShare/projectShare.routes.js';
 import projectsRoutes from './projects/projects.routes.js';
+import supportRoutes from './support/support.routes.js';
 import quickNotesRoutes from './quickNotes/quickNotes.routes.js';
 import tasksRoutes from './tasks/tasks.routes.js';
 import transcriptsRoutes from './transcripts/transcripts.routes.js';
@@ -37,6 +38,7 @@ apiRouter.use('/auth', authRoutes);
 apiRouter.use('/users', usersRoutes);
 apiRouter.use('/avatars', avatarsRoutes);
 apiRouter.use('/plans', plansRoutes);
+apiRouter.use('/support', supportRoutes);
 apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/backup-downloads', backupDownloadsRouter);
 // Shared project links: open to anyone holding the link (or any signed-in

@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { prefetchCurrentUser } from '../features/auth/hooks.js';
 import { persistQueryCache } from '../lib/queryPersistence.js';
 
 // 4xx responses are answers, not glitches, so only server/network errors retry.
@@ -22,6 +23,7 @@ const queryClient = new QueryClient({
 
 // Restores last session's data before the first render, then keeps the copy current.
 persistQueryCache(queryClient);
+prefetchCurrentUser(queryClient);
 
 export function AppProviders({ children }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;

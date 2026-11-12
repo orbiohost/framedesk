@@ -7,7 +7,13 @@ import {
   listActiveMembershipsForUser,
 } from '../members/members.service.js';
 import { User } from '../users/user.model.js';
-import { findOwnerAccountWorkspace, findPoolWorkspace, poolsFor } from './storagePool.js';
+import { cached } from '../../utils/cache.js';
+import {
+  findOwnerAccountWorkspace,
+  findPoolWorkspace,
+  findWorkspaceCached,
+  poolsFor,
+} from './storagePool.js';
 import { Workspace, poolIdOf, storageLimitBytes } from './workspace.model.js';
 
 export function defaultWorkspaceName(ownerName) {
@@ -108,8 +114,10 @@ export async function listWorkspacesForUser(userId) {
 // returned once the membership check has passed.
 export async function findWorkspaceForMember({ workspaceId, userId }) {
   const [membership, workspace] = await Promise.all([
-    findActiveMembership({ workspaceId, userId }),
-    Workspace.findById(workspaceId).lean(),
+    cached(`membership:${workspaceId}:${userId}`, [`members:${workspaceId}`], () =>
+      findActiveMembership({ workspaceId, userId }),
+    ),
+    findWorkspaceCached(workspaceId),
   ]);
   if (!membership || !workspace) throw AppError.notFound('Workspace not found');
 

@@ -20,8 +20,23 @@ services:
       # Speech-to-text (transcripts, dictation). Remove both lines to turn it off.
       WHISPER_URL: http://whisper:9000
       WHISPER_API_KEY: ${WHISPER_API_KEY:?Set WHISPER_API_KEY in .env next to docker-compose.yml}
+      # Request cache + shared rate limits. The API keeps working (on MongoDB
+      # alone) if Redis is down; remove the line to run without it.
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
     volumes:
       - framedesk_data:/data
+
+  # Cache only: nothing in it needs to survive a restart, so no disk persistence.
+  # volatile-lru evicts only entries with a TTL (cache, rate-limit counters),
+  # never the cache's invalidation counters. No ports: only the API reaches it.
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: >-
+      redis-server --save "" --appendonly no
+      --maxmemory 128mb --maxmemory-policy volatile-lru
 
   # Free, self-hosted OpenAI Whisper (faster-whisper). No ports: only the API reaches it.
   whisper:
@@ -29,15 +44,19 @@ services:
     restart: unless-stopped
     environment:
       WHISPER_API_KEY: ${WHISPER_API_KEY}
-      # large-v3 = best accuracy. large-v3-turbo is ~6x faster with nearly the same
-      # quality, and is the better pick on a CPU-only server.
-      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
+      # large-v3-turbo is several times faster than large-v3 on a CPU with nearly
+      # the same quality. Set WHISPER_MODEL=large-v3 for the last bit of accuracy.
+      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3-turbo}
       WHISPER_DEVICE: cpu
-      # 0 = use every core. Lower it to leave CPU for the API and Nginx.
+      # 0 = every core. Whisper runs at low CPU priority, so the site stays fast meanwhile.
       WHISPER_CPU_THREADS: ${WHISPER_CPU_THREADS:-0}
+      # 1 = greedy decoding (fast on a CPU); 5 = beam search (slower, slightly more accurate).
+      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-1}
+      # Pieces of a long file decoded at once. 0 = off (less memory, slower).
+      WHISPER_BATCH_SIZE: ${WHISPER_BATCH_SIZE:-8}
     # Downloads each file from a signed S3 link, so it needs outbound internet access.
     volumes:
-      # Downloaded model weights (~3 GB for large-v3), kept across rebuilds.
+      # Downloaded model weights (~1.6 GB for large-v3-turbo), kept across rebuilds.
       - whisper_models:/models
 
   web:

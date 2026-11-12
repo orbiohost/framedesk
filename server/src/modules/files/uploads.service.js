@@ -1,5 +1,3 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import mongoose from 'mongoose';
 import { storageConfig } from '../../config/storage.js';
 import { AppError } from '../../utils/AppError.js';
@@ -7,11 +5,8 @@ import { formatBytes } from '../../utils/bytes.js';
 import { sanitizeFileName } from '../../utils/fileNames.js';
 import { findActiveMembership } from '../members/members.service.js';
 import { EDIT_ROLES } from '../members/roles.js';
-import { queueTranscriptForUpload } from '../transcripts/transcripts.service.js';
 import { readUploadTranscribeOptions } from '../transcripts/transcripts.validation.js';
 import { findPoolWorkspaceById } from '../workspaces/storagePool.js';
-import { StoredFile } from './file.model.js';
-import { ingestFile } from './fileIngest.js';
 import { categoryFor, extensionOf } from './fileTypes.js';
 import { assertFolderAccess } from './folderAccess.js';
 import { findFolderOrThrow } from './folders.service.js';
@@ -21,8 +16,8 @@ import { linkedProjectIds as linkedProjectIdsSchema } from './files.validation.j
 import { tags as tagsSchema } from '../../utils/zodHelpers.js';
 
 // Optional details sent with an upload (a recorded voice note sets them up
-// front): comma-separated "tags" and "linkedProjectIds" tus metadata values.
-function splitList(value) {
+// front): comma-separated "tags" and "linkedProjectIds" values.
+export function splitList(value) {
   return String(value ?? '')
     .split(',')
     .map((part) => part.trim())
@@ -65,7 +60,7 @@ function acceptedFileName(rawName) {
   return { fileName, extension, category };
 }
 
-async function assertCanUploadTo(userId, workspaceId, folderId) {
+export async function assertCanUploadTo(userId, workspaceId, folderId) {
   if (!mongoose.isValidObjectId(workspaceId) || !mongoose.isValidObjectId(folderId)) {
     throw AppError.badRequest('Choose a folder to upload into', 'FOLDER_REQUIRED');
   }
@@ -119,63 +114,3 @@ export async function prepareUpload(user, clientMetadata, size) {
   };
 }
 
-async function storeUpload(metadata, size, stagingPath) {
-  const folder = await assertCanUploadTo(metadata.userId, metadata.workspaceId, metadata.folderId);
-  // Checked again: a linked project may have been deleted while the bytes arrived.
-  const linkedProjectIds = await resolveLinkedProjectIds(
-    metadata.workspaceId,
-    splitList(metadata.linkedProjectIds),
-    folder.projectId,
-  ).catch(() => []);
-  const { storageKey, mime, undo } = await ingestFile({
-    workspaceId: metadata.workspaceId,
-    localPath: stagingPath,
-    size,
-    extension: metadata.extension,
-  });
-  let file;
-  try {
-    file = await StoredFile.create({
-      workspaceId: metadata.workspaceId,
-      projectId: metadata.projectId || null,
-      folderId: metadata.folderId,
-      displayName: metadata.filename,
-      extension: metadata.extension,
-      category: metadata.category,
-      storageKey,
-      size,
-      mime,
-      tags: splitList(metadata.tags),
-      linkedProjectIds,
-      uploadedBy: metadata.userId,
-    });
-  } catch (err) {
-    await undo();
-    throw err;
-  }
-  if (metadata.transcribe) {
-    await queueTranscriptForUpload(file, {
-      userId: metadata.userId,
-      language: metadata.transcribeLanguage || null,
-      task: metadata.transcribe,
-    });
-  }
-  return file;
-}
-
-async function removeStagingFiles(stagingPath) {
-  await Promise.all([
-    fs.rm(stagingPath, { force: true }),
-    fs.rm(`${stagingPath}.json`, { force: true }),
-  ]);
-}
-
-// Called by the tus server once every byte has arrived.
-export async function finalizeUpload(upload) {
-  const stagingPath = upload.storage?.path ?? path.join(storageConfig.stagingDir, upload.id);
-  try {
-    return await storeUpload(upload.metadata, upload.size, stagingPath);
-  } finally {
-    await removeStagingFiles(stagingPath);
-  }
-}

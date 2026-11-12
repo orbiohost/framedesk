@@ -5,6 +5,7 @@ import {
   Gauge,
   Inbox,
   IndianRupee,
+  LifeBuoy,
   ScrollText,
   Users,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ const NAV = [
     icon: Inbox,
     badge: 'openUpgradeRequests',
   },
+  { to: '/admin/support', label: 'Support', icon: LifeBuoy, badge: 'openSupportTickets' },
   { to: '/admin/audit-log', label: 'Audit log', icon: ScrollText },
   { to: '/admin/system', label: 'System', icon: Activity },
 ];

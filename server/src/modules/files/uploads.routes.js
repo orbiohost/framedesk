@@ -2,49 +2,79 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../../middleware/authenticate.js';
 import { validate } from '../../middleware/validate.js';
-import { AppError } from '../../utils/AppError.js';
+import { sendSuccess } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { verifiedUploadMetadata } from './uploadContext.js';
-import { parseUploadMetadata } from './uploadMetadata.js';
-import { uploadServer, uploadStore } from './uploadServer.js';
-import { prepareUpload } from './uploads.service.js';
+import {
+  cancelDirectUpload,
+  completeDirectUpload,
+  createDirectUpload,
+  getDirectUpload,
+  signDirectUploadParts,
+} from './directUploads.service.js';
 
-// Resumable uploads (tus protocol). Express decides who may upload what; tus moves the bytes.
+// Uploads go from the browser straight into S3 (see directUploads.service.js).
+// These endpoints only authorise, hand out part links and finish the upload.
 
-// Upload ids become file names in the staging folder, so only plain ids are accepted.
-const uploadParamsSchema = z.object({ uploadId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/) });
+const idParams = z.object({ uploadId: z.string().regex(/^[a-f\d]{24}$/i) });
+
+const createBody = z.object({
+  size: z.number().int().positive(),
+  // Same fields the upload form always sent: names, folder, tags, transcribe options.
+  metadata: z.record(z.string(), z.string().max(2000)),
+});
+
+const partUrlsBody = z.object({
+  partNumbers: z.array(z.number().int().min(1).max(10_000)).min(1).max(100),
+});
 
 const router = Router();
+router.use(authenticate);
 
-function handOverToTus(req, res) {
-  // Inside a mounted router req.url loses the "/api/uploads" prefix tus expects.
-  req.url = req.originalUrl;
-  return uploadServer.handle(req, res);
-}
+router.post(
+  '/',
+  validate({ body: createBody }),
+  asyncHandler(async (req, res) => {
+    const upload = await createDirectUpload(req.user, req.body.metadata, req.body.size);
+    sendSuccess(res, { upload }, { status: 201 });
+  }),
+);
 
-const createUpload = asyncHandler(async (req, res) => {
-  const clientMetadata = parseUploadMetadata(req.get('upload-metadata'));
-  const size = Number(req.get('upload-length'));
-  const metadata = await prepareUpload(req.user, clientMetadata, size);
-  await verifiedUploadMetadata.run(metadata, () => handOverToTus(req, res));
-});
-
-// Unknown ids pass through so tus can answer with its usual 404.
-const checkOwnUpload = asyncHandler(async (req, res, next) => {
-  const upload = await uploadStore.getUpload(req.params.uploadId).catch(() => null);
-  if (upload && upload.metadata?.userId !== String(req.user._id)) {
-    throw AppError.forbidden('This upload belongs to someone else');
-  }
-  next();
-});
-
-router.post('/', authenticate, createUpload);
-router.all(
+router.get(
   '/:uploadId',
-  authenticate,
-  validate({ params: uploadParamsSchema }),
-  checkOwnUpload,
-  handOverToTus,
+  validate({ params: idParams }),
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, { upload: await getDirectUpload(req.user, req.params.uploadId) });
+  }),
+);
+
+router.post(
+  '/:uploadId/part-urls',
+  validate({ params: idParams, body: partUrlsBody }),
+  asyncHandler(async (req, res) => {
+    const result = await signDirectUploadParts(
+      req.user,
+      req.params.uploadId,
+      req.body.partNumbers,
+    );
+    sendSuccess(res, result);
+  }),
+);
+
+router.post(
+  '/:uploadId/complete',
+  validate({ params: idParams }),
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, await completeDirectUpload(req.user, req.params.uploadId));
+  }),
+);
+
+router.delete(
+  '/:uploadId',
+  validate({ params: idParams }),
+  asyncHandler(async (req, res) => {
+    await cancelDirectUpload(req.user, req.params.uploadId);
+    sendSuccess(res, { cancelled: true });
+  }),
 );
 
 export default router;

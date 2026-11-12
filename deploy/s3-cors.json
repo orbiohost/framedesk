@@ -1,8 +1,8 @@
 [
   {
     "AllowedOrigins": ["https://your-domain.example"],
-    "AllowedMethods": ["GET", "HEAD"],
-    "AllowedHeaders": ["Range"],
+    "AllowedMethods": ["GET", "HEAD", "PUT"],
+    "AllowedHeaders": ["*"],
     "ExposeHeaders": ["Content-Length", "Content-Range", "Accept-Ranges", "Content-Type", "ETag"],
     "MaxAgeSeconds": 3600
   }

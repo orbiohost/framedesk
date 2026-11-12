@@ -18,8 +18,9 @@ const transport = createTransport();
 
 // Single entry point for outgoing mail.
 export const mailer = {
-  async send({ to, subject, text }) {
-    await transport.sendMail({ from: env.MAIL_FROM, to, subject, text });
+  // replyTo: where "Reply" in the recipient's mail app goes (e.g. a support ticket's sender).
+  async send({ to, subject, text, replyTo }) {
+    await transport.sendMail({ from: env.MAIL_FROM, to, subject, text, replyTo });
     if (env.MAIL_TRANSPORT === 'console') {
       logger.info({ to, subject, text }, 'Email (console transport, not sent)');
     }

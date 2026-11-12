@@ -24,6 +24,7 @@ import { useState } from 'react';
 import { Button } from '../../components/ui/Button.jsx';
 import { Dialog } from '../../components/ui/Dialog.jsx';
 import { cn } from '../../lib/cn.js';
+import { useTranscriptionEnabled } from '../transcripts/hooks.js';
 import { FocusTimer } from './FocusTimer.jsx';
 import { MeetSchedule } from './MeetSchedule.jsx';
 import { MiniCalendar } from './MiniCalendar.jsx';
@@ -35,6 +36,7 @@ import { StorageWidget } from './StorageWidget.jsx';
 import { TaskBoardWidget } from './TaskBoardWidget.jsx';
 import { TeamChat } from './TeamChat.jsx';
 import { TeamWidget } from './TeamWidget.jsx';
+import { TranscribeWidget } from './TranscribeWidget.jsx';
 import {
   DEFAULT_LAYOUT,
   SPAN_LABELS,
@@ -76,6 +78,7 @@ const RENDERERS = {
   projects: (ctx) => <ProjectsWidget workspace={ctx.workspace} className={FILL} />,
   team: (ctx) => <TeamWidget workspace={ctx.workspace} tasks={ctx.tasks} className={FILL} />,
   storage: (ctx) => <StorageWidget workspace={ctx.workspace} className={FILL} />,
+  transcribe: (ctx) => <TranscribeWidget workspace={ctx.workspace} className={FILL} />,
 };
 
 function defaultSpanFor(id) {
@@ -185,8 +188,11 @@ function WidgetSlot({ item, index, count, editing, onMove, onResize, onRemove, c
   );
 }
 
-function AddWidgetDialog({ open, onClose, shownIds, onAdd }) {
-  const hidden = WIDGETS.filter((widget) => !shownIds.has(widget.id));
+function AddWidgetDialog({ workspaceId, open, onClose, shownIds, onAdd }) {
+  const transcription = useTranscriptionEnabled(workspaceId);
+  const hidden = WIDGETS.filter(
+    (widget) => !shownIds.has(widget.id) && (transcription || !widget.needsTranscription),
+  );
   return (
     <Dialog
       open={open}
@@ -347,6 +353,7 @@ export function DashboardGrid({ widgets, editing, onChange, ctx, adding, setAddi
       )}
 
       <AddWidgetDialog
+        workspaceId={ctx.workspace.id}
         open={adding}
         onClose={() => setAdding(false)}
         shownIds={shownIds}

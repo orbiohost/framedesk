@@ -93,6 +93,18 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value || undefined),
+    // Optional Redis (e.g. redis://redis:6379) for the request cache and shared
+    // rate limits. Leave empty to run without it.
+    REDIS_URL: z
+      .string()
+      .optional()
+      .transform((value) => value || undefined)
+      .pipe(
+        z
+          .string()
+          .regex(/^rediss?:\/\/.+/, 'must start with redis:// or rediss://')
+          .optional(),
+      ),
   })
   .superRefine((env, ctx) => {
     if (Boolean(env.S3_ACCESS_KEY_ID) !== Boolean(env.S3_SECRET_ACCESS_KEY)) {

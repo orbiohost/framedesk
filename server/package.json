@@ -11,14 +11,13 @@
     "start": "node src/server.js",
     "seed:users": "node scripts/seedUsers.js",
     "migrate:storage-pools": "node scripts/migrateStoragePools.js",
-    "migrate:local-to-s3": "node scripts/migrateLocalToS3.js"
+    "migrate:local-to-s3": "node scripts/migrateLocalToS3.js",
+    "optimize:media": "node scripts/optimizeStoredMedia.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1166.0",
     "@aws-sdk/lib-storage": "^3.1166.0",
     "@aws-sdk/s3-request-presigner": "^3.1166.0",
-    "@tus/file-store": "^2.1.2",
-    "@tus/server": "^2.4.7",
     "argon2": "^0.41.1",
     "compression": "^1.8.2",
     "cookie-parser": "^1.4.7",
@@ -29,6 +28,7 @@
     "express-rate-limit": "^7.4.1",
     "file-type": "^22.3.0",
     "helmet": "^8.0.0",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.1",
     "nodemailer": "^10.3.1",

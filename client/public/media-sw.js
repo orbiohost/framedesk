@@ -311,7 +311,8 @@ class Load {
         const { value, done } = await reader.read();
         if (done) break;
         feedWatchdog();
-        const piece = value.byteLength > expected - received ? value.subarray(0, expected - received) : value;
+        const piece =
+          value.byteLength > expected - received ? value.subarray(0, expected - received) : value;
         this.parts.push(piece);
         received += piece.byteLength;
         this.wake();
@@ -444,7 +445,7 @@ function passThrough(request, file) {
   const headers = {};
   const range = request.headers.get('range');
   if (range) headers.Range = range;
-  return fetch(file.url, { headers, mode: 'cors', credentials: 'omit' });
+  return fetch(file.url, { headers, mode: 'cors', credentials: 'omit', cache: 'no-store' });
 }
 
 async function serve(request, url) {

@@ -29,7 +29,11 @@ function runLimited(task) {
 }
 
 async function fetchBytes(url) {
-  const response = await fetch(url, { mode: 'cors', credentials: 'same-origin' });
+  const response = await fetch(url, {
+    mode: 'cors',
+    credentials: 'same-origin',
+    cache: 'no-store',
+  });
   if (!response.ok) throw new Error('The file could not be loaded');
   return response.arrayBuffer();
 }

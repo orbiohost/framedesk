@@ -159,7 +159,14 @@ export async function cancelConversion() {
 
 async function downloadSource(url, onProgress, signal) {
   // S3 links are cross-origin, so no cookies are sent with them.
-  const response = await fetch(url, { signal, credentials: 'same-origin', mode: 'cors' });
+  const response = await fetch(url, {
+    signal,
+    mode: 'cors',
+    credentials: 'same-origin',
+    // A <video>/<img> may already have loaded this link without CORS, and S3
+    // doesn't send Vary: Origin then, so a cached copy would fail the CORS check.
+    cache: 'no-store',
+  });
   if (!response.ok) throw new Error('The file could not be downloaded for conversion.');
   const total = Number(response.headers.get('content-length')) || 0;
   if (!response.body || !total) return response.blob();

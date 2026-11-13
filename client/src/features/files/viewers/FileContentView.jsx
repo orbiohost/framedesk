@@ -140,7 +140,7 @@ function TextView({ file, url }) {
 
   useEffect(() => {
     let isCurrent = true;
-    fetch(url, { mode: 'cors', credentials: 'same-origin' })
+    fetch(url, { mode: 'cors', credentials: 'same-origin', cache: 'no-store' })
       .then((response) => {
         if (!response.ok) throw new Error('The file could not be loaded');
         return response.text();
@@ -200,7 +200,7 @@ function FontView({ url }) {
   useEffect(() => {
     let isCurrent = true;
     let face = null;
-    fetch(url, { mode: 'cors', credentials: 'same-origin' })
+    fetch(url, { mode: 'cors', credentials: 'same-origin', cache: 'no-store' })
       .then((response) => {
         if (!response.ok) throw new Error('The font could not be loaded');
         return response.arrayBuffer();

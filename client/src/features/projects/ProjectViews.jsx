@@ -101,24 +101,10 @@ function ProjectCard({ project, workspaceId, menu }) {
         </Link>
       </h3>
       <p className="text-muted mt-1 truncate text-sm">{subtitle(project)}</p>
-      {project.tags?.length > 0 && (
-        <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Tags">
-          {project.tags.slice(0, 3).map((tag) => (
-            <li key={tag} className="bg-subtle text-muted rounded-full px-2 py-0.5 text-xs">
-              {tag}
-            </li>
-          ))}
-          {project.tags.length > 3 && (
-            <li className="text-muted px-1 py-0.5 text-xs">+{project.tags.length - 3}</li>
-          )}
-        </ul>
-      )}
       {/* Pinned to the bottom, so cards in a row line up whatever their text. */}
-      <div className="mt-auto pt-5">
-        <div className="border-line/70 space-y-3 border-t pt-4">
-          <Progress project={project} wide />
-          <DueLabel project={project} />
-        </div>
+      <div className="mt-auto space-y-2.5 pt-5">
+        <Progress project={project} wide />
+        <DueLabel project={project} />
       </div>
     </li>
   );

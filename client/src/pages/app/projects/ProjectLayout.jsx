@@ -137,9 +137,15 @@ export function ProjectLayout() {
   const manager = canManage(workspace);
   const due = dueInfo(project);
   const isArchived = project.status === 'archived';
-  // Deleting is rare and final, so it lives in the menu rather than beside Edit.
+  // The header keeps the two everyday controls (status and Share); the rest is in the menu.
   const moreItems = [];
   if (manager) {
+    moreItems.push({
+      key: 'edit',
+      label: 'Edit details',
+      icon: Pencil,
+      onSelect: () => setIsEditing(true),
+    });
     moreItems.push({
       key: 'archive',
       label: isArchived ? 'Restore from archive' : 'Archive project',
@@ -168,7 +174,7 @@ export function ProjectLayout() {
       </Link>
       <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="font-display text-3xl leading-tight tracking-tight md:text-4xl">
+          <h1 className="font-display text-2xl leading-tight tracking-tight md:text-3xl">
             {project.title}
           </h1>
           <p className="text-muted mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -205,11 +211,6 @@ export function ProjectLayout() {
           {manager && (
             <Button variant="secondary" onClick={() => setIsSharing(true)}>
               <Share2 className="h-4 w-4" aria-hidden="true" /> Share
-            </Button>
-          )}
-          {manager && (
-            <Button variant="secondary" onClick={() => setIsEditing(true)}>
-              <Pencil className="h-4 w-4" aria-hidden="true" /> Edit
             </Button>
           )}
           <ActionMenu

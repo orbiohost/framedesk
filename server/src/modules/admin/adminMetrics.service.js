@@ -81,10 +81,14 @@ async function subscriptionMetrics(now) {
   };
 }
 
+// Revenue excludes GST, which is collected for the government. Payments from
+// before GST was tracked have no taxable amount and count in full.
+const NET_OF_GST = { $ifNull: ['$taxableAmount', '$amount'] };
+
 async function sumPayments(match) {
   const [row] = await Payment.aggregate([
     { $match: match },
-    { $group: { _id: null, total: { $sum: '$amount' } } },
+    { $group: { _id: null, total: { $sum: NET_OF_GST } } },
   ]).option(ALL_WORKSPACES);
   return row?.total ?? 0;
 }
@@ -100,7 +104,7 @@ async function revenueMetrics(now) {
     {
       $group: {
         _id: { $dateToString: { format: '%Y-%m', date: '$paidAt', timezone: TIME_ZONE } },
-        amount: { $sum: '$amount' },
+        amount: { $sum: NET_OF_GST },
       },
     },
   ]).option(ALL_WORKSPACES);

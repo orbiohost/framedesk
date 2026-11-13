@@ -15,6 +15,11 @@ const billingSnapshotSchema = new Schema(
     // What the workspace pays per interval, in rupees (drives MRR).
     amount: { type: Number, min: 0, default: null },
     canceledAt: { type: Date, default: null },
+    // When the plan was first seen to have run out; the grace period counts
+    // from here (or from currentPeriodEnd, whichever is later).
+    pastDueSince: { type: Date, default: null },
+    // The period end a renewal reminder was last sent for (one email per period).
+    renewalRemindedFor: { type: Date, default: null },
   },
   { _id: false },
 );

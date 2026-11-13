@@ -1,17 +1,6 @@
-import {
-  AlarmClock,
-  ArrowDownUp,
-  ChevronDown,
-  CircleCheck,
-  FolderKanban,
-  LayoutGrid,
-  List,
-  Plus,
-  SearchX,
-  TriangleAlert,
-} from 'lucide-react';
+import { ArrowDownUp, ChevronDown, FolderKanban, LayoutGrid, List, Plus, SearchX } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Alert } from '../../../components/ui/Alert.jsx';
 import { Button } from '../../../components/ui/Button.jsx';
 import { EmptyState } from '../../../components/ui/EmptyState.jsx';
@@ -35,14 +24,14 @@ import { canAdminister, canManage } from '../../../features/workspaces/roles.js'
 import { cn } from '../../../lib/cn.js';
 import { readLocal, writeLocal } from '../../../lib/storage.js';
 
-// "all" is everything not archived. The rest match one status each.
-const TABS = [
-  { value: 'all', label: 'All' },
-  { value: 'active', label: 'Active' },
-  { value: 'review', label: 'In review' },
-  { value: 'pending', label: 'Waiting' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'completed', label: 'Completed' },
+// One row of filters. "Open" is the default: work still to be delivered.
+// `onlyWhenAny` filters stay hidden until there is something in them.
+const FILTERS = [
+  { value: 'open', label: 'Open', test: isProjectOpen },
+  { value: 'overdue', label: 'Overdue', test: isProjectOverdue, onlyWhenAny: true, alert: true },
+  { value: 'soon', label: 'Due this week', test: isProjectDueSoon, onlyWhenAny: true },
+  { value: 'completed', label: 'Completed', test: (project) => project.status === 'completed' },
+  // Archived projects load separately, so they have no count and no test.
   { value: 'archived', label: 'Archived' },
 ];
 
@@ -64,38 +53,14 @@ function useStoredChoice(key, allowed, fallback) {
   return [value, change];
 }
 
-// A number at a glance that is also a shortcut: clicking it filters the list.
-function StatTile({ icon: Icon, label, value, tint, isActive, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={isActive}
-      className={cn(
-        'bg-surface shadow-soft flex items-center gap-3.5 rounded-3xl border p-4 text-left transition-all duration-200 hover:-translate-y-0.5',
-        isActive
-          ? 'border-accent/60 ring-accent/30 ring-2'
-          : 'border-line/70 hover:border-accent/30',
-      )}
-    >
-      <span className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-2xl', tint)}>
-        <Icon className="h-5 w-5" aria-hidden="true" />
-      </span>
-      <span className="min-w-0">
-        <span className="font-display block text-2xl tabular-nums leading-none">{value}</span>
-        <span className="text-muted mt-1 block truncate text-sm">{label}</span>
-      </span>
-    </button>
+function FilterTabs({ value, onChange, counts }) {
+  const tabs = FILTERS.filter(
+    (filter) => !filter.onlyWhenAny || counts[filter.value] > 0 || value === filter.value,
   );
-}
-
-function StatusTabs({ value, onChange, counts }) {
-  // "Draft" only earns a tab while there are drafts (or it is the open tab).
-  const tabs = TABS.filter((tab) => tab.value !== 'draft' || counts.draft > 0 || value === 'draft');
   return (
     <div
       role="group"
-      aria-label="Filter by status"
+      aria-label="Filter projects"
       className="-mx-1 flex max-w-full gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {tabs.map((tab) => {
@@ -114,6 +79,9 @@ function StatusTabs({ value, onChange, counts }) {
                 : 'border-line/70 bg-surface text-muted hover:text-ink border',
             )}
           >
+            {tab.alert && !isActive && (
+              <span className="bg-danger h-1.5 w-1.5 rounded-full" aria-hidden="true" />
+            )}
             {tab.label}
             {count !== undefined && (
               <span className="text-[11px] tabular-nums opacity-70">{count}</span>
@@ -152,20 +120,19 @@ function SortSelect({ value, onChange }) {
   );
 }
 
-function countByTab(projects) {
-  const counts = { all: projects.length };
-  for (const project of projects) counts[project.status] = (counts[project.status] ?? 0) + 1;
+function countByFilter(projects) {
+  const counts = {};
+  for (const filter of FILTERS) {
+    if (filter.test) counts[filter.value] = projects.filter(filter.test).length;
+  }
   return counts;
 }
 
 export function ProjectsPage() {
   const { workspace } = useOutletContext();
-  const navigate = useNavigate();
   const manager = canManage(workspace);
   const admin = canAdminister(workspace);
-  const [tab, setTab] = useState('all');
-  // "soon" | "overdue": the stat tiles' shortcuts, on top of the "all" tab.
-  const [focus, setFocus] = useState(null);
+  const [filter, setFilter] = useState('open');
   const [search, setSearch] = useState('');
   const [view, setView] = useStoredChoice('projects:view', ['grid', 'list'], 'grid');
   const [sort, setSort] = useStoredChoice(
@@ -173,24 +140,24 @@ export function ProjectsPage() {
     PROJECT_SORTS.map((option) => option.value),
     'due',
   );
-  // The sidebar's "+" links here with ?new=1 to open the dialog straight away.
+  // The sidebar's "+" links here with ?new=1. Read on every render, so it also
+  // works when this page is already open.
   const [searchParams, setSearchParams] = useSearchParams();
+  const wantsNew = manager && searchParams.get('new') === '1';
   // null | { type: "create" } | { type: "edit" | "delete", project }
-  const [dialog, setDialog] = useState(() =>
-    manager && searchParams.get('new') === '1' ? { type: 'create' } : null,
-  );
+  const [dialog, setDialog] = useState(null);
   const save = useSaveProject(workspace.id);
   const deleteProject = useDeleteProject(workspace.id);
 
   // Everything not archived comes in one request and is filtered here, so the
-  // tabs can show counts and switch instantly. Archived loads when asked for.
+  // filters can show counts and switch instantly. Archived loads when asked for.
   const current = useProjects(workspace.id);
   const archived = useProjects(
     workspace.id,
     { status: 'archived' },
-    { enabled: tab === 'archived' },
+    { enabled: filter === 'archived' },
   );
-  const source = tab === 'archived' ? archived : current;
+  const source = filter === 'archived' ? archived : current;
   const all = current.data ?? [];
 
   function closeDialog() {
@@ -199,34 +166,21 @@ export function ProjectsPage() {
     if (searchParams.has('new')) setSearchParams({}, { replace: true });
   }
 
-  function chooseTab(next) {
-    setTab(next);
-    setFocus(null);
-  }
-
-  function chooseFocus(next) {
-    setTab('all');
-    setFocus(focus === next ? null : next);
-  }
-
   function onAction(action, project, value) {
-    if (action === 'open') navigate(`/w/${workspace.id}/projects/${project.id}`);
-    else if (action === 'status') save.mutate({ id: project.id, status: value });
+    if (action === 'status') save.mutate({ id: project.id, status: value });
     else setDialog({ type: action, project });
   }
 
   const needle = search.trim().toLowerCase();
-  const inTab = (source.data ?? []).filter((project) => {
-    if (tab !== 'all' && tab !== 'archived' && project.status !== tab) return false;
-    if (focus === 'soon' && !isProjectDueSoon(project)) return false;
-    if (focus === 'overdue' && !isProjectOverdue(project)) return false;
-    return true;
-  });
+  const test = FILTERS.find((candidate) => candidate.value === filter).test;
   const shown = sortProjects(
-    inTab.filter((project) => matchesSearch(project, needle)),
+    (source.data ?? []).filter(
+      (project) => (!test || test(project)) && matchesSearch(project, needle),
+    ),
     sort,
   );
-  const isFiltered = tab !== 'all' || focus !== null || needle !== '';
+  // Nothing at all yet (not even finished work): invite the first project.
+  const isBrandNew = current.isSuccess && all.length === 0 && filter === 'open' && !needle;
   const menu = { canManage: manager, canDelete: admin, onAction };
   const create = () => setDialog({ type: 'create' });
 
@@ -234,7 +188,6 @@ export function ProjectsPage() {
     <>
       <PageHeader
         title="Projects"
-        description="Every piece of client work, with its tasks, schedule and files."
         actions={
           manager && (
             <Button onClick={create}>
@@ -244,57 +197,22 @@ export function ProjectsPage() {
         }
       />
 
-      {all.length > 0 && (
-        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatTile
-            icon={FolderKanban}
-            label="In progress"
-            value={all.filter(isProjectOpen).length}
-            tint="bg-lavender text-accent dark:text-ink"
-            isActive={tab === 'all' && focus === null}
-            onClick={() => chooseTab('all')}
-          />
-          <StatTile
-            icon={AlarmClock}
-            label="Due this week"
-            value={all.filter(isProjectDueSoon).length}
-            tint="bg-peach text-ink"
-            isActive={focus === 'soon'}
-            onClick={() => chooseFocus('soon')}
-          />
-          <StatTile
-            icon={TriangleAlert}
-            label="Overdue"
-            value={all.filter(isProjectOverdue).length}
-            tint="bg-pink text-ink"
-            isActive={focus === 'overdue'}
-            onClick={() => chooseFocus('overdue')}
-          />
-          <StatTile
-            icon={CircleCheck}
-            label="Completed"
-            value={all.filter((project) => project.status === 'completed').length}
-            tint="bg-mint text-ink"
-            isActive={tab === 'completed'}
-            onClick={() => chooseTab('completed')}
-          />
+      {!isBrandNew && (
+        <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <FilterTabs value={filter} onChange={setFilter} counts={countByFilter(all)} />
+          <div className="flex w-full items-center gap-2 lg:ml-auto lg:w-auto">
+            <SearchInput
+              label="Search projects"
+              placeholder="Search title, client, status or tag"
+              value={search}
+              onChange={setSearch}
+              className="min-w-0 flex-1 lg:w-64 lg:flex-none"
+            />
+            <SortSelect value={sort} onChange={setSort} />
+            <SegmentedControl label="View" options={VIEW_OPTIONS} value={view} onChange={setView} />
+          </div>
         </div>
       )}
-
-      <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <StatusTabs value={tab} onChange={chooseTab} counts={countByTab(all)} />
-        <div className="flex w-full items-center gap-2 lg:ml-auto lg:w-auto">
-          <SearchInput
-            label="Search projects"
-            placeholder="Search title, client or tag"
-            value={search}
-            onChange={setSearch}
-            className="min-w-0 flex-1 lg:w-64 lg:flex-none"
-          />
-          <SortSelect value={sort} onChange={setSort} />
-          <SegmentedControl label="View" options={VIEW_OPTIONS} value={view} onChange={setView} />
-        </div>
-      </div>
 
       {save.error && (
         <Alert tone="error" className="mb-4">
@@ -305,38 +223,44 @@ export function ProjectsPage() {
       {source.isPending && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-48 rounded-3xl" />
+            <Skeleton key={i} className="h-40 rounded-3xl" />
           ))}
         </div>
       )}
 
       {source.isSuccess &&
         shown.length === 0 &&
-        (isFiltered ? (
-          <EmptyState
-            icon={SearchX}
-            title="No projects match"
-            action={
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  chooseTab('all');
-                  setSearch('');
-                }}
-              >
-                Show all projects
-              </Button>
-            }
-          >
-            Nothing fits this filter{needle ? ' and search' : ''} right now.
-          </EmptyState>
-        ) : (
+        (isBrandNew ? (
           <EmptyState
             icon={FolderKanban}
             title="Start your first project"
             action={manager && <Button onClick={create}>New project</Button>}
           >
             A project holds the brief, tasks, schedule and every file for one piece of client work.
+          </EmptyState>
+        ) : (
+          <EmptyState
+            icon={SearchX}
+            title={needle ? 'No projects match' : 'Nothing here right now'}
+            action={
+              (needle || filter !== 'open') && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setFilter('open');
+                    setSearch('');
+                  }}
+                >
+                  Show open projects
+                </Button>
+              )
+            }
+          >
+            {needle
+              ? 'Try a different search, or look under another filter.'
+              : filter === 'open'
+                ? 'Every project is finished. You can find them under Completed.'
+                : 'No projects fit this filter.'}
           </EmptyState>
         ))}
 
@@ -349,7 +273,7 @@ export function ProjectsPage() {
 
       <ProjectFormDialog
         workspaceId={workspace.id}
-        open={dialog?.type === 'create' || dialog?.type === 'edit'}
+        open={wantsNew || dialog?.type === 'create' || dialog?.type === 'edit'}
         onClose={closeDialog}
         project={dialog?.type === 'edit' ? dialog.project : undefined}
       />

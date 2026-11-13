@@ -16,6 +16,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Receipt,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -81,7 +82,9 @@ function CountBadge({ count, active }) {
   return (
     <span
       className={cn(
-        'ml-auto grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
+        // leading-none + a fixed 20px circle keeps a single digit dead centre;
+        // longer counts grow sideways from min-w-5 with a little padding.
+        'ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-center text-[10px] leading-none font-semibold tabular-nums',
         active ? 'bg-surface/20 text-current' : 'bg-lavender text-accent dark:text-ink',
       )}
     >
@@ -278,6 +281,15 @@ function AccountFooter({ workspace, compact }) {
           <Link to={`${base}/account`} onClick={close} role="menuitem" className={MENU_LINK}>
             <UserRound className="h-4 w-4" aria-hidden="true" />
             Your profile
+          </Link>
+          <Link
+            to={`${base}/account?tab=billing`}
+            onClick={close}
+            role="menuitem"
+            className={MENU_LINK}
+          >
+            <Receipt className="h-4 w-4" aria-hidden="true" />
+            Billing &amp; invoices
           </Link>
           {canAdminister(workspace) && (
             <>

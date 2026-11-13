@@ -1,4 +1,6 @@
 import { AppError } from '../../utils/AppError.js';
+import { getGstRules } from '../billing/billingSettings.service.js';
+import { isRazorpayEnabled } from '../billing/razorpay.client.js';
 import { CURRENCY, LAUNCH_OFFER, PLANS, YEARLY_MONTHS_CHARGED } from './plans.catalog.js';
 
 export const BILLING_INTERVALS = ['monthly', 'yearly'];
@@ -36,12 +38,16 @@ function toPublicOffer() {
   return { code, label, interval, percentOff, endsAt, yearlyPrices };
 }
 
-export function getPricing(now = new Date()) {
+export async function getPricing(now = new Date()) {
+  const gst = await getGstRules();
   return {
     currency: CURRENCY,
     yearlyMonthsCharged: YEARLY_MONTHS_CHARGED,
     plans: PLANS.map(toPublicPlan),
     offer: isOfferLive(now) ? toPublicOffer() : null,
+    // GST is added on top of these prices when it applies.
+    tax: { applies: gst.applies, rate: gst.rate, name: 'GST' },
+    onlinePayment: isRazorpayEnabled(),
     serverTime: now,
   };
 }

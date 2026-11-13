@@ -11,6 +11,7 @@ import {
   usePricing,
   useRequestUpgrade,
 } from '../../features/billing/hooks.js';
+import { CheckoutDialog } from '../../features/billing/CheckoutDialog.jsx';
 import { IntervalToggle } from '../../features/billing/IntervalToggle.jsx';
 import { OfferCountdown } from '../../features/billing/OfferCountdown.jsx';
 import { PlanCard, PlanGrid } from '../../features/billing/PlanCard.jsx';
@@ -53,6 +54,7 @@ export function UpgradePage() {
   const { data: openRequest } = useCurrentUpgradeRequest(workspace.id, { enabled: isAdmin });
   const requestUpgrade = useRequestUpgrade(workspace.id);
   const [billingInterval, setBillingInterval] = useState('yearly');
+  const [checkout, setCheckout] = useState(null);
 
   if (!isAdmin) {
     return (
@@ -64,8 +66,14 @@ export function UpgradePage() {
   if (isPending) return <Skeleton className="h-96 w-full" />;
   if (isError) return <Alert tone="error">{error.message}</Alert>;
 
+  const payOnline = pricing.onlinePayment;
   const isRequested = (plan) =>
-    openRequest?.planCode === plan.code && openRequest?.interval === billingInterval;
+    !payOnline && openRequest?.planCode === plan.code && openRequest?.interval === billingInterval;
+
+  function choose(plan) {
+    if (payOnline) setCheckout({ planCode: plan.code, interval: billingInterval });
+    else requestUpgrade.mutate({ planCode: plan.code, interval: billingInterval });
+  }
 
   return (
     <>
@@ -74,7 +82,7 @@ export function UpgradePage() {
         title="Choose a plan"
         description="Priced by storage. Your projects, files and team carry over unchanged."
       />
-      {openRequest && (
+      {openRequest && !payOnline && (
         <RequestNotice request={openRequest} plans={pricing.plans} email={user.email} />
       )}
       {requestUpgrade.error && (
@@ -106,18 +114,25 @@ export function UpgradePage() {
                 isPending={
                   requestUpgrade.isPending && requestUpgrade.variables?.planCode === plan.code
                 }
-                onChoose={() =>
-                  requestUpgrade.mutate({ planCode: plan.code, interval: billingInterval })
-                }
+                onChoose={() => choose(plan)}
               />
             }
           />
         ))}
       </PlanGrid>
       <p className="text-muted mt-4 text-sm">
-        Prices in INR, plus GST. Yearly plans are paid once a year. Nothing is charged until you pay
-        the link we send.
+        Prices in INR
+        {pricing.tax?.applies ? `, plus ${pricing.tax.rate}% GST` : ''}. Yearly plans are paid once
+        a year.{' '}
+        {payOnline
+          ? 'Pay securely by UPI, card or netbanking; your plan switches on as soon as it is paid, and paying again before it ends adds the time on top.'
+          : 'Nothing is charged until you pay the link we send.'}
       </p>
+      <CheckoutDialog
+        workspaceId={workspace.id}
+        selection={checkout}
+        onClose={() => setCheckout(null)}
+      />
     </>
   );
 }

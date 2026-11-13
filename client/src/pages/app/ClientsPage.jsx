@@ -94,7 +94,7 @@ export function ClientsPage() {
         ))}
 
       {clients?.length > 0 && (
-        <ul className="border-line bg-surface divide-line divide-y rounded-lg border">
+        <ul className="border-line/60 bg-surface shadow-soft divide-line/70 divide-y overflow-hidden rounded-3xl border">
           {clients.map((client) => (
             <ClientRow key={client.id} client={client} workspaceId={workspace.id} />
           ))}

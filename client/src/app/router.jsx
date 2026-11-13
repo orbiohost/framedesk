@@ -70,6 +70,11 @@ export const router = createBrowserRouter([
     path: '/share/:token',
     lazy: page(() => import('../pages/share/SharedProjectPage.jsx'), 'SharedProjectPage'),
   },
+  // One file or a few picked files shared by link.
+  {
+    path: '/share/files/:token',
+    lazy: page(() => import('../pages/share/SharedFilesPage.jsx'), 'SharedFilesPage'),
+  },
 
   {
     element: <RequireAuth />,
@@ -123,6 +128,13 @@ export const router = createBrowserRouter([
                 lazy: page(
                   () => import('../pages/admin/SupportTicketsPage.jsx'),
                   'SupportTicketsPage',
+                ),
+              },
+              {
+                path: 'invoicing',
+                lazy: page(
+                  () => import('../pages/admin/AdminInvoicingPage.jsx'),
+                  'AdminInvoicingPage',
                 ),
               },
               {

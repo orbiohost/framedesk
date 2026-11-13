@@ -1,6 +1,8 @@
 import { AppError } from '../../utils/AppError.js';
 import { containsInsensitive } from '../../utils/objects.js';
-import { Payment } from '../billing/payment.model.js';
+import { getGstRules } from '../billing/billingSettings.service.js';
+import { computeGst } from '../billing/gst.js';
+import { billedToSnapshot, recordPaidPeriod } from '../billing/subscription.service.js';
 import { findPlan, planStorageBytes } from '../plans/plans.service.js';
 import { User } from '../users/user.model.js';
 import { findPoolWorkspace } from '../workspaces/storagePool.js';
@@ -8,12 +10,6 @@ import { Workspace, storageLimitBytes } from '../workspaces/workspace.model.js';
 import { recordAudit } from './auditLog.service.js';
 
 const PAYING_STATUSES = ['active', 'past_due'];
-
-function addInterval(from, interval) {
-  const end = new Date(from);
-  end.setMonth(end.getMonth() + (interval === 'yearly' ? 12 : 1));
-  return end;
-}
 
 // Monthly value of a subscription: yearly plans count as a twelfth per month.
 export function monthlyValue(billing) {
@@ -64,55 +60,31 @@ export async function listSubscriptions({ status, plan, q }) {
   return workspaces.map((workspace) => toSubscriptionDto(workspace, workspace.ownerId));
 }
 
-// Puts a workspace on a paid plan until `periodEnd`, with that plan's storage.
-async function applyPlan(workspaceId, { planCode, interval, amount, periodEnd }) {
-  const plan = findPlan(planCode);
-  await Workspace.updateOne(
-    { _id: workspaceId },
-    {
-      $set: {
-        'billing.planCode': plan.code,
-        'billing.status': 'active',
-        'billing.interval': interval,
-        'billing.amount': amount,
-        'billing.trialEndsAt': null,
-        'billing.canceledAt': null,
-        'billing.currentPeriodEnd': periodEnd,
-        'storage.planLimitBytes': planStorageBytes(plan),
-      },
-    },
-  );
-}
-
-// A payment starts a new paid period, or extends the current one if it hasn't ended.
+// A payment recorded by hand. `amount` is what was received, so any GST is
+// taken out of it rather than added on top.
 export async function recordPayment(requestedWorkspaceId, adminId, input) {
   const workspace = await findWorkspaceOrThrow(requestedWorkspaceId);
   const workspaceId = workspace._id;
-  const paidAt = input.paidAt ?? new Date();
-  const periodStart =
-    workspace.billing.status === 'active' && workspace.billing.currentPeriodEnd > paidAt
-      ? workspace.billing.currentPeriodEnd
-      : paidAt;
-  const periodEnd = addInterval(periodStart, input.interval);
+  const billedTo = await billedToSnapshot(workspace.ownerId);
+  const { taxableAmount, tax } = computeGst(input.amount, {
+    rules: await getGstRules(),
+    buyer: billedTo,
+    inclusive: true,
+  });
 
-  const payment = await Payment.create({
-    workspaceId,
+  const payment = await recordPaidPeriod(workspace, {
     amount: input.amount,
+    taxableAmount,
+    tax,
+    billedTo,
     planCode: input.planCode,
     interval: input.interval,
     method: input.method,
     reference: input.reference || null,
     offerCode: input.offerCode ?? null,
-    paidAt,
-    periodEnd,
+    paidAt: input.paidAt ?? new Date(),
     recordedBy: adminId,
     upgradeRequestId: input.upgradeRequestId ?? null,
-  });
-  await applyPlan(workspaceId, {
-    planCode: input.planCode,
-    interval: input.interval,
-    amount: input.amount,
-    periodEnd,
   });
   await recordAudit({
     actorId: adminId,

@@ -3,11 +3,12 @@ import { getStorageDriver } from '../../storage/storageDriver.js';
 import { AppError } from '../../utils/AppError.js';
 import { sanitizeFileName } from '../../utils/fileNames.js';
 import { logger } from '../../utils/logger.js';
+import { removeFilesFromShares } from '../fileShare/fileShare.model.js';
 import { deleteTranscriptsForFiles } from '../transcripts/transcripts.service.js';
 import { withoutUndefined } from '../../utils/objects.js';
 import { Project } from '../projects/project.model.js';
 import { StoredFile } from './file.model.js';
-import { extensionOf, isPreviewable } from './fileTypes.js';
+import { correctedMime, extensionOf, inlineMime, isPreviewable } from './fileTypes.js';
 import { assertFolderAccess, hiddenFolderIds } from './folderAccess.js';
 import { fallbackFolderId, findFolderOrThrow } from './folders.service.js';
 import { releaseStorage, reserveStorage } from './storageQuota.service.js';
@@ -35,14 +36,16 @@ function populateFileRefs(query, workspaceId) {
 export function toFileDto(file) {
   const uploader = file.uploadedBy;
   const linkedProjects = linkedProjectsOf(file);
+  // Fixes HEIC photos stored before the upload check knew all HEIF brands.
+  const mime = correctedMime(file.mime, file.extension);
   return {
     id: String(file._id),
     name: file.displayName,
     extension: file.extension,
     category: file.category,
     size: file.size,
-    mime: file.mime,
-    previewable: isPreviewable(file.mime),
+    mime,
+    previewable: isPreviewable(mime, file.extension),
     status: file.status,
     version: file.version,
     tags: file.tags,
@@ -214,6 +217,7 @@ export async function deleteFilePermanently(workspaceId, fileId, viewer = null) 
   const result = await StoredFile.deleteOne({ _id: fileId, workspaceId, deletedAt: { $ne: null } });
   if (result.deletedCount === 0) return;
   await deleteTranscriptsForFiles(workspaceId, [file._id]);
+  await removeFilesFromShares(workspaceId, [file._id]);
   await getStorageDriver()
     .delete(file.storageKey)
     .catch((err) =>
@@ -235,6 +239,7 @@ export async function emptyTrash(workspaceId, projectId = null, viewer = null) {
   // Only what was just read: a file restored in the meantime no longer matches.
   await StoredFile.deleteMany({ _id: { $in: ids }, workspaceId, deletedAt: { $ne: null } });
   await deleteTranscriptsForFiles(workspaceId, ids);
+  await removeFilesFromShares(workspaceId, ids);
 
   const driver = getStorageDriver();
   await Promise.all(
@@ -251,10 +256,11 @@ export async function emptyTrash(workspaceId, projectId = null, viewer = null) {
 
 export async function createFileUrl(workspaceId, fileId, { disposition }, viewer = null) {
   const file = await findFileOrThrow(workspaceId, fileId, viewer);
-  const inline = disposition === 'inline' && isPreviewable(file.mime);
+  const mime = correctedMime(file.mime, file.extension);
+  const inline = disposition === 'inline' && isPreviewable(mime, file.extension);
   const url = await getStorageDriver().createSignedUrl(file.storageKey, {
     fileName: file.displayName,
-    mime: file.mime,
+    mime: inline ? inlineMime(mime, file.extension) : mime,
     disposition: inline ? 'inline' : 'attachment',
     expiresInSeconds: storageConfig.signedUrlTtlSeconds,
   });
@@ -270,19 +276,19 @@ export async function createFileUrl(workspaceId, fileId, { disposition }, viewer
 export async function createPreviewUrls(workspaceId, fileIds, viewer = null) {
   const [files, hidden] = await Promise.all([
     StoredFile.find({ _id: { $in: fileIds }, workspaceId })
-      .select('storageKey displayName mime folderId')
+      .select('storageKey displayName mime extension folderId')
       .lean(),
     hiddenFolderIds(workspaceId, viewer),
   ]);
   const driver = getStorageDriver();
   const shown = files.filter(
-    (file) => isPreviewable(file.mime) && !hidden.has(String(file.folderId)),
+    (file) => isPreviewable(correctedMime(file.mime, file.extension), file.extension) && !hidden.has(String(file.folderId)),
   );
   const signed = await Promise.all(
     shown.map((file) =>
       driver.createSignedUrl(file.storageKey, {
         fileName: file.displayName,
-        mime: file.mime,
+        mime: inlineMime(correctedMime(file.mime, file.extension), file.extension),
         disposition: 'inline',
         expiresInSeconds: storageConfig.signedUrlTtlSeconds,
       }),
@@ -311,10 +317,9 @@ export async function purgeFiles(workspaceId, filter = {}) {
   if (files.length === 0) return { count: 0 };
 
   await StoredFile.deleteMany({ ...filter, workspaceId });
-  await deleteTranscriptsForFiles(
-    workspaceId,
-    files.map((file) => file._id),
-  );
+  const ids = files.map((file) => file._id);
+  await deleteTranscriptsForFiles(workspaceId, ids);
+  await removeFilesFromShares(workspaceId, ids);
   const liveBytes = files
     .filter((file) => !file.deletedAt)
     .reduce((total, file) => total + file.size, 0);

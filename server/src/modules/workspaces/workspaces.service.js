@@ -6,6 +6,7 @@ import {
   findActiveMembership,
   listActiveMembershipsForUser,
 } from '../members/members.service.js';
+import { effectiveBilling } from '../billing/planLifecycle.service.js';
 import { User } from '../users/user.model.js';
 import { cached } from '../../utils/cache.js';
 import {
@@ -23,15 +24,19 @@ export function defaultWorkspaceName(ownerName) {
 
 // `pool` is the account workspace whose plan and storage this one shares.
 export function toWorkspaceSummary(workspace, membership, pool = workspace) {
+  const billing = effectiveBilling(pool.billing);
   return {
     id: String(workspace._id),
     name: workspace.name,
     role: membership.role,
     isOwner: String(workspace.ownerId) === String(membership.userId),
     billing: {
-      planCode: pool.billing.planCode,
-      status: pool.billing.status,
-      trialEndsAt: pool.billing.trialEndsAt,
+      planCode: billing.planCode,
+      status: billing.status,
+      trialEndsAt: billing.trialEndsAt,
+      currentPeriodEnd: billing.currentPeriodEnd,
+      // While past due: when uploads stop unless the plan is renewed.
+      graceEndsAt: billing.graceEndsAt,
     },
     storage: {
       usedBytes: pool.storage.usedBytes,

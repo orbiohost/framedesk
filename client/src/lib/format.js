@@ -29,6 +29,18 @@ export function formatInr(amount) {
   return inr.format(amount);
 }
 
+const inrWithPaise = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+// Keeps the paise (₹470.82) where a figure has them, e.g. amounts with GST.
+export function formatInrExact(amount) {
+  return Math.round(amount * 100) % 100 === 0 ? inr.format(amount) : inrWithPaise.format(amount);
+}
+
 // "film, retainer" -> ["film", "retainer"]
 export function parseTagList(text) {
   return (text ?? '')

@@ -1,123 +1,248 @@
-import { Bold, Heading2, Italic, List, ListChecks, ListOrdered, Strikethrough } from 'lucide-react';
-import { useLayoutEffect, useRef } from 'react';
+import { Placeholder } from '@tiptap/extension-placeholder';
+import { TaskItem } from '@tiptap/extension-task-item';
+import { TaskList } from '@tiptap/extension-task-list';
+import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
+import { StarterKit } from '@tiptap/starter-kit';
+import {
+  Bold,
+  Code,
+  Heading2,
+  Italic,
+  List,
+  ListChecks,
+  ListOrdered,
+  Redo2,
+  Strikethrough,
+  Undo2,
+} from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { cn } from '../../lib/cn.js';
-import { insertSpokenText } from '../../lib/insertText.js';
 import { DictateButton } from '../transcripts/DictateButton.jsx';
-import { continueList, toggleLinePrefix, wrapSelection } from './noteFormat.js';
+import { docToNote, noteToDoc } from './noteDoc.js';
 
 const TOOLS = [
   {
     key: 'check',
     label: 'To-do list',
     icon: ListChecks,
-    run: (v, s, e) => toggleLinePrefix(v, s, e, 'check'),
+    isActive: (editor) => editor.isActive('taskList'),
+    run: (chain) => chain.toggleTaskList(),
   },
   {
     key: 'bullet',
     label: 'Bulleted list',
     icon: List,
-    run: (v, s, e) => toggleLinePrefix(v, s, e, 'bullet'),
+    isActive: (editor) => editor.isActive('bulletList'),
+    run: (chain) => chain.toggleBulletList(),
   },
   {
     key: 'numbered',
     label: 'Numbered list',
     icon: ListOrdered,
-    run: (v, s, e) => toggleLinePrefix(v, s, e, 'numbered'),
+    isActive: (editor) => editor.isActive('orderedList'),
+    run: (chain) => chain.toggleOrderedList(),
   },
   {
     key: 'heading',
     label: 'Heading',
     icon: Heading2,
-    run: (v, s, e) => toggleLinePrefix(v, s, e, 'heading'),
+    isActive: (editor) => editor.isActive('heading'),
+    run: (chain) => chain.toggleHeading({ level: 2 }),
     divider: true,
   },
   {
     key: 'bold',
     label: 'Bold (Ctrl + B)',
     icon: Bold,
-    run: (v, s, e) => wrapSelection(v, s, e, '**', 'bold'),
+    isActive: (editor) => editor.isActive('bold'),
+    run: (chain) => chain.toggleBold(),
   },
   {
     key: 'italic',
     label: 'Italic (Ctrl + I)',
     icon: Italic,
-    run: (v, s, e) => wrapSelection(v, s, e, '_', 'italic'),
+    isActive: (editor) => editor.isActive('italic'),
+    run: (chain) => chain.toggleItalic(),
   },
   {
     key: 'strike',
     label: 'Strikethrough',
     icon: Strikethrough,
-    run: (v, s, e) => wrapSelection(v, s, e, '~~', 'text'),
+    isActive: (editor) => editor.isActive('strike'),
+    run: (chain) => chain.toggleStrike(),
+  },
+  {
+    key: 'code',
+    label: 'Code',
+    icon: Code,
+    isActive: (editor) => editor.isActive('code'),
+    run: (chain) => chain.toggleCode(),
   },
 ];
 
-const SHORTCUTS = { b: 'bold', i: 'italic' };
+const EXTENSIONS_OFF = {
+  blockquote: false,
+  codeBlock: false,
+  horizontalRule: false,
+  // Links stay as typed text; cards turn URLs into links when showing the note.
+  link: false,
+  underline: false,
+};
+
+function ToolButton({ label, icon: Icon, active, disabled, onClick }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      disabled={disabled}
+      // Keeps the editor's selection while clicking.
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+      className={cn(
+        'grid h-7 w-7 place-items-center rounded-lg transition-colors disabled:opacity-40',
+        active ? 'bg-accent/15 text-accent' : 'text-muted enabled:hover:bg-subtle enabled:hover:text-ink',
+      )}
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+    </button>
+  );
+}
 
 /**
- * A plain textarea with a formatting toolbar. Formatting is written as light
- * Markdown (see noteFormat.js); Enter keeps lists and to-dos going.
+ * The note editor: you see headings, lists and ticked to-dos as you write,
+ * instead of Markdown symbols. `value` / `onChange` are still the note's plain
+ * text (see noteDoc.js), so nothing about how notes are stored changes.
+ *
+ * Typing shortcuts work too: "- " list, "1. " numbered, "[ ] " to-do,
+ * "## " heading, **bold**, _italic_; Tab indents a list item.
+ *
+ * onSubmit: Ctrl/Cmd + Enter. onEscape: Escape (leave unset to let it bubble).
  * workspaceId: adds a mic button to the toolbar that types what you say.
  * onDictationError(message | null): where mic problems are reported.
  */
 export function NoteTextEditor({
   value,
   onChange,
-  onKeyDown,
+  onSubmit,
+  onEscape,
   onFocus,
   showToolbar = true,
   workspaceId,
   onDictationError,
+  autoFocus = false,
+  placeholder,
   className,
-  ...textareaProps
+  'aria-label': ariaLabel,
 }) {
-  const ref = useRef(null);
-  const pendingSelection = useRef(null);
+  // What the editor last told us the text was, to tell our own edits from outside ones.
+  const lastText = useRef(value);
 
-  // Put the cursor back where the edit left it, once React has rendered the new text.
-  useLayoutEffect(() => {
-    const selection = pendingSelection.current;
-    if (!selection || !ref.current) return;
-    pendingSelection.current = null;
-    ref.current.setSelectionRange(selection.start, selection.end);
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({ ...EXTENSIONS_OFF, heading: { levels: [1, 2, 3] } }),
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      Placeholder.configure({ placeholder: placeholder ?? '' }),
+    ],
+    content: noteToDoc(value),
+    autofocus: autoFocus ? 'end' : false,
   });
 
-  function apply(result) {
-    if (!result) return false;
-    pendingSelection.current = { start: result.start, end: result.end };
-    onChange(result.value);
-    return true;
-  }
+  // The editor is created once. Its callbacks are re-attached after each render,
+  // so they always see the latest props.
+  useEffect(() => {
+    if (!editor) return undefined;
+    const handleUpdate = () => {
+      const text = docToNote(editor.getJSON());
+      lastText.current = text;
+      onChange(text);
+    };
+    const handleFocus = () => onFocus?.();
+    editor.on('update', handleUpdate);
+    editor.on('focus', handleFocus);
+    editor.setOptions({
+      editorProps: {
+        attributes: {
+          role: 'textbox',
+          'aria-multiline': 'true',
+          'aria-label': ariaLabel ?? 'Note',
+        },
+        handleKeyDown(view, event) {
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+            // Also stops a surrounding dialog from submitting a second time.
+            event.preventDefault();
+            onSubmit?.();
+            return true;
+          }
+          if (event.key === 'Escape' && onEscape) {
+            event.preventDefault();
+            onEscape();
+            view.dom.blur();
+            return true;
+          }
+          return false;
+        },
+        // Plain text pasted in (from a doc, a chat, another note) keeps its lists and headings.
+        handlePaste(_view, event) {
+          const text = event.clipboardData?.getData('text/plain');
+          if (!text || event.clipboardData.getData('text/html')) return false;
+          const { content } = noteToDoc(text.replace(/\r\n?/g, '\n'));
+          const single = content.length === 1 && content[0].type === 'paragraph';
+          editor
+            .chain()
+            .focus()
+            .insertContent(single ? (content[0].content ?? []) : content)
+            .run();
+          return true;
+        },
+      },
+    });
+    return () => {
+      editor.off('update', handleUpdate);
+      editor.off('focus', handleFocus);
+    };
+  });
 
-  function runTool(tool) {
-    const element = ref.current;
-    element.focus();
-    apply(tool.run(value, element.selectionStart, element.selectionEnd));
-  }
+  // The hint changes when the capture box opens up.
+  useEffect(() => {
+    if (!editor) return;
+    const extension = editor.extensionManager.extensions.find(
+      (candidate) => candidate.name === 'placeholder',
+    );
+    if (!extension || extension.options.placeholder === (placeholder ?? '')) return;
+    extension.options.placeholder = placeholder ?? '';
+    editor.view.dispatch(editor.state.tr);
+  }, [editor, placeholder]);
 
-  function handleKeyDown(event) {
-    const element = event.currentTarget;
-    const shortcut = SHORTCUTS[event.key.toLowerCase()];
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && shortcut) {
-      event.preventDefault();
-      runTool(TOOLS.find((tool) => tool.key === shortcut));
-      return;
-    }
-    const plainEnter =
-      event.key === 'Enter' &&
-      !event.shiftKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      !event.nativeEvent.isComposing;
-    if (plainEnter && apply(continueList(value, element.selectionStart, element.selectionEnd))) {
-      event.preventDefault();
-      return;
-    }
-    onKeyDown?.(event);
+  // The text was changed from outside (the form was reset after saving).
+  useEffect(() => {
+    if (!editor || value === lastText.current) return;
+    lastText.current = value;
+    editor.commands.setContent(noteToDoc(value), { emitUpdate: false });
+  }, [editor, value]);
+
+  const state = useEditorState({
+    editor,
+    selector: ({ editor: current }) => {
+      if (!current) return null;
+      const active = {};
+      for (const tool of TOOLS) active[tool.key] = tool.isActive(current);
+      return { active, canUndo: current.can().undo(), canRedo: current.can().redo() };
+    },
+  });
+
+  function insertSpoken(text) {
+    if (!editor) return;
+    const { from } = editor.state.selection;
+    const before = editor.state.doc.textBetween(Math.max(0, from - 1), from, '\n');
+    const spaced = before && !/\s/.test(before) ? ` ${text.trim()}` : text.trim();
+    editor.chain().focus().insertContent(spaced).run();
   }
 
   return (
-    <div>
+    <div className="note-editor">
       {showToolbar && (
         <div
           role="toolbar"
@@ -126,43 +251,47 @@ export function NoteTextEditor({
         >
           {TOOLS.map((tool) => (
             <span key={tool.key} className="flex items-center">
-              <button
-                type="button"
-                title={tool.label}
-                aria-label={tool.label}
-                // Keeps the textarea's selection while clicking.
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => runTool(tool)}
-                className="text-muted hover:bg-subtle hover:text-ink grid h-7 w-7 place-items-center rounded-lg"
-              >
-                <tool.icon className="h-4 w-4" aria-hidden="true" />
-              </button>
+              <ToolButton
+                label={tool.label}
+                icon={tool.icon}
+                active={Boolean(state?.active[tool.key])}
+                onClick={() => tool.run(editor.chain().focus()).run()}
+              />
               {tool.divider && <span className="bg-line mx-1 h-4 w-px" aria-hidden="true" />}
             </span>
           ))}
+          <span className="bg-line mx-1 h-4 w-px" aria-hidden="true" />
+          <ToolButton
+            label="Undo (Ctrl + Z)"
+            icon={Undo2}
+            disabled={!state?.canUndo}
+            onClick={() => editor.chain().focus().undo().run()}
+          />
+          <ToolButton
+            label="Redo (Ctrl + Shift + Z)"
+            icon={Redo2}
+            disabled={!state?.canRedo}
+            onClick={() => editor.chain().focus().redo().run()}
+          />
           {workspaceId && (
             <DictateButton
               workspaceId={workspaceId}
               variant="icon"
               label="Speak to type"
               onError={onDictationError}
-              onText={(text) => insertSpokenText(ref.current, text)}
+              onText={insertSpoken}
               className="ml-auto h-7 min-w-7 rounded-lg"
             />
           )}
         </div>
       )}
-      <textarea
-        ref={ref}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={handleKeyDown}
-        onFocus={onFocus}
-        className={cn(
-          'placeholder:text-muted/70 block w-full resize-none bg-transparent px-4 text-sm leading-relaxed outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
-          className,
-        )}
-        {...textareaProps}
+      <EditorContent
+        editor={editor}
+        className={cn('px-4', className)}
+        // Clicking the empty space under the text puts the cursor at the end.
+        onClick={(event) => {
+          if (event.target === event.currentTarget) editor?.chain().focus('end').run();
+        }}
       />
     </div>
   );

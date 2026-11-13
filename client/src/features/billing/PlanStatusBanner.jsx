@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
-import { daysUntil } from '../../lib/format.js';
+import { daysUntil, formatShortDate } from '../../lib/format.js';
 import { canAdminister } from '../workspaces/roles.js';
 
 const SOON_DAYS = 2;
+// Plans don't renew by themselves, so owners get a heads-up before one ends.
+const RENEW_SOON_DAYS = 5;
 
 function bannerMessage(billing) {
   if (billing.status === 'trialing') {
@@ -12,13 +14,27 @@ function bannerMessage(billing) {
     if (days <= SOON_DAYS) return `Your trial ends in ${days} ${days === 1 ? 'day' : 'days'}.`;
     return null;
   }
+  if (billing.status === 'active' && billing.currentPeriodEnd) {
+    const days = daysUntil(billing.currentPeriodEnd);
+    if (days > RENEW_SOON_DAYS) return null;
+    return `Your plan ends ${days <= 1 ? 'today' : `in ${days} days`} and doesn't renew by itself. Renew now and the new period is added after the current one.`;
+  }
+  if (billing.status === 'past_due') {
+    return billing.graceEndsAt
+      ? `Your plan has ended. Uploads keep working until ${formatShortDate(billing.graceEndsAt)}; renew to avoid a break.`
+      : 'A payment is due for this workspace.';
+  }
   if (billing.status === 'none') return 'This workspace has no plan yet, so uploads are paused.';
   if (billing.status === 'read_only')
-    return 'This workspace is read-only until payment goes through.';
+    return 'Your plan has ended, so this workspace is read-only. Your files are safe; renew to upload again.';
   return null;
 }
 
-// Only interrupts when it matters: trial nearly over or ended, or no plan.
+function linkLabel(billing) {
+  return ['active', 'past_due', 'read_only'].includes(billing.status) ? 'Renew' : 'See plans';
+}
+
+// Only interrupts when it matters: a trial or plan nearly over or ended, or no plan.
 export function PlanStatusBanner({ workspace }) {
   const message = bannerMessage(workspace.billing);
   if (!message) return null;
@@ -31,7 +47,7 @@ export function PlanStatusBanner({ workspace }) {
           to={`/w/${workspace.id}/upgrade`}
           className="text-lavender dark:text-accent font-medium underline underline-offset-4"
         >
-          See plans
+          {linkLabel(workspace.billing)}
         </Link>
       )}
     </div>

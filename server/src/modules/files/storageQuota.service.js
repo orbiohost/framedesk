@@ -1,5 +1,6 @@
 import { AppError } from '../../utils/AppError.js';
 import { formatBytes } from '../../utils/bytes.js';
+import { effectiveStatus } from '../billing/planLifecycle.service.js';
 import { poolIdForWorkspaceId } from '../workspaces/storagePool.js';
 import { Workspace, storageLimitBytes } from '../workspaces/workspace.model.js';
 
@@ -23,7 +24,16 @@ function storageFull(workspace, bytes) {
 }
 
 export function assertUploadsAllowed(workspace) {
-  const { status, trialEndsAt } = workspace.billing;
+  const { trialEndsAt } = workspace.billing;
+  // A paid period that has run out counts from the moment it ends, not from
+  // the next sweep.
+  const status = effectiveStatus(workspace.billing);
+  if (status === 'read_only') {
+    throw AppError.forbidden(
+      'Your plan has ended, so this workspace is read-only. Renew to keep uploading.',
+      'PLAN_EXPIRED',
+    );
+  }
   if (!UPLOADING_STATUSES.includes(status)) {
     throw AppError.forbidden('Uploads need an active plan for this workspace', 'PLAN_REQUIRED');
   }

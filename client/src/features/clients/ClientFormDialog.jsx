@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Dialog, DialogActions } from '../../components/ui/Dialog.jsx';
+import { MoreOptions } from '../../components/ui/MoreOptions.jsx';
 import { TextAreaField } from '../../components/ui/TextAreaField.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { parseTagList } from '../../lib/format.js';
@@ -54,7 +55,9 @@ function ClientForm({ workspaceId, client, onDone }) {
           id="client-name"
           dictationWorkspaceId={workspaceId}
           label="Contact name"
-          autoFocus
+          placeholder="Who you deal with"
+          autoComplete="off"
+          autoFocus={!client}
           error={errors.name?.message}
           {...register('name')}
         />
@@ -62,6 +65,8 @@ function ClientForm({ workspaceId, client, onDone }) {
           id="client-company"
           dictationWorkspaceId={workspaceId}
           label="Company"
+          placeholder="Optional"
+          autoComplete="off"
           error={errors.company?.message}
           {...register('company')}
         />
@@ -69,6 +74,8 @@ function ClientForm({ workspaceId, client, onDone }) {
           id="client-email"
           label="Email"
           type="email"
+          placeholder="Optional"
+          autoComplete="off"
           error={errors.email?.message}
           {...register('email')}
         />
@@ -76,25 +83,35 @@ function ClientForm({ workspaceId, client, onDone }) {
           id="client-phone"
           label="Phone"
           type="tel"
+          placeholder="Optional"
+          autoComplete="off"
           error={errors.phone?.message}
           {...register('phone')}
         />
       </div>
-      <TextField
-        id="client-tags"
-        label="Tags"
-        hint="Separate with commas, e.g. wedding, retainer"
-        error={errors.tags?.message}
-        {...register('tags')}
-      />
-      <TextAreaField
-        id="client-notes"
-        dictationWorkspaceId={workspaceId}
-        label="Notes"
-        hint="Billing contact, brand guidelines, how they like to receive files…"
-        error={errors.notes?.message}
-        {...register('notes')}
-      />
+      <MoreOptions
+        label="Tags and notes"
+        defaultOpen={Boolean(client?.tags.length || client?.notes)}
+        forceOpen={Boolean(errors.tags || errors.notes)}
+      >
+        <TextField
+          id="client-tags"
+          label="Tags"
+          placeholder="wedding, retainer"
+          hint="Separate with commas"
+          error={errors.tags?.message}
+          {...register('tags')}
+        />
+        <TextAreaField
+          id="client-notes"
+          dictationWorkspaceId={workspaceId}
+          label="Notes"
+          rows={3}
+          placeholder="Billing contact, brand guidelines, how they like to receive files…"
+          error={errors.notes?.message}
+          {...register('notes')}
+        />
+      </MoreOptions>
       <DialogActions>
         <Button type="button" variant="secondary" onClick={onDone}>
           Cancel

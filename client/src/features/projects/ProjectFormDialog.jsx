@@ -1,9 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
+import { ChoiceChips } from '../../components/ui/ChoiceChips.jsx';
 import { Dialog, DialogActions } from '../../components/ui/Dialog.jsx';
+import { MoreOptions } from '../../components/ui/MoreOptions.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { TextAreaField } from '../../components/ui/TextAreaField.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
@@ -64,6 +66,7 @@ function ProjectForm({ workspaceId, project, defaults, onDone }) {
   const { data: clients } = useClients(workspaceId);
   const {
     register,
+    control,
     handleSubmit,
     setError,
     formState: { errors },
@@ -83,10 +86,24 @@ function ProjectForm({ workspaceId, project, defaults, onDone }) {
         id="project-title"
         dictationWorkspaceId={workspaceId}
         label="Title"
-        placeholder="e.g. Diwali campaign film"
-        autoFocus
+        hideLabel
+        size="lg"
+        placeholder="Project name, e.g. Diwali campaign film"
+        autoFocus={!project}
         error={errors.title?.message}
         {...register('title')}
+      />
+      <Controller
+        control={control}
+        name="type"
+        render={({ field }) => (
+          <ChoiceChips
+            label="Type"
+            options={PROJECT_TYPE_OPTIONS}
+            value={field.value}
+            onChange={field.onChange}
+          />
+        )}
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <SelectField
@@ -96,25 +113,6 @@ function ProjectForm({ workspaceId, project, defaults, onDone }) {
           options={clientOptions(clients)}
           {...register('clientId')}
         />
-        <SelectField
-          id="project-type"
-          label="Type"
-          options={PROJECT_TYPE_OPTIONS}
-          {...register('type')}
-        />
-        <SelectField
-          id="project-status"
-          label="Status"
-          options={PROJECT_STATUS_OPTIONS}
-          {...register('status')}
-        />
-        <SelectField
-          id="project-priority"
-          label="Priority"
-          options={PRIORITY_OPTIONS}
-          {...register('priority')}
-        />
-        <TextField id="project-start" label="Start date" type="date" {...register('startDate')} />
         <TextField
           id="project-due"
           label="Due date"
@@ -122,28 +120,66 @@ function ProjectForm({ workspaceId, project, defaults, onDone }) {
           error={errors.dueDate?.message}
           {...register('dueDate')}
         />
-        <TextField
-          id="project-budget"
-          label="Budget (₹, optional)"
-          inputMode="numeric"
-          error={errors.budget?.message}
-          {...register('budget')}
-        />
-        <TextField
-          id="project-tags"
-          label="Tags"
-          hint="Separate with commas"
-          {...register('tags')}
-        />
       </div>
       <TextAreaField
         id="project-description"
         dictationWorkspaceId={workspaceId}
         label="Brief"
-        hint="What's being delivered, formats, references, anything the team should know."
+        rows={3}
+        placeholder="What's being delivered, formats, references…"
         error={errors.description?.message}
         {...register('description')}
       />
+      {/* A new project starts Active at Medium priority; change that here if needed. */}
+      <MoreOptions
+        label="Status, priority, budget and tags"
+        defaultOpen={Boolean(project)}
+        forceOpen={Boolean(errors.budget || errors.tags || errors.startDate)}
+      >
+        <Controller
+          control={control}
+          name="priority"
+          render={({ field }) => (
+            <ChoiceChips
+              label="Priority"
+              options={PRIORITY_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SelectField
+            id="project-status"
+            label="Status"
+            options={PROJECT_STATUS_OPTIONS}
+            {...register('status')}
+          />
+          <TextField
+            id="project-start"
+            label="Start date"
+            type="date"
+            error={errors.startDate?.message}
+            {...register('startDate')}
+          />
+          <TextField
+            id="project-budget"
+            label="Budget (₹)"
+            inputMode="numeric"
+            placeholder="e.g. 75000"
+            error={errors.budget?.message}
+            {...register('budget')}
+          />
+          <TextField
+            id="project-tags"
+            label="Tags"
+            placeholder="wedding, reels"
+            hint="Separate with commas"
+            error={errors.tags?.message}
+            {...register('tags')}
+          />
+        </div>
+      </MoreOptions>
       <DialogActions>
         <Button type="button" variant="secondary" onClick={onDone}>
           Cancel

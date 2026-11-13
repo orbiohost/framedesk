@@ -13,6 +13,7 @@ import {
   forgetConversion,
 } from './browserConvert.js';
 import { MediaPlayer } from './MediaPlayer.jsx';
+import { canStreamThroughWorker, streamKey, workerStreamUrl } from './mediaStream.js';
 
 // Plays a stored audio/video file with the least work for the server:
 //   1. Native playback, straight from the stored file over HTTP Range.
@@ -138,6 +139,9 @@ export function PlayableMedia({ file, url, refreshUrl, onDownload, fill = false 
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
   const [noPicture, setNoPicture] = useState(false);
+  // Played through the media worker, which buffers well ahead (also while
+  // paused). Off if this browser can't, or if playing that way failed.
+  const [viaWorker, setViaWorker] = useState(() => canStreamThroughWorker() && !!streamKey(file));
   const abortRef = useRef(null);
   const startsConverting = useRef(mode === 'converting');
   const lastRenewal = useRef(0);
@@ -217,6 +221,11 @@ export function PlayableMedia({ file, url, refreshUrl, onDownload, fill = false 
   const onIssue = useCallback(
     async (type, detail) => {
       if (type === 'no-picture') setNoPicture(true);
+      // Try the direct link before deciding the format itself is the problem.
+      if (type === 'unsupported' && viaWorker) {
+        setViaWorker(false);
+        return;
+      }
       // Small files convert straight away; big ones wait for a click.
       if (type === 'unsupported') {
         if (file.size <= AUTO_CONVERT_MAX_BYTES) convert();
@@ -238,7 +247,7 @@ export function PlayableMedia({ file, url, refreshUrl, onDownload, fill = false 
         }
       }
     },
-    [refreshUrl, file.size, convert],
+    [refreshUrl, file.size, convert, viaWorker],
   );
 
   // The converted copy wouldn't play either. If its video was only repackaged
@@ -266,6 +275,9 @@ export function PlayableMedia({ file, url, refreshUrl, onDownload, fill = false 
   }
 
   const downloadExtra = { label: 'Download original', icon: Download, onSelect: onDownload };
+  const stream = viaWorker
+    ? { key: streamKey(file), url: source.url, size: file.size, mime: file.mime }
+    : null;
   if (mode === 'converted' && converted) {
     return (
       <div className="space-y-3">
@@ -306,7 +318,8 @@ export function PlayableMedia({ file, url, refreshUrl, onDownload, fill = false 
       {error && <Alert tone="error">{error}</Alert>}
       <MediaPlayer
         kind={kind}
-        src={source.url}
+        src={stream ? workerStreamUrl(stream) : source.url}
+        stream={stream}
         startAt={source.startAt}
         title={file.name}
         onIssue={onIssue}

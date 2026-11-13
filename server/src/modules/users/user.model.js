@@ -9,6 +9,21 @@ const oneTimeTokenSchema = new Schema(
   { _id: false },
 );
 
+// Printed on invoices under "Billed to". Every field is optional.
+const billingProfileSchema = new Schema(
+  {
+    companyName: { type: String, trim: true, maxlength: 120, default: null },
+    gstin: { type: String, trim: true, uppercase: true, maxlength: 15, default: null },
+    addressLine: { type: String, trim: true, maxlength: 200, default: null },
+    city: { type: String, trim: true, maxlength: 60, default: null },
+    state: { type: String, trim: true, maxlength: 60, default: null },
+    postalCode: { type: String, trim: true, maxlength: 12, default: null },
+    country: { type: String, trim: true, maxlength: 60, default: null },
+    phone: { type: String, trim: true, maxlength: 20, default: null },
+  },
+  { _id: false },
+);
+
 const userSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 80 },
@@ -17,6 +32,7 @@ const userSchema = new Schema(
     passwordHash: { type: String, select: false },
     googleId: { type: String, unique: true, sparse: true },
     avatarUrl: { type: String, default: null },
+    billingProfile: { type: billingProfileSchema, default: () => ({}) },
 
     emailVerifiedAt: { type: Date, default: null },
     emailVerification: { type: oneTimeTokenSchema, select: false },

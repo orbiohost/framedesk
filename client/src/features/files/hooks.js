@@ -6,6 +6,8 @@ import { cachedSignedUrl, forgetSignedUrls, peekSignedUrl } from '../../lib/sign
 import { featureKey, invalidateFeatures } from '../../lib/workspaceKeys.js';
 import { workspaceKeys } from '../workspaces/hooks.js';
 import { getSnapshot, subscribe } from './uploadStore.js';
+import { convertImage } from './viewers/convertImage.js';
+import { imageDecoder, isImageFile } from './viewers/formats.js';
 
 function filesPath(workspaceId) {
   return `/workspaces/${workspaceId}/files`;
@@ -184,7 +186,13 @@ export function warmFilePreview(workspaceId, file) {
   if (!file.previewable) return;
   fetchFileUrl(workspaceId, file.id, 'inline')
     .then((url) => {
-      if (!file.mime.startsWith('image/') || file.size > WARM_IMAGE_MAX_BYTES) return;
+      if (!isImageFile(file) || file.size > WARM_IMAGE_MAX_BYTES) return;
+      // HEIC, TIFF, PSD and RAW: start converting (an <img> load here would
+      // also leave a non-CORS copy in the cache that the converter can't read).
+      if (imageDecoder(file)) {
+        convertImage(file, url).catch(() => {});
+        return;
+      }
       const image = new Image();
       image.decoding = 'async';
       image.src = url;

@@ -5,6 +5,7 @@ import {
   Gauge,
   Inbox,
   IndianRupee,
+  ReceiptText,
   LifeBuoy,
   ScrollText,
   Users,
@@ -20,6 +21,7 @@ const NAV = [
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
   { to: '/admin/sales', label: 'Sales', icon: IndianRupee },
+  { to: '/admin/invoicing', label: 'Invoicing', icon: ReceiptText },
   {
     to: '/admin/upgrade-requests',
     label: 'Upgrade requests',

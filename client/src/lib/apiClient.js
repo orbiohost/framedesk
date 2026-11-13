@@ -66,17 +66,29 @@ async function parse(response) {
   });
 }
 
-async function request(path, options) {
+async function sendWithRefresh(path, options) {
   let response = await send(path, options);
   if (response.status === 401 && !NO_REFRESH_PATHS.includes(path)) {
     const refreshed = await refreshSession();
     if (refreshed) response = await send(path, options);
   }
+  return response;
+}
+
+async function request(path, options) {
+  return parse(await sendWithRefresh(path, options));
+}
+
+// For file responses (e.g. an invoice PDF): resolves to a Blob, or throws the API error.
+async function requestBlob(path) {
+  const response = await sendWithRefresh(path);
+  if (response.ok) return response.blob();
   return parse(response);
 }
 
 export const api = {
   get: (path) => request(path),
+  getBlob: (path) => requestBlob(path),
   post: (path, body) => request(path, { method: 'POST', body }),
   postBlob: (path, blob) => request(path, { method: 'POST', blob }),
   patch: (path, body) => request(path, { method: 'PATCH', body }),

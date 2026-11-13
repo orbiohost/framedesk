@@ -1,14 +1,5 @@
 import { addDays, differenceInCalendarDays, format, startOfDay } from 'date-fns';
-import {
-  ArrowRight,
-  CalendarClock,
-  CalendarDays,
-  FileStack,
-  Flag,
-  ListChecks,
-  Pencil,
-  Target,
-} from 'lucide-react';
+import { ArrowRight, Flag, Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { Card } from '../../../components/ui/Card.jsx';
@@ -20,7 +11,6 @@ import { fileTint } from '../../../features/files/FileThumbnail.jsx';
 import { FileTypeIcon } from '../../../features/files/FileTypeIcon.jsx';
 import { useFiles } from '../../../features/files/hooks.js';
 import { dueInfo, taskPercent } from '../../../features/projects/projectList.js';
-import { projectTypeLabel } from '../../../features/projects/projectMeta.js';
 import { useTasks } from '../../../features/tasks/hooks.js';
 import { canManage } from '../../../features/workspaces/roles.js';
 import { cn } from '../../../lib/cn.js';
@@ -37,25 +27,6 @@ const DUE_TONES = {
   muted: 'text-muted',
   ink: 'text-ink',
 };
-
-function StatTile({ icon: Icon, label, value, hint, tint, valueClassName }) {
-  return (
-    <div className="bg-surface shadow-soft border-line/70 flex items-center gap-3.5 rounded-3xl border p-4">
-      <span className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-2xl', tint)}>
-        <Icon className="h-5 w-5" aria-hidden="true" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-muted truncate text-xs font-medium uppercase tracking-[0.1em]">
-          {label}
-        </p>
-        <p className={cn('font-display mt-0.5 truncate text-xl leading-tight', valueClassName)}>
-          {value}
-        </p>
-        {hint && <p className="text-muted truncate text-xs">{hint}</p>}
-      </div>
-    </div>
-  );
-}
 
 // A card with a heading and, usually, a link to the tab that holds the full list.
 function Section({ title, count, to, linkLabel, action, children, className }) {
@@ -309,44 +280,53 @@ function Detail({ label, children }) {
   );
 }
 
-function DetailsCard({ workspace, project }) {
+// Where the project stands: tasks done, the deadline, and only the facts that are filled in.
+function SummaryCard({ project }) {
   const span = timeline(project);
+  const due = dueInfo(project);
+  const { done, total } = project.tasks;
+  const percent = taskPercent(project);
   return (
-    <Section title="Details">
-      <div className="px-5 py-2">
-        <dl className="divide-line/60 divide-y">
-          <Detail label="Client">
-            {project.client ? (
-              <Link
-                to={`/w/${workspace.id}/clients/${project.client.id}`}
-                className="underline underline-offset-4"
-              >
-                {project.client.name}
-              </Link>
-            ) : (
-              'Internal'
+    <Section title="Summary">
+      <div className="px-5 pb-2 pt-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="font-display text-2xl tabular-nums leading-none">
+            {total === 0 ? 'Not started' : `${percent}%`}
+          </p>
+          <p className="text-muted text-sm tabular-nums">
+            {total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`}
+          </p>
+        </div>
+        <div className="bg-subtle mt-3 h-2 overflow-hidden rounded-full" aria-hidden="true">
+          <div
+            className={cn('h-full rounded-full', percent === 100 ? 'bg-success' : 'bg-accent')}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+        <dl className="divide-line/60 mt-3 divide-y">
+          <Detail label="Deadline">
+            <span className={DUE_TONES[due.tone]}>{due.label}</span>
+            {project.dueDate && (
+              <span className="text-muted font-normal"> · {formatDate(project.dueDate)}</span>
             )}
           </Detail>
-          <Detail label="Type">{projectTypeLabel(project.type)}</Detail>
+          {project.startDate && <Detail label="Started">{formatDate(project.startDate)}</Detail>}
           <Detail label="Priority">{priorityLabel(project.priority)}</Detail>
-          <Detail label="Start">{project.startDate ? formatDate(project.startDate) : '—'}</Detail>
-          <Detail label="Due">{project.dueDate ? formatDate(project.dueDate) : '—'}</Detail>
-          <Detail label="Budget">
-            {typeof project.budget === 'number' ? formatInr(project.budget) : '—'}
-          </Detail>
-          <Detail label="Created">{formatDate(project.createdAt)}</Detail>
+          {typeof project.budget === 'number' && (
+            <Detail label="Budget">{formatInr(project.budget)}</Detail>
+          )}
         </dl>
         {span && (
           <div className="border-line/60 border-t pb-3 pt-4">
             <div className="text-muted mb-1.5 flex justify-between text-xs">
-              <span>Schedule</span>
+              <span>Time used</span>
               <span className="tabular-nums">
                 {span.percent}% of {span.total} days
               </span>
             </div>
             <div className="bg-subtle h-1.5 overflow-hidden rounded-full" aria-hidden="true">
               <div
-                className="bg-accent h-full rounded-full"
+                className="bg-ink/40 h-full rounded-full"
                 style={{ width: `${span.percent}%` }}
               />
             </div>
@@ -361,66 +341,25 @@ export function ProjectOverviewPage() {
   const { workspace, project, editProject } = useOutletContext();
   const filesQuery = useFiles(workspace.id, { projectId: project.id });
   const files = filesQuery.data?.pages.flatMap((page) => page.files) ?? [];
-  const due = dueInfo(project);
-  const { done, total } = project.tasks;
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatTile
-          icon={Target}
-          label="Progress"
-          value={total === 0 ? 'Not started' : `${taskPercent(project)}%`}
-          hint={total === 0 ? 'No tasks yet' : `${done} of ${total} tasks done`}
-          tint="bg-lavender text-accent dark:text-ink"
-        />
-        <StatTile
-          icon={ListChecks}
-          label="Open tasks"
-          value={total - done}
-          hint={total === 0 ? 'Add the first one' : `${total} in total`}
-          tint="bg-mint text-ink"
-        />
-        <StatTile
-          icon={FileStack}
-          label="Files"
-          value={filesQuery.isPending ? '…' : `${files.length}${filesQuery.hasNextPage ? '+' : ''}`}
-          hint={
-            files.length > 0
-              ? formatBytes(files.reduce((sum, file) => sum + file.size, 0)) +
-                (filesQuery.hasNextPage ? ' or more' : '')
-              : 'Nothing uploaded'
-          }
-          tint="bg-peach text-ink"
-        />
-        <StatTile
-          icon={project.dueDate ? CalendarClock : CalendarDays}
-          label="Deadline"
-          value={due.label}
-          hint={project.dueDate ? formatDate(project.dueDate) : 'Set one in Edit project'}
-          tint="bg-pink text-ink"
-          valueClassName={DUE_TONES[due.tone]}
-        />
+    <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="space-y-6">
+        <BriefCard project={project} canEdit={canManage(workspace)} onEdit={editProject} />
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <OpenTasksCard workspace={workspace} project={project} />
+          <RecentFilesCard
+            workspace={workspace}
+            project={project}
+            files={files}
+            isPending={filesQuery.isPending}
+            hasMore={filesQuery.hasNextPage}
+          />
+        </div>
       </div>
-
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="space-y-6">
-          <BriefCard project={project} canEdit={canManage(workspace)} onEdit={editProject} />
-          <div className="grid items-start gap-6 lg:grid-cols-2">
-            <OpenTasksCard workspace={workspace} project={project} />
-            <RecentFilesCard
-              workspace={workspace}
-              project={project}
-              files={files}
-              isPending={filesQuery.isPending}
-              hasMore={filesQuery.hasNextPage}
-            />
-          </div>
-        </div>
-        <div className="space-y-6">
-          <DetailsCard workspace={workspace} project={project} />
-          <UpcomingCard workspace={workspace} project={project} />
-        </div>
+      <div className="space-y-6">
+        <SummaryCard project={project} />
+        <UpcomingCard workspace={workspace} project={project} />
       </div>
     </div>
   );

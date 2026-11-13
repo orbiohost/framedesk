@@ -102,3 +102,34 @@ export function useActivateUpgradeRequest() {
     api.post(`/admin/upgrade-requests/${requestId}/activate`, payment),
   );
 }
+
+export function useBillingSettings() {
+  return useQuery({
+    queryKey: adminKey('billing-settings'),
+    queryFn: () => api.get('/admin/billing-settings'),
+  });
+}
+
+export function useUpdateBillingSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => api.put('/admin/billing-settings', input),
+    onSuccess: (data) => {
+      queryClient.setQueryData(adminKey('billing-settings'), data);
+      // GST on/off and the rate change what the pricing page shows.
+      queryClient.invalidateQueries({ queryKey: ['pricing'] });
+    },
+  });
+}
+
+export function useSampleInvoice() {
+  return useMutation({
+    mutationFn: async (target) => {
+      const blob = await api.getBlob('/admin/billing-settings/sample-pdf');
+      const url = URL.createObjectURL(blob);
+      target.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    onError: (_error, target) => target?.close(),
+  });
+}

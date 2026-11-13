@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/cn.js';
 import { readLocal, writeLocal } from '../../lib/storage.js';
 import { useDismiss } from '../../lib/useDismiss.js';
+import { useWorkerPrefetch } from './mediaStream.js';
 
 // A custom player around the native <video>/<audio> element. Decoding stays
 // in the browser (hardware-accelerated on most devices); the server only
@@ -387,6 +388,8 @@ const SHORTCUTS =
  * menuExtras: [{ label, icon, onSelect }] added to the settings menu.
  * fill: the video takes its box's width at 16:9 with no height cap (the box
  *   sizes it, as in the full-screen file viewer).
+ * stream: { key, url, size, mime } when src is served by the media worker,
+ *   which then keeps buffering ahead of the playhead (see mediaStream.js).
  */
 export function MediaPlayer({
   kind,
@@ -397,6 +400,7 @@ export function MediaPlayer({
   onIssue,
   menuExtras,
   fill = false,
+  stream = null,
 }) {
   const mediaRef = useRef(null);
   const containerRef = useRef(null);
@@ -422,6 +426,9 @@ export function MediaPlayer({
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [bufferedRatio, setBufferedRatio] = useState(0);
+  // How far the media worker holds the file ahead (it keeps going when paused).
+  const [prefetchedRatio, setPrefetchedRatio] = useState(0);
+  useWorkerPrefetch(mediaRef, stream, setPrefetchedRatio);
   const [showRemaining, setShowRemaining] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -799,7 +806,7 @@ export function MediaPlayer({
         mediaRef={mediaRef}
         current={time}
         duration={duration}
-        bufferedRatio={bufferedRatio}
+        bufferedRatio={Math.max(bufferedRatio, prefetchedRatio)}
         barRef={barRef}
         onScrub={setTime}
         tone={tone}

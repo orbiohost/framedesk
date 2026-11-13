@@ -4,6 +4,7 @@ import { validate } from '../../middleware/validate.js';
 import { AppError } from '../../utils/AppError.js';
 import * as admin from './admin.controller.js';
 import * as billing from './adminBilling.controller.js';
+import * as invoicing from './adminInvoicing.controller.js';
 import * as users from './adminUsers.controller.js';
 import * as support from '../support/support.controller.js';
 import {
@@ -14,6 +15,7 @@ import {
 import {
   activateRequestSchema,
   adjustSubscriptionSchema,
+  billingSettingsSchema,
   cursorQuery,
   idParam,
   paymentsQuerySchema,
@@ -63,6 +65,14 @@ router.post(
 
 router.get('/payments', validate({ query: paymentsQuerySchema }), billing.payments);
 router.get('/payments/export', validate({ query: paymentsQuerySchema }), billing.paymentsExport);
+
+router.get('/billing-settings', invoicing.getSettings);
+router.put(
+  '/billing-settings',
+  validate({ body: billingSettingsSchema }),
+  invoicing.updateSettings,
+);
+router.get('/billing-settings/sample-pdf', invoicing.samplePdf);
 
 router.get(
   '/upgrade-requests',

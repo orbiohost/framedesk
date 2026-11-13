@@ -83,7 +83,7 @@ function PhotoAdjust({ source, zoom, onZoom }) {
   );
 }
 
-export default function AvatarPicker({ user }) {
+export default function AvatarPicker({ user, onSaved }) {
   const setAvatar = useSetAvatar();
   const clearAvatar = useClearAvatar();
   const fileInput = useRef(null);
@@ -140,7 +140,12 @@ export default function AvatarPicker({ user }) {
         pending.kind === 'photo'
           ? await squareImage(pending.source, { zoom })
           : await squareImage(pending.uri);
-      setAvatar.mutate(image, { onSuccess: () => setPending(null) });
+      setAvatar.mutate(image, {
+        onSuccess: () => {
+          setPending(null);
+          onSaved?.();
+        },
+      });
     } catch (convertError) {
       setLocalError(convertError.message);
     }
@@ -152,7 +157,7 @@ export default function AvatarPicker({ user }) {
   }
 
   return (
-    <div className="border-line/70 space-y-4 border-b p-5">
+    <div className="space-y-4 p-5">
       {error && <Alert tone="error">{error}</Alert>}
 
       <div className="flex flex-wrap items-center gap-4">

@@ -5,11 +5,13 @@ import { optionalAuthenticate } from '../middleware/optionalAuthenticate.js';
 import adminRoutes from './admin/admin.routes.js';
 import authRoutes from './auth/auth.routes.js';
 import { backupDownloadsRouter, workspaceBackupsRouter } from './backups/backups.routes.js';
+import checkoutRoutes from './billing/checkout.routes.js';
 import upgradeRequestsRoutes from './billing/upgradeRequests.routes.js';
 import calendarRoutes from './calendar/calendar.routes.js';
 import chatRoutes from './chat/chat.routes.js';
 import clientsRoutes from './clients/clients.routes.js';
 import dashboardRoutes from './dashboard/dashboard.routes.js';
+import { fileSharesRouter, publicFileShareRouter } from './fileShare/fileShare.routes.js';
 import filesRoutes from './files/files.routes.js';
 import foldersRoutes from './files/folders.routes.js';
 import membersRoutes from './members/members.routes.js';
@@ -44,6 +46,8 @@ apiRouter.use('/backup-downloads', backupDownloadsRouter);
 // Shared project links: open to anyone holding the link (or any signed-in
 // account, as the link's settings say), no workspace membership needed.
 apiRouter.use('/share/:token', optionalAuthenticate, publicShareRouter);
+// Links to one file or a hand-picked set of files, open the same way.
+apiRouter.use('/file-share/:token', optionalAuthenticate, publicFileShareRouter);
 
 mountWorkspaceFeature('members', membersRoutes);
 mountWorkspaceFeature('clients', clientsRoutes);
@@ -56,8 +60,10 @@ mountWorkspaceFeature('quick-notes', quickNotesRoutes);
 mountWorkspaceFeature('dashboard', dashboardRoutes);
 mountWorkspaceFeature('folders', foldersRoutes);
 mountWorkspaceFeature('files', filesRoutes);
+mountWorkspaceFeature('file-shares', fileSharesRouter);
 mountWorkspaceFeature('transcripts', transcriptsRoutes);
 mountWorkspaceFeature('upgrade-requests', upgradeRequestsRoutes);
+mountWorkspaceFeature('checkout', checkoutRoutes);
 mountWorkspaceFeature('backups', workspaceBackupsRouter);
 
 apiRouter.use('/workspaces', workspacesRoutes);

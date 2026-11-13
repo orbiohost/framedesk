@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { password, personName } from '../../utils/zodHelpers.js';
+import { objectId, optionalText, password, personName } from '../../utils/zodHelpers.js';
 
 export const updateProfileSchema = z.object({ name: personName });
 
@@ -17,3 +17,27 @@ export const changePasswordSchema = z
     path: ['newPassword'],
     message: 'Choose a password different from your current one',
   });
+
+export const billingProfileSchema = z.object({
+  companyName: optionalText(120),
+  gstin: z
+    .union([
+      z.literal(''),
+      z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^[0-9A-Z]{15}$/, 'A GSTIN is 15 letters and digits'),
+    ])
+    .nullable()
+    .optional()
+    .transform((value) => value || null),
+  addressLine: optionalText(200),
+  city: optionalText(60),
+  state: optionalText(60),
+  postalCode: optionalText(12),
+  country: optionalText(60),
+  phone: optionalText(20),
+});
+
+export const invoiceParamsSchema = z.object({ paymentId: objectId });

@@ -8,7 +8,7 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { PLAN_NAMES, shortDate } from '../../features/admin/adminFormat.js';
 import { useActivateUpgradeRequest, useAdminUpgradeRequests } from '../../features/admin/hooks.js';
 import { RecordPaymentDialog } from '../../features/admin/RecordPaymentDialog.jsx';
-import { formatInr } from '../../lib/format.js';
+import { formatInr, formatInrExact } from '../../lib/format.js';
 
 function RequestRow({ request, onActivate }) {
   return (
@@ -23,7 +23,10 @@ function RequestRow({ request, onActivate }) {
           {shortDate(request.createdAt)}
         </p>
         <p className="mt-1 text-sm">
-          Collect <strong>{formatInr(request.quotedAmount)}</strong>
+          Collect <strong>{formatInrExact(request.amountDue ?? request.quotedAmount)}</strong>
+          {request.amountDue > request.quotedAmount && (
+            <span className="text-muted"> ({formatInr(request.quotedAmount)} + GST)</span>
+          )}
           {request.offerCode && <span className="text-accent"> · {request.offerCode}</span>}
         </p>
       </div>
@@ -71,7 +74,7 @@ export function UpgradeRequestsPage() {
         initial={{
           planCode: selected?.planCode,
           interval: selected?.interval,
-          amount: selected?.quotedAmount,
+          amount: selected?.amountDue ?? selected?.quotedAmount,
         }}
         fixedPlan
         pending={activate.isPending}

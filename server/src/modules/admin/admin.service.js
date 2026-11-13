@@ -1,11 +1,13 @@
 import { AppError } from '../../utils/AppError.js';
 import { UpgradeRequest } from '../billing/upgradeRequest.model.js';
+import { getGstRules } from '../billing/billingSettings.service.js';
+import { computeGst } from '../billing/gst.js';
 import { recordPayment } from './adminSubscriptions.service.js';
 
 // Admin reads span every workspace, so they opt out of the tenant scope guard explicitly.
 const ALL_WORKSPACES = { crossWorkspace: true };
 
-function toAdminRequestDto(request) {
+function toAdminRequestDto(request, rules) {
   return {
     id: String(request._id),
     workspace: request.workspaceId
@@ -17,6 +19,8 @@ function toAdminRequestDto(request) {
     planCode: request.planCode,
     interval: request.interval,
     quotedAmount: request.quotedAmount,
+    // What to collect: the quote plus GST, when GST applies.
+    amountDue: computeGst(request.quotedAmount, { rules }).total,
     offerCode: request.offerCode,
     status: request.status,
     createdAt: request.createdAt,
@@ -31,7 +35,8 @@ export async function listUpgradeRequests({ status = 'open' } = {}) {
     .populate('workspaceId', 'name')
     .populate('requestedBy', 'name email')
     .lean();
-  return requests.map(toAdminRequestDto);
+  const rules = await getGstRules();
+  return requests.map((request) => toAdminRequestDto(request, rules));
 }
 
 // Marks the request paid: records the payment (which also switches the plan on).
@@ -46,7 +51,8 @@ export async function activateUpgradeRequest(requestId, adminId, { method, refer
   if (!request) throw AppError.notFound('Open upgrade request not found');
 
   await recordPayment(request.workspaceId, adminId, {
-    amount: amount ?? request.quotedAmount,
+    // Quotes are "plus GST", so the default is the quote with GST on top.
+    amount: amount ?? computeGst(request.quotedAmount, { rules: await getGstRules() }).total,
     planCode: request.planCode,
     interval: request.interval,
     method,

@@ -39,7 +39,7 @@ const envSchema = z
     SMTP_PASS: z
       .string()
       .optional()
-      .transform((value) => value?.replace(/s+/g, '')),
+      .transform((value) => value?.replace(/\s+/g, '')),
 
     // Uploaded files live in an Amazon S3 bucket (or any S3-compatible store
     // such as R2 or MinIO, through S3_ENDPOINT).
@@ -105,8 +105,62 @@ const envSchema = z
           .regex(/^rediss?:\/\/.+/, 'must start with redis:// or rediss://')
           .optional(),
       ),
+
+    // Seller details printed on customer invoices. All optional.
+    INVOICE_BUSINESS_NAME: z
+      .string()
+      .optional()
+      .transform((value) => value || undefined),
+    // Separate lines with "|", e.g. "12 MG Road|Bengaluru 560001|India".
+    INVOICE_BUSINESS_ADDRESS: z
+      .string()
+      .optional()
+      .transform((value) => value || undefined),
+    INVOICE_BUSINESS_EMAIL: z
+      .string()
+      .optional()
+      .transform((value) => value || undefined),
+    INVOICE_BUSINESS_GSTIN: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim().toUpperCase() || undefined)
+      .pipe(
+        z
+          .string()
+          .regex(/^\d{2}[0-9A-Z]{13}$/, 'must be a 15-character GSTIN')
+          .optional(),
+      ),
+    // GST is added at checkout only when INVOICE_BUSINESS_GSTIN is set.
+    GST_RATE: z.coerce.number().min(0).max(28).default(18),
+    // Optional SAC code printed on tax invoices.
+    GST_SAC_CODE: z
+      .string()
+      .optional()
+      .transform((value) => value || undefined),
+
+    // Online payments through Razorpay. Leave the keys empty to keep the
+    // "request a payment link" flow instead.
+    RAZORPAY_KEY_ID: z
+      .string()
+      .optional()
+      .transform((value) => value || undefined),
+    RAZORPAY_KEY_SECRET: z
+      .string()
+      .optional()
+      .transform((value) => value || undefined),
+    RAZORPAY_WEBHOOK_SECRET: z
+      .string()
+      .optional()
+      .transform((value) => value || undefined),
   })
   .superRefine((env, ctx) => {
+    if (Boolean(env.RAZORPAY_KEY_ID) !== Boolean(env.RAZORPAY_KEY_SECRET)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['RAZORPAY_KEY_SECRET'],
+        message: 'set both RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, or neither',
+      });
+    }
     if (Boolean(env.S3_ACCESS_KEY_ID) !== Boolean(env.S3_SECRET_ACCESS_KEY)) {
       ctx.addIssue({
         code: 'custom',
@@ -160,6 +214,12 @@ function loadEnv() {
       console.error(`  - ${issue.path.join('.')}: ${issue.message}`);
     }
     process.exit(1);
+  }
+  if (result.data.RAZORPAY_KEY_ID && !result.data.RAZORPAY_WEBHOOK_SECRET) {
+    console.warn(
+      'WARNING: RAZORPAY_WEBHOOK_SECRET is not set. Refunds, disputes and payments whose ' +
+        'browser closed before confirming will not be picked up.',
+    );
   }
   return Object.freeze(result.data);
 }

@@ -5,6 +5,8 @@ import { formatTime } from '../media/MediaPlayer.jsx';
 import { FileTypeIcon } from './FileTypeIcon.jsx';
 import { fetchPreviewUrl, peekFileUrl } from './hooks.js';
 import { cachedVideoFrame, loadVideoFrame } from './videoFrames.js';
+import { convertImage } from './viewers/convertImage.js';
+import { imageDecoder, isImageFile } from './viewers/formats.js';
 
 // Images larger than this show their type icon instead: without server-made
 // thumbnails, the grid would download the full image.
@@ -26,7 +28,10 @@ export function fileTint(category) {
 
 function thumbnailKind(file) {
   if (!file.previewable) return null;
-  if (file.mime.startsWith('image/') && file.size <= IMAGE_THUMB_MAX_BYTES) return 'image';
+  if (isImageFile(file) && file.size <= IMAGE_THUMB_MAX_BYTES) {
+    // HEIC, TIFF, PSD and RAW are converted in the browser first.
+    return imageDecoder(file) ? 'converted' : 'image';
+  }
   if (file.mime.startsWith('video/')) return 'video';
   return null;
 }
@@ -66,10 +71,10 @@ function useThumbnail(workspaceId, file, kind, isNear) {
     if (!kind || !isNear || thumb) return undefined;
     let isCurrent = true;
     const getUrl = () => fetchPreviewUrl(workspaceId, file.id);
-    const pending =
-      kind === 'video'
-        ? loadVideoFrame(frameKey, file.mime, getUrl)
-        : getUrl().then((src) => ({ src }));
+    let pending;
+    if (kind === 'video') pending = loadVideoFrame(frameKey, file.mime, getUrl);
+    else if (kind === 'converted') pending = convertImage(file, getUrl).then((src) => ({ src }));
+    else pending = getUrl().then((src) => ({ src }));
     pending
       .then((result) => isCurrent && result && setThumb(result))
       .catch(() => {
@@ -78,7 +83,7 @@ function useThumbnail(workspaceId, file, kind, isNear) {
     return () => {
       isCurrent = false;
     };
-  }, [kind, isNear, thumb, workspaceId, file.id, file.mime, frameKey]);
+  }, [kind, isNear, thumb, workspaceId, file, frameKey]);
 
   return thumb;
 }

@@ -47,6 +47,7 @@ import { cn } from '../../lib/cn.js';
 import { formatDate, formatDueLabel, formatTime, isOverdue } from '../../lib/dates.js';
 import { formatBytes } from '../../lib/format.js';
 import { priorityLabel } from '../../lib/priorities.js';
+import { showsNatively } from '../../features/files/viewers/formats.js';
 
 const TABS = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -315,7 +316,7 @@ function FileRow({ file, token, previewUrl, onOpen }) {
 
   return (
     <li className="flex flex-wrap items-center gap-3 px-5 py-2.5">
-      {previewUrl && file.category === 'image' ? (
+      {previewUrl && showsNatively(file) ? (
         <img
           src={previewUrl}
           alt=""
@@ -391,7 +392,7 @@ function FilesTab({ token }) {
   const folders = pages[0]?.folders ?? [];
   const files = pages.flatMap((page) => page.files);
   const imageIds = files
-    .filter((file) => file.category === 'image' && file.previewable)
+    .filter((file) => file.previewable && showsNatively(file))
     .slice(0, 100)
     .map((file) => file.id);
   const { data: previewUrls } = useSharedPreviewUrls(token, imageIds);

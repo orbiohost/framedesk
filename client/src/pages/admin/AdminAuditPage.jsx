@@ -48,7 +48,7 @@ export function AdminAuditPage() {
                   {describe(entry)}
                   {entry.workspace && <span className="text-muted"> · {entry.workspace.name}</span>}
                 </span>
-                <span className="text-muted">{entry.actor?.name ?? 'Unknown'}</span>
+                <span className="text-muted">{entry.actor?.name ?? 'System'}</span>
               </li>
             ))}
           </ul>

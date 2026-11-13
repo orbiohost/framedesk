@@ -7,7 +7,7 @@ export const PLAN_OPTIONS = Object.entries(PLAN_NAMES).map(([value, label]) => (
 export const BILLING_STATUS = {
   trialing: { label: 'Trial', tone: 'neutral' },
   active: { label: 'Active', tone: 'success' },
-  past_due: { label: 'Payment due', tone: 'accent' },
+  past_due: { label: 'Ended, in grace', tone: 'accent' },
   read_only: { label: 'Read-only', tone: 'danger' },
   canceled: { label: 'Cancelled', tone: 'muted' },
   none: { label: 'No plan', tone: 'muted' },
@@ -29,6 +29,21 @@ export const PAYMENT_METHODS = [
 
 export function methodLabel(value) {
   return PAYMENT_METHODS.find((method) => method.value === value)?.label ?? value;
+}
+
+const RAZORPAY_METHODS = {
+  upi: 'UPI',
+  card: 'card',
+  netbanking: 'netbanking',
+  wallet: 'wallet',
+  emi: 'EMI',
+  paylater: 'pay later',
+};
+
+// "Razorpay (UPI)" for online payments, the plain method otherwise.
+export function paymentMethodLabel(payment) {
+  const via = RAZORPAY_METHODS[payment.razorpayMethod] ?? payment.razorpayMethod;
+  return payment.method === 'razorpay' && via ? `Razorpay (${via})` : methodLabel(payment.method);
 }
 
 export function shortDate(value) {

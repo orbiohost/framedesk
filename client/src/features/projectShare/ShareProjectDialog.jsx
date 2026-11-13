@@ -55,7 +55,7 @@ function Switch({ checked, onChange, disabled, label }) {
 }
 
 // Two side-by-side choice cards, each with an icon, a label and a short hint.
-function ChoiceGroup({ legend, name, options, value, onChange, disabled }) {
+export function ChoiceGroup({ legend, name, options, value, onChange, disabled }) {
   return (
     <fieldset disabled={disabled}>
       <legend className="text-muted mb-2 text-xs font-medium uppercase tracking-[0.1em]">
@@ -106,7 +106,7 @@ function ChoiceGroup({ legend, name, options, value, onChange, disabled }) {
   );
 }
 
-function CopyLinkField({ url }) {
+export function CopyLinkField({ url }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {

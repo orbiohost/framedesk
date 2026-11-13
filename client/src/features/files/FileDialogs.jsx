@@ -17,6 +17,8 @@ import { FILE_STATUS_OPTIONS, folderTree } from './fileMeta.js';
 import { fetchFileUrl, peekFileUrl, useUpdateFile } from './hooks.js';
 import { fileTint } from './FileThumbnail.jsx';
 import { FileTypeIcon } from './FileTypeIcon.jsx';
+import { FileContentView } from './viewers/FileContentView.jsx';
+import { isPlayable } from './viewers/formats.js';
 
 function nameWithoutExtension(file) {
   const suffix = `.${file.extension}`;
@@ -244,10 +246,6 @@ export function MoveFileDialog({ workspaceId, file, folders, onClose }) {
   );
 }
 
-function isPlayable(file) {
-  return file.mime.startsWith('video/') || file.mime.startsWith('audio/');
-}
-
 function MediaPreview({ workspaceId, file, url }) {
   const refreshUrl = useCallback(
     (options) => fetchFileUrl(workspaceId, file.id, 'inline', options),
@@ -271,22 +269,7 @@ function MediaPreview({ workspaceId, file, url }) {
       </div>
     );
   }
-  if (file.mime.startsWith('image/')) {
-    return (
-      <img
-        src={url}
-        alt={file.name}
-        className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
-      />
-    );
-  }
-  return (
-    <iframe
-      src={url}
-      title={file.name}
-      className="h-full w-full max-w-5xl rounded-xl border-0 bg-white shadow-2xl"
-    />
-  );
+  return <FileContentView file={file} url={url} />;
 }
 
 function PreviewBody({ workspaceId, file }) {
@@ -343,7 +326,8 @@ function ViewerButton({ label, onClick, children, className }) {
 }
 
 /**
- * A full-screen, dark viewer for one file: video, audio, images and PDFs.
+ * A full-screen, dark viewer for one file: video, audio, images (HEIC, TIFF,
+ * PSD and RAW converted in the browser), PDFs, text files and fonts.
  * files: the previewable files on screen, for previous/next (optional).
  * onNavigate(file): show another file. onDownload(file): download the original.
  * canEdit: may start transcripts (everyone who can view can read them).
@@ -388,6 +372,8 @@ export function PreviewDialog({
     if (!open || isMedia || !onNavigate) return undefined;
     function onKeyDown(event) {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      // Typing in a field (the font viewer's sample text) keeps its arrows.
+      if (event.target.closest?.('input, textarea, [contenteditable="true"]')) return;
       if (event.key === 'ArrowLeft' && prev) onNavigate(prev);
       if (event.key === 'ArrowRight' && next) onNavigate(next);
     }

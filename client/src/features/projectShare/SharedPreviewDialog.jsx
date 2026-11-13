@@ -6,21 +6,21 @@ import { formatDate } from '../../lib/dates.js';
 import { formatBytes } from '../../lib/format.js';
 import { fileTint } from '../files/FileThumbnail.jsx';
 import { FileTypeIcon } from '../files/FileTypeIcon.jsx';
+import { FileContentView } from '../files/viewers/FileContentView.jsx';
+import { isPlayable } from '../files/viewers/formats.js';
 import { PlayableMedia } from '../media/PlayableMedia.jsx';
 import { fetchSharedFileUrl } from './hooks.js';
 
-function isPlayable(file) {
-  return file.mime.startsWith('video/') || file.mime.startsWith('audio/');
-}
-
-async function inlineUrl(token, fileId) {
-  return (await fetchSharedFileUrl(token, fileId, 'inline')).url;
+async function inlineUrl(fetchUrl, token, fileId) {
+  return (await fetchUrl(token, fileId, 'inline')).url;
 }
 
 // Starts a download without leaving the page: the link answers with
 // Content-Disposition: attachment, so the browser saves it in place.
-export async function downloadSharedFile(token, fileId) {
-  const { url } = await fetchSharedFileUrl(token, fileId, 'attachment');
+// fetchUrl(token, fileId, disposition): where signed links come from; a shared
+// project by default, a file link passes its own.
+export async function downloadSharedFile(token, fileId, fetchUrl = fetchSharedFileUrl) {
+  const { url } = await fetchUrl(token, fileId, 'attachment');
   const link = document.createElement('a');
   link.href = url;
   link.rel = 'noopener';
@@ -47,22 +47,29 @@ function ViewerButton({ label, onClick, children, className }) {
   );
 }
 
-function PreviewBody({ token, file }) {
+// Shows one shared file in place: a player, an image or a document frame.
+export function SharedFilePreview({ token, file, fetchUrl = fetchSharedFileUrl }) {
   const [state, setState] = useState({ url: null, error: null });
 
   useEffect(() => {
     let isCurrent = true;
-    inlineUrl(token, file.id)
+    inlineUrl(fetchUrl, token, file.id)
       .then((url) => isCurrent && setState({ url, error: null }))
       .catch((error) => isCurrent && setState({ url: null, error: error.message }));
     return () => {
       isCurrent = false;
     };
-  }, [token, file.id]);
+  }, [fetchUrl, token, file.id]);
 
   // The player asks again when a link expires mid-playback.
-  const refreshUrl = useCallback(() => inlineUrl(token, file.id), [token, file.id]);
-  const download = useCallback(() => downloadSharedFile(token, file.id), [token, file.id]);
+  const refreshUrl = useCallback(
+    () => inlineUrl(fetchUrl, token, file.id),
+    [fetchUrl, token, file.id],
+  );
+  const download = useCallback(
+    () => downloadSharedFile(token, file.id, fetchUrl),
+    [fetchUrl, token, file.id],
+  );
 
   if (state.error) {
     return (
@@ -98,30 +105,23 @@ function PreviewBody({ token, file }) {
       </div>
     );
   }
-  if (file.mime.startsWith('image/')) {
-    return (
-      <img
-        src={state.url}
-        alt={file.name}
-        className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
-      />
-    );
-  }
-  return (
-    <iframe
-      src={state.url}
-      title={file.name}
-      className="h-full w-full max-w-5xl rounded-xl border-0 bg-white shadow-2xl"
-    />
-  );
+  return <FileContentView file={file} url={state.url} />;
 }
 
 /**
  * Full-screen viewer for a shared project's files: plays video and audio,
  * shows images and PDFs, right on the page.
  * files: the previewable files, for previous/next.
+ * fetchUrl: see downloadSharedFile.
  */
-export function SharedPreviewDialog({ token, file, files = [], onNavigate, onClose }) {
+export function SharedPreviewDialog({
+  token,
+  file,
+  files = [],
+  onNavigate,
+  onClose,
+  fetchUrl = fetchSharedFileUrl,
+}) {
   const dialogRef = useRef(null);
   const [downloadError, setDownloadError] = useState(null);
   const open = Boolean(file);
@@ -141,6 +141,8 @@ export function SharedPreviewDialog({ token, file, files = [], onNavigate, onClo
     if (!open || isMedia) return undefined;
     function onKeyDown(event) {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      // Typing in a field (the font viewer's sample text) keeps its arrows.
+      if (event.target.closest?.('input, textarea, [contenteditable="true"]')) return;
       if (event.key === 'ArrowLeft' && prev) onNavigate(prev);
       if (event.key === 'ArrowRight' && next) onNavigate(next);
     }
@@ -151,7 +153,7 @@ export function SharedPreviewDialog({ token, file, files = [], onNavigate, onClo
   async function download() {
     setDownloadError(null);
     try {
-      await downloadSharedFile(token, file.id);
+      await downloadSharedFile(token, file.id, fetchUrl);
     } catch (error) {
       setDownloadError(error.message);
     }
@@ -207,7 +209,7 @@ export function SharedPreviewDialog({ token, file, files = [], onNavigate, onClo
             className="relative flex min-h-0 flex-1 items-center justify-center px-3 pb-4 sm:px-20 sm:pb-8"
             onClick={(event) => event.target === event.currentTarget && onClose()}
           >
-            <PreviewBody key={file.id} token={token} file={file} />
+            <SharedFilePreview key={file.id} token={token} file={file} fetchUrl={fetchUrl} />
             {prev && (
               <ViewerButton
                 label={`Previous: ${prev.name}`}

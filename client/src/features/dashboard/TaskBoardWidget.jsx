@@ -40,7 +40,7 @@ function StatusTabs({ groups, active, onSelect, onAdd }) {
               {tab.label}
               <span
                 className={cn(
-                  'grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums',
+                  'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-center text-[11px] leading-none font-semibold tabular-nums',
                   isActive ? 'bg-surface text-ink' : 'bg-lavender text-accent dark:text-ink',
                 )}
               >

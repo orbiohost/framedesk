@@ -3,6 +3,22 @@ import { hashPassword, verifyPassword } from '../../utils/password.js';
 import { revokeAllSessions } from '../auth/session.service.js';
 import { User } from './user.model.js';
 
+const BILLING_PROFILE_FIELDS = [
+  'companyName',
+  'gstin',
+  'addressLine',
+  'city',
+  'state',
+  'postalCode',
+  'country',
+  'phone',
+];
+
+export function toBillingProfile(user) {
+  const profile = user.billingProfile ?? {};
+  return Object.fromEntries(BILLING_PROFILE_FIELDS.map((field) => [field, profile[field] ?? null]));
+}
+
 export function toPublicUser(user) {
   return {
     id: String(user._id),
@@ -12,7 +28,24 @@ export function toPublicUser(user) {
     avatarUrl: user.avatarUrl ?? null,
     isSuperadmin: Boolean(user.isSuperadmin),
     createdAt: user.createdAt,
+    billingProfile: toBillingProfile(user),
   };
+}
+
+// Fields left out of `input` keep their value; null or "" clears one.
+export async function updateBillingProfile(userId, input) {
+  const set = Object.fromEntries(
+    Object.entries(input)
+      .filter(([, value]) => value !== undefined)
+      .map(([field, value]) => [`billingProfile.${field}`, value]),
+  );
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { $set: set },
+    { new: true, runValidators: true },
+  );
+  if (!user) throw AppError.notFound('User not found');
+  return user;
 }
 
 export async function updateProfile(userId, { name }) {

@@ -29,11 +29,15 @@ export const TextAreaField = forwardRef(function TextAreaField(
           <textarea
             ref={mergeRefs(ref, dictation.controlRef)}
             rows={rows}
-            className={cn(controlClassName(error), 'py-2 leading-6', dictation.active && 'pr-11')}
+            className={cn(
+              controlClassName(error),
+              'scrollbar-thin min-h-[4.5rem] py-2 leading-6',
+              dictation.active && 'pr-11',
+            )}
             {...aria}
             {...textareaProps}
           />
-          {dictation.button}
+          {dictation.button && <span className="absolute bottom-2.5 right-1">{dictation.button}</span>}
         </div>
       )}
     </FieldShell>

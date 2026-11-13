@@ -94,6 +94,7 @@ export function NoteComposer({
     else reset();
   }
 
+  // The title field. The editor below handles the same two keys itself.
   function onKeyDown(event) {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) submit(event);
     if (event.key === 'Escape' && collapsible && !note) {
@@ -133,21 +134,17 @@ export function NoteComposer({
         value={body}
         onChange={setBody}
         onFocus={() => setExpanded(true)}
-        onKeyDown={onKeyDown}
+        onSubmit={submit}
+        onEscape={collapsible && !note ? reset : undefined}
         showToolbar={isOpen}
         workspaceId={workspaceId}
         onDictationError={setDictationError}
         autoFocus={autoFocus}
-        rows={isOpen ? 5 : 1}
-        placeholder={
-          isOpen
-            ? 'Write your thought… use the toolbar for to-dos and lists, #tags to group notes'
-            : 'Take a note…'
-        }
+        placeholder={isOpen ? 'Write your thought… add #tags to group notes' : 'Take a note…'}
         aria-label="Note"
         className={cn(
-          'scrollbar-thin',
-          isOpen ? 'max-h-[50vh] min-h-28 py-1.5 [field-sizing:content]' : 'py-3.5',
+          'scrollbar-thin cursor-text',
+          isOpen ? 'max-h-[50vh] min-h-28 overflow-y-auto py-1.5' : 'py-3.5',
         )}
       />
       {isOpen && (

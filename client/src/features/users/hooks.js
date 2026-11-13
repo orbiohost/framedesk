@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { currentUserKey } from '../auth/hooks.js';
 import { usersApi } from './api.js';
 
@@ -32,4 +32,43 @@ export function useClearAvatar() {
 
 export function useChangePassword() {
   return useMutation({ mutationFn: usersApi.changePassword });
+}
+
+export const accountBillingKey = ['account-billing'];
+
+export function useAccountBilling() {
+  return useQuery({ queryKey: accountBillingKey, queryFn: usersApi.billing, staleTime: 60 * 1000 });
+}
+
+export function useUpdateBillingProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: usersApi.updateBillingProfile,
+    onSuccess: ({ user }) => {
+      queryClient.setQueryData(currentUserKey, user);
+      queryClient.invalidateQueries({ queryKey: accountBillingKey });
+    },
+  });
+}
+
+// Fetches the invoice PDF, then opens it in a new tab or saves it.
+export function useInvoicePdf() {
+  return useMutation({
+    mutationFn: async ({ payment, mode, target }) => {
+      const blob = await usersApi.invoicePdf(payment.id);
+      const url = URL.createObjectURL(blob);
+      if (mode === 'open' && target) {
+        target.location.href = url;
+      } else {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `invoice-${payment.invoiceNumber}.pdf`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    onError: (_error, { target }) => target?.close(),
+  });
 }

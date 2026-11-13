@@ -37,5 +37,12 @@ export function groupItemsByDay(items = []) {
       day = addDays(day, 1);
     }
   }
+  for (const group of groups.values()) group.sort(byDayOrder);
   return groups;
+}
+
+// Within a day: all-day items and due dates first, then timed events in order.
+function byDayOrder(a, b) {
+  if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+  return new Date(a.startsAt) - new Date(b.startsAt);
 }

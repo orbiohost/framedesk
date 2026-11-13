@@ -3,6 +3,7 @@ import { api } from '../../lib/apiClient.js';
 import { toQueryString } from '../../lib/queryString.js';
 import { featureKey, invalidateFeatures } from '../../lib/workspaceKeys.js';
 import { workspaceKeys } from '../workspaces/hooks.js';
+import { isProjectOpen } from './projectMeta.js';
 
 function basePath(workspaceId) {
   return `/workspaces/${workspaceId}/projects`;
@@ -56,6 +57,12 @@ export function useDeleteProject(workspaceId) {
   });
 }
 
-export function projectOptions(projects = []) {
-  return projects.map((project) => ({ value: project.id, label: project.title }));
+// Dropdown options. Pass `keepId` (the project already chosen) to offer only
+// projects still in progress plus that one, so finished work doesn't pad the list.
+export function projectOptions(projects = [], keepId) {
+  const offered =
+    keepId === undefined
+      ? projects
+      : projects.filter((project) => isProjectOpen(project) || project.id === keepId);
+  return offered.map((project) => ({ value: project.id, label: project.title }));
 }

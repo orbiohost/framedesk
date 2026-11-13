@@ -1,9 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
+import { ChoiceChips } from '../../components/ui/ChoiceChips.jsx';
 import { Dialog, DialogActions } from '../../components/ui/Dialog.jsx';
+import { DueDateField } from '../../components/ui/DueDateField.jsx';
+import { MoreOptions } from '../../components/ui/MoreOptions.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { TextAreaField } from '../../components/ui/TextAreaField.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
@@ -83,27 +86,55 @@ function TaskForm({ workspaceId, task, defaults, canEdit, onDone }) {
     );
   }
 
+  const statusField = (
+    <Controller
+      control={control}
+      name="status"
+      render={({ field }) => (
+        <ChoiceChips
+          label="Status"
+          options={TASK_STATUS_OPTIONS}
+          value={field.value}
+          onChange={field.onChange}
+        />
+      )}
+    />
+  );
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
       {save.error && !save.error.details && <Alert tone="error">{save.error.message}</Alert>}
-      <fieldset disabled={!canEdit} className="space-y-4">
+      <fieldset disabled={!canEdit} className="min-w-0 space-y-4">
         <TextField
           id="task-title"
           dictationWorkspaceId={workspaceId}
           label="Task"
-          placeholder="e.g. Rough cut of the sangeet highlights"
-          autoFocus
+          hideLabel
+          size="lg"
+          placeholder="What needs to be done?"
+          autoFocus={!task}
           error={errors.title?.message}
           {...register('title')}
         />
+        {task && statusField}
+        <Controller
+          control={control}
+          name="dueDate"
+          render={({ field }) => <DueDateField value={field.value} onChange={field.onChange} />}
+        />
+        <Controller
+          control={control}
+          name="priority"
+          render={({ field }) => (
+            <ChoiceChips
+              label="Priority"
+              options={PRIORITY_OPTIONS}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
         <div className="grid gap-4 sm:grid-cols-2">
-          <SelectField
-            id="task-project"
-            label="Project"
-            placeholder="No project (personal)"
-            options={projectOptions(projects)}
-            {...register('projectId')}
-          />
           <SelectField
             id="task-assignee"
             label="Assignee"
@@ -112,27 +143,31 @@ function TaskForm({ workspaceId, task, defaults, canEdit, onDone }) {
             {...register('assigneeId')}
           />
           <SelectField
-            id="task-status"
-            label="Status"
-            options={TASK_STATUS_OPTIONS}
-            {...register('status')}
+            id="task-project"
+            label="Project"
+            placeholder="No project (personal)"
+            options={projectOptions(projects, task?.project?.id ?? defaults.projectId ?? '')}
+            {...register('projectId')}
           />
-          <SelectField
-            id="task-priority"
-            label="Priority"
-            options={PRIORITY_OPTIONS}
-            {...register('priority')}
-          />
-          <TextField id="task-due" label="Due date" type="date" {...register('dueDate')} />
         </div>
-        <TextAreaField
-          id="task-description"
-          dictationWorkspaceId={workspaceId}
-          label="Details"
-          rows={3}
-          {...register('description')}
-        />
-        <ChecklistEditor control={control} register={register} />
+        {/* A new task only needs the fields above; an existing one shows everything. */}
+        <MoreOptions
+          label={task ? 'Details and checklist' : 'Details, checklist and status'}
+          defaultOpen={Boolean(task)}
+          forceOpen={Boolean(errors.description || errors.checklist)}
+        >
+          {!task && statusField}
+          <TextAreaField
+            id="task-description"
+            dictationWorkspaceId={workspaceId}
+            label="Details"
+            rows={3}
+            placeholder="Links, references, what done looks like…"
+            error={errors.description?.message}
+            {...register('description')}
+          />
+          <ChecklistEditor control={control} register={register} />
+        </MoreOptions>
       </fieldset>
       <DialogActions
         start={
@@ -165,7 +200,12 @@ export function TaskFormDialog({
   canEdit = true,
 }) {
   return (
-    <Dialog open={open} onClose={onClose} title={task ? task.title : 'New task'} wide>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={!task ? 'New task' : canEdit ? 'Edit task' : 'Task'}
+      wide
+    >
       <TaskForm
         workspaceId={workspaceId}
         task={task}

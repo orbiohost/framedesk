@@ -24,43 +24,62 @@ export function Dialog({ open, onClose, title, description, wide = false, childr
     onClose();
   }
 
+  // Ctrl/Cmd + Enter saves from anywhere in the form, including a textarea.
+  function submitOnShortcut(event) {
+    // A field that already handled the shortcut (the note editor) has prevented the default.
+    if (event.defaultPrevented) return;
+    if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey)) return;
+    const form = dialogRef.current.querySelector('form');
+    if (!form) return;
+    event.preventDefault();
+    form.requestSubmit();
+  }
+
   return (
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
       onCancel={closeOnEscape}
       onClick={closeOnBackdrop}
+      onKeyDown={submitOnShortcut}
       className={cn(
-        'border-line/60 bg-surface text-ink m-auto w-[calc(100%-2rem)] rounded-3xl border p-0 shadow-2xl',
-        'backdrop:bg-ink/30 backdrop:backdrop-blur-sm',
-        wide === 'xl' ? 'max-w-5xl' : wide ? 'max-w-2xl' : 'max-w-lg',
+        'dialog-panel border-line/70 bg-surface text-ink m-auto w-[calc(100%-1.5rem)] overflow-hidden rounded-[22px] border p-0 shadow-2xl',
+        wide === 'xl' ? 'max-w-5xl' : wide ? 'max-w-xl' : 'max-w-lg',
       )}
     >
       {open && (
-        <div className="max-h-[85vh] overflow-y-auto">
-          <header className="border-line/70 bg-surface sticky top-0 z-10 flex items-start justify-between gap-4 border-b px-6 py-4">
-            <div>
-              <h2 id={titleId} className="text-base font-semibold">
+        <div className="scrollbar-thin max-h-[88dvh] overflow-y-auto">
+          <header className="bg-surface sticky top-0 z-10 flex items-start justify-between gap-4 px-6 pb-2 pt-5">
+            <div className="min-w-0">
+              <h2 id={titleId} className="truncate text-[17px] font-semibold tracking-tight">
                 {title}
               </h2>
-              {description && <p className="text-muted mt-0.5 text-sm">{description}</p>}
+              {description && <p className="text-muted mt-0.5 truncate text-sm">{description}</p>}
             </div>
-            <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label="Close"
+              className="-mr-2 -mt-1"
+            >
               <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </header>
-          <div className="px-6 py-5">{children}</div>
+          <div className="px-6 pb-5 pt-2">{children}</div>
         </div>
       )}
     </dialog>
   );
 }
 
+// The footer stays pinned to the bottom of the dialog while a long form scrolls.
+// The `!` margins win over a parent's `space-y-*`.
 export function DialogActions({ children, start }) {
   return (
-    <div className="border-line mt-6 flex items-center justify-between gap-3 border-t pt-4">
-      <div>{start}</div>
-      <div className="flex gap-2">{children}</div>
+    <div className="border-line/70 bg-surface sticky bottom-0 z-10 -mx-6 !-mb-5 !mt-6 flex flex-wrap items-center justify-between gap-3 border-t px-6 py-3.5">
+      <div className="min-w-0">{start}</div>
+      <div className="ml-auto flex gap-2">{children}</div>
     </div>
   );
 }

@@ -12,7 +12,7 @@ export function planLabel(billing) {
       : 'Trial ended';
   }
   if (billing.status === 'active') return planName;
-  if (billing.status === 'past_due') return `${planName} · payment due`;
+  if (billing.status === 'past_due') return `${planName} · ended, renew`;
   if (billing.status === 'read_only') return `${planName} · read-only`;
   return 'No active plan';
 }

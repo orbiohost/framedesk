@@ -3,6 +3,7 @@ import { UpgradeRequest } from '../billing/upgradeRequest.model.js';
 import { Event } from '../calendar/event.model.js';
 import { Message } from '../chat/message.model.js';
 import { Client } from '../clients/client.model.js';
+import { FileShare } from '../fileShare/fileShare.model.js';
 import { DashboardLayout } from '../dashboard/dashboardLayout.model.js';
 import { purgeFiles } from '../files/files.service.js';
 import { Folder } from '../files/folder.model.js';
@@ -27,6 +28,7 @@ const WORKSPACE_DATA = [
   QuickNote,
   DashboardLayout,
   UpgradeRequest,
+  FileShare,
 ];
 
 async function assertCanDelete(workspace, membership, userId, confirmName) {

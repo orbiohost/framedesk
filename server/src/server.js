@@ -2,6 +2,7 @@ import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
 import { createApp } from './app.js';
+import { startPlanLifecycle, stopPlanLifecycle } from './modules/billing/planLifecycle.service.js';
 import { startUploadSweeper, stopUploadSweeper } from './modules/files/directUploads.service.js';
 import {
   startStorageReconciler,
@@ -22,6 +23,7 @@ function registerGracefulShutdown(server) {
     stopTranscriptWorker();
     stopUploadSweeper();
     stopStorageReconciler();
+    stopPlanLifecycle();
     server.close(async () => {
       await Promise.all([disconnectDatabase(), disconnectRedis()]);
       process.exit(0);
@@ -46,6 +48,7 @@ async function start() {
   startTranscriptWorker();
   startUploadSweeper();
   startStorageReconciler();
+  startPlanLifecycle();
   verifyMailer();
 }
 

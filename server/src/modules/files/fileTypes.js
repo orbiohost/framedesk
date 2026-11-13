@@ -161,6 +161,8 @@ const INLINE_MIME_BY_EXTENSION = {
   aac: 'audio/aac',
   ogg: 'audio/ogg',
   flac: 'audio/flac',
+  heic: 'image/heic',
+  heif: 'image/heif',
   pdf: 'application/pdf',
 };
 
@@ -198,17 +200,81 @@ export function isBlockedMime(mime) {
   return BLOCKED_MIMES.has(mime);
 }
 
-// Prefer what the bytes say (sniffed); fall back to the extension.
-export function resolveMime(extension, sniffedMime) {
-  if (sniffedMime) return sniffedMime;
-  return INLINE_MIME_BY_EXTENSION[extension] ?? 'application/octet-stream';
+const HEIF_EXTENSIONS = new Set(['heic', 'heif']);
+
+// HEIC/HEIF photos are ISO-BMFF files, like MP4. file-type only knows a few
+// HEIF brands and labels the rest (heim, heis, mif2, MiHE... used by many
+// iPhones and Android phones) as video/mp4, which sent them to the video
+// player. A .heic/.heif that sniffed as video or as nothing is a picture.
+export function correctedMime(mime, extension = '') {
+  if (
+    HEIF_EXTENSIONS.has(extension) &&
+    (!mime || mime === 'application/octet-stream' || mime.startsWith('video/'))
+  ) {
+    return INLINE_MIME_BY_EXTENSION[extension];
+  }
+  return mime;
 }
 
-export function isPreviewable(mime) {
-  return (
-    mime.startsWith('video/') ||
-    mime.startsWith('audio/') ||
-    (mime.startsWith('image/') && mime !== 'image/svg+xml') ||
-    mime === 'application/pdf'
+// Prefer what the bytes say (sniffed); fall back to the extension.
+export function resolveMime(extension, sniffedMime) {
+  return correctedMime(
+    sniffedMime || INLINE_MIME_BY_EXTENSION[extension] || 'application/octet-stream',
+    extension,
   );
+}
+
+// Formats the viewer opens even though the browser can't show the bytes as
+// they are: the client converts HEIC/HEIF (iPhone photos), TIFF, PSD and camera
+// RAW to a picture, shows text files as text and fonts as a type specimen.
+const VIEWER_EXTENSIONS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'bmp',
+  'heic',
+  'heif',
+  'tif',
+  'tiff',
+  'psd',
+  'psb',
+  'cr2',
+  'cr3',
+  'nef',
+  'arw',
+  'dng',
+  'raf',
+  'txt',
+  'md',
+  'csv',
+  'srt',
+  'vtt',
+  'otf',
+  'ttf',
+  'woff',
+  'woff2',
+]);
+
+// Opened as plain text whatever was sniffed (text has no magic bytes).
+const TEXT_EXTENSIONS = new Set(['txt', 'md', 'csv', 'srt', 'vtt']);
+
+// Images the viewer can't show (EXR, DPX) stay download-only.
+const UNVIEWABLE_IMAGE_EXTENSIONS = new Set(['exr', 'dpx']);
+
+export function isPreviewable(mime, extension = '') {
+  if (BLOCKED_MIMES.has(mime)) return false;
+  if (mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf') {
+    return true;
+  }
+  if (VIEWER_EXTENSIONS.has(extension)) return true;
+  return mime.startsWith('image/') && !UNVIEWABLE_IMAGE_EXTENSIONS.has(extension);
+}
+
+// The type an inline link answers with. Text is always plain text, so a .txt
+// that really holds HTML can't render as a page.
+export function inlineMime(mime, extension = '') {
+  if (TEXT_EXTENSIONS.has(extension)) return 'text/plain; charset=utf-8';
+  return mime;
 }

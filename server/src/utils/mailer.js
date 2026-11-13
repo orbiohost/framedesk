@@ -19,10 +19,12 @@ const transport = createTransport();
 // Single entry point for outgoing mail.
 export const mailer = {
   // replyTo: where "Reply" in the recipient's mail app goes (e.g. a support ticket's sender).
-  async send({ to, subject, text, replyTo }) {
-    await transport.sendMail({ from: env.MAIL_FROM, to, subject, text, replyTo });
+  // attachments: [{ filename, content, contentType }] (e.g. an invoice PDF).
+  async send({ to, subject, text, replyTo, attachments }) {
+    await transport.sendMail({ from: env.MAIL_FROM, to, subject, text, replyTo, attachments });
     if (env.MAIL_TRANSPORT === 'console') {
-      logger.info({ to, subject, text }, 'Email (console transport, not sent)');
+      const attached = attachments?.map((file) => file.filename);
+      logger.info({ to, subject, text, attached }, 'Email (console transport, not sent)');
     }
   },
 };

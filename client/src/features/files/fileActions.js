@@ -6,6 +6,7 @@ import {
   Link2,
   Pencil,
   RotateCcw,
+  Share2,
   Trash2,
   X,
 } from 'lucide-react';
@@ -50,6 +51,15 @@ export function fileActionItems({ file, inTrash, canEdit, canTranscribe = false,
       label: 'Link to projects',
       title: `Link ${file.name} to projects`,
       icon: Link2,
+    });
+  }
+  // Under a project it is only linked to, a file is shared from where it lives.
+  if (canEdit && !linked) {
+    items.push({
+      action: 'share',
+      label: 'Share link',
+      title: `Share a link to ${file.name}`,
+      icon: Share2,
     });
   }
   if (canEdit && !linked) {

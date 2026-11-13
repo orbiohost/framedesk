@@ -1,7 +1,7 @@
 import { differenceInCalendarDays } from 'date-fns';
-import { Archive, ArchiveRestore, CircleCheck, ExternalLink, Pencil, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, CircleCheck, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { formatDueLabel } from '../../lib/dates.js';
-import { isProjectOpen, PROJECT_STATUS_OPTIONS } from './projectMeta.js';
+import { isProjectOpen, projectStatus, projectTypeLabel } from './projectMeta.js';
 
 // Helpers for the Projects page: due dates, quick filters, sorting and the "⋯" menu.
 
@@ -70,13 +70,16 @@ export function sortProjects(projects, sort) {
   return [...projects].sort(COMPARATORS[sort] ?? COMPARATORS.due);
 }
 
-// Matches the title, the client and the tags.
+// Matches the title, the client, the tags, and the status and type as shown
+// ("waiting", "in review", "branding").
 export function matchesSearch(project, needle) {
   if (!needle) return true;
   const haystack = [
     project.title,
     project.client?.name,
     project.client?.company,
+    projectStatus(project.status).label,
+    projectTypeLabel(project.type),
     ...(project.tags ?? []),
   ]
     .filter(Boolean)
@@ -85,39 +88,34 @@ export function matchesSearch(project, needle) {
   return haystack.includes(needle);
 }
 
-// The statuses a project can be moved to straight from the list.
-const QUICK_STATUSES = ['active', 'review', 'pending', 'completed'];
-
 // The "⋯" menu for one project. onAction(action, project, value?):
-// "open" | "edit" | "status" (value: the new status) | "delete".
+// "edit" | "status" (value: the new status) | "delete".
+// Clicking the card opens it, so the menu only holds what changes it: finish or
+// reopen, archive or restore. Other statuses are set in Edit or on the project.
 // Managers can edit and change status; only owners and admins can delete.
 export function projectMenuItems({ project, canManage, canDelete, onAction }) {
-  const items = [
-    { key: 'open', label: 'Open', icon: ExternalLink, onSelect: () => onAction('open', project) },
-  ];
+  const items = [];
   if (canManage) {
+    const archived = project.status === 'archived';
+    const completed = project.status === 'completed';
     items.push({
       key: 'edit',
       label: 'Edit details',
       icon: Pencil,
       onSelect: () => onAction('edit', project),
     });
-    QUICK_STATUSES.filter((status) => status !== project.status).forEach((status, index) => {
-      const option = PROJECT_STATUS_OPTIONS.find((candidate) => candidate.value === status);
+    if (!archived) {
       items.push({
-        key: `status-${status}`,
-        label: `Mark as ${option.label.toLowerCase()}`,
-        icon: CircleCheck,
-        divider: index === 0,
-        onSelect: () => onAction('status', project, status),
+        key: 'complete',
+        label: completed ? 'Reopen project' : 'Mark as completed',
+        icon: completed ? RotateCcw : CircleCheck,
+        onSelect: () => onAction('status', project, completed ? 'active' : 'completed'),
       });
-    });
-    const archived = project.status === 'archived';
+    }
     items.push({
       key: 'archive',
       label: archived ? 'Restore from archive' : 'Archive',
       icon: archived ? ArchiveRestore : Archive,
-      divider: true,
       onSelect: () => onAction('status', project, archived ? 'active' : 'archived'),
     });
   }
@@ -127,7 +125,7 @@ export function projectMenuItems({ project, canManage, canDelete, onAction }) {
       label: 'Delete project',
       icon: Trash2,
       danger: true,
-      divider: !canManage,
+      divider: canManage,
       onSelect: () => onAction('delete', project),
     });
   }

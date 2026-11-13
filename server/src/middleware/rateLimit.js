@@ -105,6 +105,14 @@ export const supportLimiter = createLimiter({
   message: 'You have sent several requests in a short time. Please wait a few minutes.',
 });
 
+// Every checkout opens an order at Razorpay; real buyers need a handful at most.
+export const checkoutLimiter = createLimiter({
+  name: 'checkout',
+  windowMs: FIFTEEN_MINUTES,
+  limit: 15,
+  message: 'Too many checkout attempts. Please wait a few minutes and try again.',
+});
+
 // Each dictated note runs the speech model, so keep it to a sensible pace.
 export const dictationLimiter = createLimiter({
   name: 'dictation',

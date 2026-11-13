@@ -4,10 +4,12 @@ import {
   ChevronRight,
   FolderInput,
   FolderPlus,
+  Link2,
   Lock,
   Mic,
   Search,
   SearchX,
+  Share2,
   Trash2,
   UploadCloud,
   X,
@@ -21,6 +23,8 @@ import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { cn } from '../../lib/cn.js';
 import { readLocal, writeLocal } from '../../lib/storage.js';
+import { ShareFilesDialog } from '../fileShare/ShareFilesDialog.jsx';
+import { SharedLinksDialog } from '../fileShare/SharedLinksDialog.jsx';
 import { ActionMenu } from './ActionMenu.jsx';
 import {
   ConfirmDialog,
@@ -244,13 +248,16 @@ function TypeChips({ files, value, onChange }) {
 }
 
 // Appears once files are ticked; stays in reach at the bottom of the pane.
-function SelectionBar({ count, error, onMove, onTrash, onClear }) {
+function SelectionBar({ count, error, onShare, onMove, onTrash, onClear }) {
   return (
     <div className="sticky bottom-3 z-20 mt-4 flex justify-center">
       <div className="bg-surface border-line shadow-lift flex max-w-full flex-wrap items-center gap-1.5 rounded-2xl border p-1.5 pl-4">
         <p className="mr-1 text-sm font-semibold tabular-nums" role="status">
           {count} selected
         </p>
+        <Button size="sm" variant="secondary" onClick={onShare}>
+          <Share2 className="h-3.5 w-3.5" aria-hidden="true" /> Share
+        </Button>
         <Button size="sm" variant="secondary" onClick={onMove}>
           <FolderInput className="h-3.5 w-3.5" aria-hidden="true" /> Move
         </Button>
@@ -329,8 +336,9 @@ export function FolderFilesPane({
   const [type, setType] = useState('all');
   const [sort, setSort] = useFileSort();
   const [picked, setPicked] = useState(() => new Set());
-  // "move" | "trash" while the matching dialog for the selection is open.
+  // "share" | "move" | "trash" while the matching dialog for the selection is open.
   const [bulkDialog, setBulkDialog] = useState(null);
+  const [linksOpen, setLinksOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const canRecord = canEdit && canRecordVoice();
   const query = useFiles(workspace.id, { folderId: folder.id });
@@ -410,6 +418,11 @@ export function FolderFilesPane({
       },
     );
   }
+  // One file from its menu, or everything ticked from the selection bar.
+  let filesToShare = null;
+  if (dialog?.type === 'share') filesToShare = [dialog.file];
+  else if (bulkDialog === 'share')
+    filesToShare = shownFiles.filter((file) => selectedIds.includes(file.id));
   // Previous/next in the preview step through what is on screen.
   const previewable = shownFiles.filter((file) => file.previewable);
   const subfolders = folders.filter((candidate) => candidate.parentId === folder.id);
@@ -469,6 +482,17 @@ export function FolderFilesPane({
                   <span className="sr-only sm:hidden">Record a voice note</span>
                 </Button>
               )}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-9"
+                onClick={() => setLinksOpen(true)}
+                title="Shared file links"
+              >
+                <Link2 className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden xl:inline">Shared links</span>
+                <span className="sr-only xl:hidden">Shared file links</span>
+              </Button>
               <Button size="sm" className="h-9" onClick={() => inputRef.current.click()}>
                 <UploadCloud className="h-4 w-4" aria-hidden="true" /> Upload
               </Button>
@@ -596,6 +620,7 @@ export function FolderFilesPane({
       {selectedIds.length > 0 && (
         <SelectionBar
           count={selectedIds.length}
+          onShare={() => setBulkDialog('share')}
           onMove={() => setBulkDialog('move')}
           onTrash={() => setBulkDialog('trash')}
           onClear={clearSelection}
@@ -648,6 +673,16 @@ export function FolderFilesPane({
         file={dialog?.type === 'move' ? dialog.file : null}
         folders={folders}
         onClose={closeDialog}
+      />
+      <ShareFilesDialog
+        workspaceId={workspace.id}
+        files={filesToShare}
+        onClose={dialog?.type === 'share' ? closeDialog : closeBulkDialog}
+      />
+      <SharedLinksDialog
+        workspaceId={workspace.id}
+        open={linksOpen}
+        onClose={() => setLinksOpen(false)}
       />
       <Dialog
         open={bulkDialog === 'move'}

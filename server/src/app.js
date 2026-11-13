@@ -11,6 +11,7 @@ import { csrfProtection } from './middleware/csrf.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import { globalLimiter, uploadLimiter } from './middleware/rateLimit.js';
+import { razorpayWebhookRouter } from './modules/billing/razorpayWebhook.js';
 import uploadsRoutes from './modules/files/uploads.routes.js';
 import { apiRouter } from './modules/index.js';
 import { sendSuccess } from './utils/apiResponse.js';
@@ -33,6 +34,8 @@ export function createApp() {
   // gzip JSON responses. Media never passes through the API: browsers fetch it from S3.
   app.use(compression());
   app.use(cors({ origin: env.CLIENT_URL, credentials: true }));
+  // Ahead of express.json(): the webhook signature is checked against the raw body.
+  app.use('/api/billing', razorpayWebhookRouter);
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   app.use(mongoSanitize());

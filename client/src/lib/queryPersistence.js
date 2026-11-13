@@ -23,7 +23,8 @@ const USER_QUERY = 'currentUser';
 // Not kept on disk: platform admin data (sensitive), and workspace features
 // that poll anyway or are only ever looked at fresh.
 // Shared links can be turned off at any time, so what they showed isn't kept.
-const SKIPPED_ROOTS = new Set(['admin', 'share', USER_QUERY]);
+// Billing details (addresses, payments) stay off disk too.
+const SKIPPED_ROOTS = new Set(['admin', 'share', 'account-billing', USER_QUERY]);
 // Transcripts can be long; they are cheap to fetch again.
 const SKIPPED_FEATURES = new Set(['chat', 'backups', 'transcripts']);
 

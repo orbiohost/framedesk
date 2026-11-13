@@ -23,7 +23,7 @@ function PaymentForm({ initial, fixedPlan, pending, error, onSubmit, onCancel })
     paidOn: toDateInputValue(new Date()),
   });
   const set = (field) => (event) => setValues({ ...values, [field]: event.target.value });
-  const amountIsValid = /^\d+$/.test(values.amount);
+  const amountIsValid = /^\d+(\.\d{1,2})?$/.test(values.amount);
 
   function submit(event) {
     event.preventDefault();
@@ -63,7 +63,9 @@ function PaymentForm({ initial, fixedPlan, pending, error, onSubmit, onCancel })
           inputMode="numeric"
           value={values.amount}
           onChange={set('amount')}
-          error={values.amount && !amountIsValid ? 'Whole rupees, no commas' : undefined}
+          error={
+            values.amount && !amountIsValid ? 'Rupees, up to 2 decimals, no commas' : undefined
+          }
         />
         <TextField
           id="pay-date"

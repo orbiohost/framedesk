@@ -4,7 +4,7 @@ import { cn } from '../../lib/cn.js';
 
 // Which workspaces an AI connection may read: all of them (including ones
 // joined later), or a hand-picked few.
-// value: { allWorkspaces: boolean, workspaceIds: string[] }
+// value: { allWorkspaces: boolean, workspaceIds: string[], ...anything else, kept as is }
 export function WorkspaceAccessPicker({ workspaces, value, onChange }) {
   const { allWorkspaces, workspaceIds } = value;
 
@@ -12,7 +12,7 @@ export function WorkspaceAccessPicker({ workspaces, value, onChange }) {
     const next = workspaceIds.includes(id)
       ? workspaceIds.filter((item) => item !== id)
       : [...workspaceIds, id];
-    onChange({ allWorkspaces: false, workspaceIds: next });
+    onChange({ ...value, allWorkspaces: false, workspaceIds: next });
   }
 
   return (
@@ -22,7 +22,7 @@ export function WorkspaceAccessPicker({ workspaces, value, onChange }) {
           type="button"
           role="radio"
           aria-checked={allWorkspaces}
-          onClick={() => onChange({ allWorkspaces: true, workspaceIds: [] })}
+          onClick={() => onChange({ ...value, allWorkspaces: true, workspaceIds: [] })}
           className={chipClassName(allWorkspaces)}
         >
           All my workspaces
@@ -33,6 +33,7 @@ export function WorkspaceAccessPicker({ workspaces, value, onChange }) {
           aria-checked={!allWorkspaces}
           onClick={() =>
             onChange({
+              ...value,
               allWorkspaces: false,
               workspaceIds: workspaceIds.length > 0 ? workspaceIds : workspaces.map((w) => w.id),
             })

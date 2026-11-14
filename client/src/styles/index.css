@@ -529,3 +529,14 @@ html {
     animation: sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 }
+
+/* ---- Website ---- */
+/* A faint grid behind the home page headline, fading out towards the edges. */
+.hero-grid {
+  background-image:
+    linear-gradient(rgb(var(--color-ink) / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--color-ink) / 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
+}

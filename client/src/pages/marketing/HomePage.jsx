@@ -1,4 +1,7 @@
+import { AiSection } from './home/AiSection.jsx';
+import { ConnectorsShowcase } from './home/ConnectorsShowcase.jsx';
 import { FaqSection } from './home/FaqSection.jsx';
+import { FeatureGrid } from './home/FeatureGrid.jsx';
 import { FinalCta } from './home/FinalCta.jsx';
 import { HeroSection } from './home/HeroSection.jsx';
 import { PricingPreview } from './home/PricingPreview.jsx';
@@ -10,7 +13,10 @@ export function HomePage() {
     <main>
       <HeroSection />
       <ProblemSection />
+      <AiSection />
+      <ConnectorsShowcase />
       <WorkflowsSection />
+      <FeatureGrid />
       <PricingPreview />
       <FaqSection />
       <FinalCta />

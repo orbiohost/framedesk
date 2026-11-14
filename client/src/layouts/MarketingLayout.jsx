@@ -5,6 +5,8 @@ import { useCurrentUser } from '../features/auth/hooks.js';
 import { OfferBar } from '../pages/marketing/home/OfferBar.jsx';
 
 const SECTION_LINKS = [
+  { href: '/#ai', label: 'AI assistant' },
+  { href: '/#connectors', label: 'Connectors' },
   { href: '/#workflows', label: 'How it works' },
   { href: '/#pricing', label: 'Pricing' },
   { href: '/#faq', label: 'FAQ' },
@@ -46,7 +48,7 @@ function SiteHeader() {
         <Link to="/" className="rounded-full" aria-label="FrameDesk home">
           <Logo />
         </Link>
-        <nav className="hidden items-center gap-7 md:flex" aria-label="Main">
+        <nav className="hidden items-center gap-6 lg:flex" aria-label="Main">
           {SECTION_LINKS.map((link) => (
             <a key={link.href} href={link.href} className="text-muted hover:text-ink text-sm">
               {link.label}
@@ -65,10 +67,29 @@ function SiteHeader() {
 function SiteFooter() {
   return (
     <footer className="border-line border-t">
-      <div className="text-muted mx-auto flex max-w-6xl flex-col gap-2 px-4 py-10 text-sm sm:flex-row sm:justify-between sm:px-6">
-        <Logo />
-        <p>Built for editors, designers and small studios in India. Prices in INR.</p>
-        <p>© {new Date().getFullYear()} FrameDesk</p>
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+        <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
+          <div className="max-w-sm">
+            <Logo />
+            <p className="text-muted mt-3 text-sm leading-relaxed">
+              One desk for footage, files and client feedback, with an AI assistant built in. Made
+              for editors, designers and small studios in India.
+            </p>
+          </div>
+          <nav aria-label="Footer" className="flex flex-wrap gap-x-7 gap-y-2 text-sm">
+            {SECTION_LINKS.map((link) => (
+              <a key={link.href} href={link.href} className="text-muted hover:text-ink">
+                {link.label}
+              </a>
+            ))}
+            <Link to="/login" className="text-muted hover:text-ink">
+              Sign in
+            </Link>
+          </nav>
+        </div>
+        <p className="text-muted border-line mt-10 border-t pt-6 text-sm">
+          © {new Date().getFullYear()} FrameDesk · Prices in INR, plus GST
+        </p>
       </div>
     </footer>
   );

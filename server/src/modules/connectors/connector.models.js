@@ -53,6 +53,10 @@ const connectorGrantSchema = new Schema(
     // true: every workspace the person can see, now and later.
     allWorkspaces: { type: Boolean, default: true },
     workspaceIds: { type: [Schema.Types.ObjectId], ref: 'Workspace', default: [] },
+    // Off: the assistant sees file details, AI summaries and transcripts only.
+    // On: it can also fetch the original bytes (download links, image/text
+    // content) for files it can already see. Switched by the person, any time.
+    allowDownloads: { type: Boolean, default: false },
     // API keys only: the hash, and the first characters to recognise it by.
     keyHash: { type: String, default: null },
     keyPreview: { type: String, default: null },

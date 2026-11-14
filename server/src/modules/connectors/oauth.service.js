@@ -281,7 +281,7 @@ export async function describeAuthorizationRequest(userId, params) {
 // Approve or deny. Either way the answer is a URL to send the browser to.
 export async function decideAuthorization(
   userId,
-  { params, approve, allWorkspaces, workspaceIds },
+  { params, approve, allWorkspaces, workspaceIds, allowDownloads = false },
 ) {
   const request = await checkAuthorizationRequest(params);
   if (request.error) {
@@ -310,6 +310,7 @@ export async function decideAuthorization(
         name: request.client.clientName ?? host ?? 'AI assistant',
         clientHost: host,
         scopes: request.scopes,
+        allowDownloads: Boolean(allowDownloads),
         ...choice,
       },
       $setOnInsert: { userId, kind: 'oauth', clientId: request.client.clientId },
@@ -536,6 +537,7 @@ function toConnection(grant) {
     scopes: grant.scopes,
     allWorkspaces: grant.allWorkspaces,
     workspaceIds: grant.workspaceIds.map(String),
+    allowDownloads: Boolean(grant.allowDownloads),
     lastUsedAt: grant.lastUsedAt,
     createdAt: grant.createdAt,
   };
@@ -552,7 +554,10 @@ export async function listConnections(userId) {
   };
 }
 
-export async function createApiKey(userId, { name, allWorkspaces, workspaceIds }) {
+export async function createApiKey(
+  userId,
+  { name, allWorkspaces, workspaceIds, allowDownloads = false },
+) {
   const count = await ConnectorGrant.countDocuments({ userId, kind: 'api_key', revokedAt: null });
   if (count >= MAX_API_KEYS) {
     throw AppError.conflict(
@@ -569,14 +574,16 @@ export async function createApiKey(userId, { name, allWorkspaces, workspaceIds }
     scopes: ['read'],
     keyHash: sha256(key),
     keyPreview: `${key.slice(0, PREFIX.key.length + 4)}…${key.slice(-4)}`,
+    allowDownloads: Boolean(allowDownloads),
     ...choice,
   });
   // The key itself is shown once and never stored.
   return { connection: toConnection(grant.toObject()), key };
 }
 
-export async function updateConnectionWorkspaces(userId, grantId, choice) {
+export async function updateConnectionWorkspaces(userId, grantId, { allowDownloads, ...choice }) {
   const cleaned = await cleanWorkspaceChoice(userId, choice);
+  if (typeof allowDownloads === 'boolean') cleaned.allowDownloads = allowDownloads;
   const grant = await ConnectorGrant.findOneAndUpdate(
     { _id: grantId, userId, revokedAt: null },
     { $set: cleaned },

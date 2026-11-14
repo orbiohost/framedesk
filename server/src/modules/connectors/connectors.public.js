@@ -15,6 +15,12 @@ import {
   resolveBearer,
 } from './oauth.service.js';
 import { CONNECTOR_SCOPES } from './connector.models.js';
+import { DOWNLOAD_PATH, readDownloadToken } from './downloadLinks.js';
+import { fileForDownload } from './mcpData.service.js';
+import { correctedMime } from '../files/fileTypes.js';
+import { getStorageDriver } from '../../storage/storageDriver.js';
+import { contentDisposition } from '../../storage/mediaHeaders.js';
+import { logger } from '../../utils/logger.js';
 
 // The parts of the AI connector that outside apps call: OAuth discovery and
 // sign-in (Claude, ChatGPT and other MCP clients follow the MCP authorization
@@ -182,6 +188,43 @@ function methodNotAllowed(req, res) {
     id: null,
   });
 }
+
+// ---------------------------------------------------------------------------
+// File downloads for AI connections with "Allow file downloads" on. The link
+// itself is the credential (signed, 1 hour), and everything behind it is
+// checked again here. Streamed from FrameDesk's own domain rather than
+// redirected to the bucket, so sandboxed agents need only this one host.
+
+const notFound = (res) =>
+  res
+    .status(404)
+    .json({ error: 'not_found', error_description: 'Link invalid, expired or revoked' });
+
+const handleDownload = asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('X-Content-Type-Options', 'nosniff');
+  const claims = readDownloadToken(req.params.token);
+  if (!claims) return notFound(res);
+  const file = await fileForDownload(claims);
+  if (!file) return notFound(res);
+
+  res.set('Content-Type', correctedMime(file.mime, file.extension) || 'application/octet-stream');
+  res.set('Content-Disposition', contentDisposition('attachment', file.displayName));
+  res.set('Content-Length', String(file.size));
+  if (req.method === 'HEAD') return res.end();
+
+  const stream = getStorageDriver().readStream(file.storageKey);
+  stream.on('error', (err) => {
+    logger.error({ err, fileId: String(file._id) }, 'Connector download failed');
+    res.destroy(err);
+  });
+  res.on('close', () => stream.destroy());
+  stream.pipe(res);
+});
+
+connectorPublicRouter.options(`${DOWNLOAD_PATH}/:token/:name?`, openCors);
+connectorPublicRouter.get(`${DOWNLOAD_PATH}/:token/:name?`, openCors, mcpLimiter, handleDownload);
 
 connectorPublicRouter.options(MCP_PATH, openCors);
 connectorPublicRouter.post(

@@ -130,7 +130,7 @@ function ReviewPanel() {
 
 export function ProductPreview() {
   return (
-    <figure className="border-line bg-surface shadow-ink/10 overflow-hidden rounded-xl border shadow-2xl">
+    <figure className="border-line/70 bg-surface shadow-lift overflow-hidden rounded-3xl border">
       <div className="border-line flex items-center gap-1.5 border-b px-4 py-2.5">
         <span className="bg-line h-2.5 w-2.5 rounded-full" />
         <span className="bg-line h-2.5 w-2.5 rounded-full" />

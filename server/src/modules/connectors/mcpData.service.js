@@ -11,9 +11,14 @@ import { QuickNote } from '../quickNotes/quickNote.model.js';
 import { Task } from '../tasks/task.model.js';
 import { Transcript } from '../transcripts/transcript.model.js';
 import { User } from '../users/user.model.js';
+import { correctedMime } from '../files/fileTypes.js';
+import { getStorageDriver } from '../../storage/storageDriver.js';
+import { ConnectorGrant } from './connector.models.js';
+import { createDownloadLink } from './downloadLinks.js';
 import { PUBLIC_ORIGIN, shareableWorkspaces } from './oauth.service.js';
 
-// Everything an AI connector can read. Read-only on purpose: each function
+// Everything an AI connector can read. Read-only on purpose (file downloads
+// too, and only when the person turned them on for the connection): each function
 // takes the connection context ({ user, grant }) and only ever returns what
 // that person could see in the app, inside the workspaces the connection
 // covers. Membership and roles are checked fresh on every call, so removing
@@ -21,6 +26,10 @@ import { PUBLIC_ORIGIN, shareableWorkspaces } from './oauth.service.js';
 
 // A problem the assistant should see and can fix (bad id, missing argument).
 export class ToolError extends Error {}
+
+// A handler returning { [RAW_CONTENT]: [...] } sends those MCP content blocks
+// as they are (pictures, file text) instead of one JSON text block.
+export const RAW_CONTENT = Symbol('rawContent');
 
 const DAY_MS = 24 * 3600 * 1000;
 const { ObjectId } = mongoose.Types;
@@ -952,4 +961,136 @@ export async function fetchRecord(ctx, { id }) {
     url: urlOf(data) ?? appUrl(`/w/${workspaceId}`),
     metadata: { kind, workspaceId },
   };
+}
+
+// ---------------------------------------------------------------------------
+// File downloads (only when the person switched "Allow file downloads" on)
+
+const MAX_LINKS_PER_CALL = 25;
+// Small enough to hand back inside the tool result itself.
+const MAX_INLINE_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_INLINE_TEXT_BYTES = 1024 * 1024;
+const INLINE_IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+const TEXT_EXTENSIONS = new Set([
+  'txt',
+  'md',
+  'csv',
+  'tsv',
+  'json',
+  'xml',
+  'srt',
+  'vtt',
+  'html',
+  'htm',
+  'css',
+  'js',
+  'yaml',
+  'yml',
+  'log',
+  'ini',
+  'rtf',
+  'svg',
+]);
+
+function assertDownloadsAllowed(ctx) {
+  if (!ctx.grant.allowDownloads) {
+    throw new ToolError(
+      'File downloads are off for this connection. The person can turn on "Allow file downloads" in FrameDesk → Account → AI connectors → Access.',
+    );
+  }
+}
+
+export async function getDownloadLinks(ctx, args) {
+  assertDownloadsAllowed(ctx);
+  const workspace = await resolveWorkspace(ctx, args.workspace_id);
+  const ids = [...new Set(args.file_ids ?? [])];
+  if (ids.length === 0) throw new ToolError('Pass at least one file_id');
+  if (ids.length > MAX_LINKS_PER_CALL) {
+    throw new ToolError(`Ask for at most ${MAX_LINKS_PER_CALL} files at a time`);
+  }
+  const filter = await visibleFileFilter(workspace);
+  const files = await StoredFile.find({
+    ...filter,
+    _id: { $in: ids.map((id) => objectId(id, 'file_id')) },
+  })
+    .select('displayName extension mime size')
+    .lean();
+  const byId = new Map(files.map((file) => [String(file._id), file]));
+  return {
+    files: ids.map((id) => {
+      const file = byId.get(String(id));
+      if (!file) return { id: String(id), error: 'File not found' };
+      return {
+        id: String(file._id),
+        name: file.displayName,
+        mime: correctedMime(file.mime, file.extension),
+        sizeBytes: file.size,
+        ...createDownloadLink({
+          grantId: ctx.grant._id,
+          workspaceId: workspace.id,
+          fileId: file._id,
+          fileName: file.displayName,
+        }),
+      };
+    }),
+    howTo:
+      'Plain HTTPS GET, no auth header needed (e.g. curl -L -o "<name>" "<url>"). Links work for 1 hour and stop working if the connection is revoked or downloads are turned off. Sandboxed agents must be allowed to reach this host.',
+  };
+}
+
+// Small pictures and text files come back inside the result, for chat
+// assistants that can't fetch URLs themselves.
+export async function readFileContent(ctx, args) {
+  assertDownloadsAllowed(ctx);
+  const workspace = await resolveWorkspace(ctx, args.workspace_id);
+  const file = await findVisibleFile(workspace, args.file_id);
+  const mime = correctedMime(file.mime, file.extension);
+  const isImage = INLINE_IMAGE_MIMES.has(mime);
+  const isText = !isImage && (mime.startsWith('text/') || TEXT_EXTENSIONS.has(file.extension));
+  if (!isImage && !isText) {
+    throw new ToolError(
+      `${file.displayName} (${mime}) can't be shown inline. Use get_download_links to fetch it.`,
+    );
+  }
+  const max = isImage ? MAX_INLINE_IMAGE_BYTES : MAX_INLINE_TEXT_BYTES;
+  if (file.size > max) {
+    throw new ToolError(
+      `${file.displayName} is ${Math.round(file.size / 1024)} KB, over the ${max / 1024 / 1024} MB inline limit. Use get_download_links to fetch it.`,
+    );
+  }
+  const bytes =
+    file.size > 0
+      ? await getStorageDriver().readStart(file.storageKey, file.size)
+      : Buffer.alloc(0);
+  const header = {
+    type: 'text',
+    text: JSON.stringify({
+      id: String(file._id),
+      name: file.displayName,
+      mime,
+      sizeBytes: file.size,
+    }),
+  };
+  return {
+    [RAW_CONTENT]: isImage
+      ? [header, { type: 'image', data: bytes.toString('base64'), mimeType: mime }]
+      : [header, { type: 'text', text: bytes.toString('utf8') }],
+  };
+}
+
+// For the download endpoint: the file behind a link, after checking that the
+// connection, its downloads switch, the person and their access all still hold.
+export async function fileForDownload({ grantId, workspaceId, fileId }) {
+  if (![grantId, workspaceId, fileId].every((id) => mongoose.isValidObjectId(id))) return null;
+  const grant = await ConnectorGrant.findOne({ _id: grantId, revokedAt: null }).lean();
+  if (!grant?.allowDownloads) return null;
+  const user = await User.findById(grant.userId).select('status').lean();
+  if (!user || user.status !== 'active') return null;
+  try {
+    const workspace = await resolveWorkspace({ user, grant }, workspaceId);
+    return await findVisibleFile(workspace, fileId);
+  } catch (err) {
+    if (err instanceof ToolError) return null;
+    throw err;
+  }
 }

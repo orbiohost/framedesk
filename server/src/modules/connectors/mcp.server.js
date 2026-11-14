@@ -16,6 +16,11 @@ Start with list_workspaces or workspace_overview, then drill into projects, task
 calendar events, files (with AI summaries) and transcripts. Dates are ISO 8601 (UTC).
 Budgets are in Indian rupees (INR).`;
 
+const DOWNLOAD_INSTRUCTIONS = `
+File downloads are on for this connection: get_download_links gives plain HTTPS links to the
+original files (videos, photos, documents) for editing, converting or analysing them, and
+read_file_content returns small images and text files directly.`;
+
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 
 const workspaceId = z
@@ -27,6 +32,7 @@ const limit = (max, fallback) =>
 const query = z.string().max(200).optional().describe('Case-insensitive text to look for.');
 
 function asResult(value) {
+  if (value?.[data.RAW_CONTENT]) return { content: value[data.RAW_CONTENT] };
   return { content: [{ type: 'text', text: JSON.stringify(value) }] };
 }
 
@@ -210,14 +216,41 @@ const TOOLS = [
   },
 ];
 
+// Only offered when the person turned on "Allow file downloads" for this connection.
+const DOWNLOAD_TOOLS = [
+  {
+    name: 'get_download_links',
+    title: 'Get download links',
+    description:
+      'Direct HTTPS download links to the original files (full quality), valid for 1 hour, no auth header needed. Use these to download videos, photos or documents and work on them (edit, convert, cut a reel, analyse frames). Get file ids from list_files, get_project or search.',
+    inputSchema: {
+      workspace_id: workspaceId,
+      file_ids: z.array(z.string()).min(1).max(25),
+    },
+    handler: data.getDownloadLinks,
+  },
+  {
+    name: 'read_file_content',
+    title: 'Read file content',
+    description:
+      'Returns the content of one small file directly: images (PNG, JPEG, GIF, WebP up to 5 MB) as a picture, text files (txt, md, csv, json, srt, vtt... up to 1 MB) as text. For anything else use get_download_links.',
+    inputSchema: { workspace_id: workspaceId, file_id: z.string() },
+    handler: data.readFileContent,
+  },
+];
+
 // A fresh server per request: the endpoint is stateless, and each server is
 // bound to the caller's connection.
 export function createMcpServer(ctx) {
   const server = new McpServer(
     { name: 'framedesk', title: 'FrameDesk', version: '1.0.0' },
-    { instructions: INSTRUCTIONS, capabilities: { tools: {} } },
+    {
+      instructions: ctx.grant.allowDownloads ? INSTRUCTIONS + DOWNLOAD_INSTRUCTIONS : INSTRUCTIONS,
+      capabilities: { tools: {} },
+    },
   );
-  for (const { name, title, description, inputSchema, handler } of TOOLS) {
+  const tools = ctx.grant.allowDownloads ? [...TOOLS, ...DOWNLOAD_TOOLS] : TOOLS;
+  for (const { name, title, description, inputSchema, handler } of tools) {
     server.registerTool(
       name,
       { title, description, inputSchema, annotations: { ...READ_ONLY, title } },

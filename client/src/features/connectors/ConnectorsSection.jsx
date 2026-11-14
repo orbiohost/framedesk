@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns';
-import { Check, Copy, KeyRound, Plug, Plus, TriangleAlert } from 'lucide-react';
+import { Check, Copy, Download, KeyRound, Plug, Plus, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
@@ -10,6 +10,7 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { cn } from '../../lib/cn.js';
 import { SettingsRow, SettingsSection } from '../account/SettingsSection.jsx';
+import { DownloadsSwitch } from './DownloadsSwitch.jsx';
 import { WorkspaceAccessPicker } from './WorkspaceAccessPicker.jsx';
 import {
   useConnectors,
@@ -211,6 +212,12 @@ function ConnectionRow({ connection, workspaces, onEdit }) {
         <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
           <span className="truncate">{connection.name}</span>
           {connection.clientHost && <Badge tone="muted">{connection.clientHost}</Badge>}
+          {connection.allowDownloads && (
+            <Badge tone="muted">
+              <Download className="mr-1 inline h-3 w-3" aria-hidden="true" />
+              Downloads on
+            </Badge>
+          )}
         </p>
         <p className="text-muted mt-0.5 text-xs leading-5">
           {isKey && <span className="break-all font-mono">{connection.keyPreview} · </span>}
@@ -269,6 +276,7 @@ function EditAccessDialog({ connection, workspaces, onClose }) {
   const [access, setAccess] = useState(() => ({
     allWorkspaces: connection?.allWorkspaces ?? true,
     workspaceIds: connection?.workspaceIds ?? [],
+    allowDownloads: connection?.allowDownloads ?? false,
   }));
   const nothingPicked = !access.allWorkspaces && access.workspaceIds.length === 0;
 
@@ -281,6 +289,10 @@ function EditAccessDialog({ connection, workspaces, onClose }) {
     >
       <div className="space-y-4 pb-1">
         <WorkspaceAccessPicker workspaces={workspaces} value={access} onChange={setAccess} />
+        <DownloadsSwitch
+          checked={access.allowDownloads}
+          onChange={(allowDownloads) => setAccess((current) => ({ ...current, allowDownloads }))}
+        />
         {update.error && <Alert tone="error">{update.error.message}</Alert>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
@@ -299,16 +311,18 @@ function EditAccessDialog({ connection, workspaces, onClose }) {
   );
 }
 
+const NEW_ACCESS = { allWorkspaces: true, workspaceIds: [], allowDownloads: false };
+
 function CreateKeyDialog({ open, onClose, workspaces, mcpUrl }) {
   const create = useCreateApiKey();
   const [name, setName] = useState('');
-  const [access, setAccess] = useState({ allWorkspaces: true, workspaceIds: [] });
+  const [access, setAccess] = useState(NEW_ACCESS);
   const created = create.data;
 
   function close() {
     create.reset();
     setName('');
-    setAccess({ allWorkspaces: true, workspaceIds: [] });
+    setAccess(NEW_ACCESS);
     onClose();
   }
 
@@ -335,8 +349,9 @@ function CreateKeyDialog({ open, onClose, workspaces, mcpUrl }) {
         <div className="space-y-4 pb-1">
           <CodeBlock label="API key">{created.key}</CodeBlock>
           <Alert tone="info">
-            Anyone with this key can read the workspaces it covers. Keep it out of shared files and
-            repositories.
+            Anyone with this key can read the workspaces it covers
+            {created.connection.allowDownloads ? ' and download their files' : ''}. Keep it out of
+            shared files and repositories.
           </Alert>
           <div>
             <p className="mb-1.5 text-sm font-medium">Ready-to-paste mcp.json</p>
@@ -372,6 +387,10 @@ function CreateKeyDialog({ open, onClose, workspaces, mcpUrl }) {
             <p className="mb-2 text-sm font-medium">Workspaces it can read</p>
             <WorkspaceAccessPicker workspaces={workspaces} value={access} onChange={setAccess} />
           </div>
+          <DownloadsSwitch
+            checked={access.allowDownloads}
+            onChange={(allowDownloads) => setAccess((current) => ({ ...current, allowDownloads }))}
+          />
           {create.error && !create.error.details && (
             <Alert tone="error">{create.error.message}</Alert>
           )}
@@ -410,7 +429,7 @@ export function ConnectorsSection() {
     <>
       <SettingsSection
         title="AI connectors"
-        description="Ask Claude, ChatGPT, Gemini or a local model about your projects, tasks, clients and files. Read-only, and limited to what you can see."
+        description="Ask Claude, ChatGPT, Gemini or a local model about your projects, tasks, clients and files. Read-only, limited to what you can see. Turn on file downloads per connection to let it fetch the original files."
       >
         <SettingsRow
           label="Server URL"

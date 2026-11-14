@@ -2,6 +2,22 @@ import { Plus } from 'lucide-react';
 
 const QUESTIONS = [
   {
+    q: 'What can the AI assistant do?',
+    a: 'It transcribes your recordings, watches your videos, looks at your images and reads your documents. Then you ask in plain words: find a clip, summarise a brief, list what a client asked for, or suggest a title and caption. Answers link to the files they came from.',
+  },
+  {
+    q: 'Is the AI included, or does it cost extra?',
+    a: 'It is included on every plan and in the free trial. Usage refreshes every few hours within a weekly limit, and bigger plans get more. If you need more than that, you can buy extra credits.',
+  },
+  {
+    q: 'Which AI apps can I connect to FrameDesk?',
+    a: 'Claude, ChatGPT, Gemini CLI, Claude Code, and any app that supports remote MCP servers, such as LM Studio, Cursor or VS Code with a local model. You paste the server URL from your account page and sign in, or create an API key.',
+  },
+  {
+    q: 'Can a connected AI app change or delete my work?',
+    a: 'No. Connectors are read-only and see only what your own account can see. You choose which workspaces each connection may read, and you can disconnect it at any time.',
+  },
+  {
     q: 'What counts toward my storage?',
     a: 'Every file you upload, including older versions and files in Trash. Trash empties itself after 30 days, and you can empty it sooner to free space straight away.',
   },

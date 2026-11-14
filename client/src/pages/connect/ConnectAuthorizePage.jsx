@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button.jsx';
 import { Logo } from '../../components/ui/Logo.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { useCurrentUser } from '../../features/auth/hooks.js';
+import { DownloadsSwitch } from '../../features/connectors/DownloadsSwitch.jsx';
 import { WorkspaceAccessPicker } from '../../features/connectors/WorkspaceAccessPicker.jsx';
 import {
   useAuthorizationRequest,
@@ -18,7 +19,10 @@ const PROMISES = [
     text: 'Read your projects, tasks, clients, calendar, notes, file details, AI summaries and transcripts.',
   },
   { icon: FolderLock, text: 'Only what you can already see. Locked folders stay locked.' },
-  { icon: Ban, text: 'It cannot change, delete, share or download anything.' },
+  {
+    icon: Ban,
+    text: 'It cannot change, delete or share anything. Downloading files is off unless you allow it below.',
+  },
 ];
 
 function Shell({ children }) {
@@ -40,7 +44,11 @@ export function ConnectAuthorizePage() {
   const { data: user } = useCurrentUser();
   const request = useAuthorizationRequest(params);
   const decide = useDecideAuthorization();
-  const [access, setAccess] = useState({ allWorkspaces: true, workspaceIds: [] });
+  const [access, setAccess] = useState({
+    allWorkspaces: true,
+    workspaceIds: [],
+    allowDownloads: false,
+  });
   const [leaving, setLeaving] = useState(false);
 
   function answer(approve) {
@@ -150,6 +158,14 @@ export function ConnectAuthorizePage() {
           <>
             <p className="mb-2.5 text-sm font-medium">Which workspaces can it read?</p>
             <WorkspaceAccessPicker workspaces={workspaces} value={access} onChange={setAccess} />
+            <div className="mt-4">
+              <DownloadsSwitch
+                checked={access.allowDownloads}
+                onChange={(allowDownloads) =>
+                  setAccess((current) => ({ ...current, allowDownloads }))
+                }
+              />
+            </div>
           </>
         )}
       </div>

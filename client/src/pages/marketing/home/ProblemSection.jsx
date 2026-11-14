@@ -1,3 +1,5 @@
+import { Eyebrow, Reveal } from './Reveal.jsx';
+
 const TODAY = [
   {
     title: 'The rushes are on a link that expired on Tuesday.',
@@ -19,17 +21,15 @@ const TODAY = [
 
 export function ProblemSection() {
   return (
-    <section className="border-line bg-subtle border-y">
+    <section className="border-line bg-subtle/60 border-y">
       <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <div>
-          <p className="text-muted mb-4 text-xs uppercase tracking-[0.16em]">
-            The way it works today
-          </p>
+        <Reveal>
+          <Eyebrow>The way it works today</Eyebrow>
           <h2 className="font-display text-4xl leading-tight tracking-tight md:text-5xl">
             The work is good. Everything around it is scattered.
           </h2>
-        </div>
-        <ol className="divide-line divide-y">
+        </Reveal>
+        <Reveal as="ol" delay={100} className="divide-line divide-y">
           {TODAY.map((item, index) => (
             <li key={item.title} className="flex gap-6 py-5 first:pt-0">
               <span className="font-display text-muted text-2xl leading-none">0{index + 1}</span>
@@ -39,7 +39,7 @@ export function ProblemSection() {
               </div>
             </li>
           ))}
-        </ol>
+        </Reveal>
       </div>
     </section>
   );

@@ -1,4 +1,6 @@
 import { cn } from '../../../lib/cn.js';
+import { ProductPreview } from './ProductPreview.jsx';
+import { Eyebrow, Reveal } from './Reveal.jsx';
 import { NotesSnippet, TeamSnippet, UploadSnippet } from './WorkflowSnippets.jsx';
 
 const WORKFLOWS = [
@@ -30,7 +32,7 @@ function Workflow({ workflow, index }) {
   const isReversed = index % 2 === 1;
 
   return (
-    <div className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
+    <Reveal className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
       <div className={cn(isReversed && 'md:order-2')}>
         <p className="text-accent mb-3 text-xs font-medium uppercase tracking-[0.16em]">
           {String(index + 1).padStart(2, '0')} · {workflow.label}
@@ -40,22 +42,28 @@ function Workflow({ workflow, index }) {
         </h3>
         <p className="text-muted mt-4 leading-relaxed">{workflow.body}</p>
       </div>
-      <figure className="border-line bg-surface overflow-hidden rounded-lg border">
+      <figure className="border-line/70 bg-surface shadow-soft overflow-hidden rounded-3xl border">
         <figcaption className="border-line text-muted border-b px-5 py-2.5 text-xs">
           {workflow.caption}
         </figcaption>
         <Snippet />
       </figure>
-    </div>
+    </Reveal>
   );
 }
 
 export function WorkflowsSection() {
   return (
     <section id="workflows" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-24 sm:px-6">
-      <h2 className="font-display mb-16 max-w-2xl text-4xl leading-tight tracking-tight md:text-5xl">
-        Three things you do every week, done in one place.
-      </h2>
+      <Reveal>
+        <Eyebrow>Files and review</Eyebrow>
+        <h2 className="font-display mb-12 max-w-2xl text-4xl leading-tight tracking-tight md:text-5xl">
+          Three things you do every week, done in one place.
+        </h2>
+        <div className="mb-24">
+          <ProductPreview />
+        </div>
+      </Reveal>
       <div className="space-y-24">
         {WORKFLOWS.map((workflow, index) => (
           <Workflow key={workflow.label} workflow={workflow} index={index} />

@@ -24,6 +24,7 @@ const objectIdString = z.string().refine(mongoose.isValidObjectId, 'Invalid id')
 const workspaceChoice = {
   allWorkspaces: z.boolean().default(true),
   workspaceIds: z.array(objectIdString).max(100).default([]),
+  allowDownloads: z.boolean().optional(),
 };
 
 // The authorization request as the assistant sent it. Everything is checked

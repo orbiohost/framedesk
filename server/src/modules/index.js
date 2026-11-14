@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/authenticate.js';
 import { loadWorkspace } from '../middleware/loadWorkspace.js';
 import { optionalAuthenticate } from '../middleware/optionalAuthenticate.js';
 import adminRoutes from './admin/admin.routes.js';
+import aiRoutes from './ai/ai.routes.js';
 import authRoutes from './auth/auth.routes.js';
 import { backupDownloadsRouter, workspaceBackupsRouter } from './backups/backups.routes.js';
 import checkoutRoutes from './billing/checkout.routes.js';
@@ -10,6 +11,7 @@ import upgradeRequestsRoutes from './billing/upgradeRequests.routes.js';
 import calendarRoutes from './calendar/calendar.routes.js';
 import chatRoutes from './chat/chat.routes.js';
 import clientsRoutes from './clients/clients.routes.js';
+import connectorsRoutes from './connectors/connectors.routes.js';
 import dashboardRoutes from './dashboard/dashboard.routes.js';
 import { fileSharesRouter, publicFileShareRouter } from './fileShare/fileShare.routes.js';
 import filesRoutes from './files/files.routes.js';
@@ -41,6 +43,8 @@ apiRouter.use('/users', usersRoutes);
 apiRouter.use('/avatars', avatarsRoutes);
 apiRouter.use('/plans', plansRoutes);
 apiRouter.use('/support', supportRoutes);
+// AI connectors: connected assistants, API keys and the OAuth consent screen.
+apiRouter.use('/connectors', connectorsRoutes);
 apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/backup-downloads', backupDownloadsRouter);
 // Shared project links: open to anyone holding the link (or any signed-in
@@ -65,5 +69,6 @@ mountWorkspaceFeature('transcripts', transcriptsRoutes);
 mountWorkspaceFeature('upgrade-requests', upgradeRequestsRoutes);
 mountWorkspaceFeature('checkout', checkoutRoutes);
 mountWorkspaceFeature('backups', workspaceBackupsRouter);
+mountWorkspaceFeature('ai', aiRoutes);
 
 apiRouter.use('/workspaces', workspacesRoutes);

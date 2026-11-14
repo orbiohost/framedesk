@@ -1,3 +1,4 @@
+import { deleteInsightsForFiles } from '../ai/aiInsight.model.js';
 import { storageConfig } from '../../config/storage.js';
 import { getStorageDriver } from '../../storage/storageDriver.js';
 import { AppError } from '../../utils/AppError.js';
@@ -217,6 +218,7 @@ export async function deleteFilePermanently(workspaceId, fileId, viewer = null) 
   const result = await StoredFile.deleteOne({ _id: fileId, workspaceId, deletedAt: { $ne: null } });
   if (result.deletedCount === 0) return;
   await deleteTranscriptsForFiles(workspaceId, [file._id]);
+  await deleteInsightsForFiles(workspaceId, [file._id]);
   await removeFilesFromShares(workspaceId, [file._id]);
   await getStorageDriver()
     .delete(file.storageKey)
@@ -239,6 +241,7 @@ export async function emptyTrash(workspaceId, projectId = null, viewer = null) {
   // Only what was just read: a file restored in the meantime no longer matches.
   await StoredFile.deleteMany({ _id: { $in: ids }, workspaceId, deletedAt: { $ne: null } });
   await deleteTranscriptsForFiles(workspaceId, ids);
+  await deleteInsightsForFiles(workspaceId, ids);
   await removeFilesFromShares(workspaceId, ids);
 
   const driver = getStorageDriver();
@@ -282,7 +285,9 @@ export async function createPreviewUrls(workspaceId, fileIds, viewer = null) {
   ]);
   const driver = getStorageDriver();
   const shown = files.filter(
-    (file) => isPreviewable(correctedMime(file.mime, file.extension), file.extension) && !hidden.has(String(file.folderId)),
+    (file) =>
+      isPreviewable(correctedMime(file.mime, file.extension), file.extension) &&
+      !hidden.has(String(file.folderId)),
   );
   const signed = await Promise.all(
     shown.map((file) =>
@@ -319,6 +324,7 @@ export async function purgeFiles(workspaceId, filter = {}) {
   await StoredFile.deleteMany({ ...filter, workspaceId });
   const ids = files.map((file) => file._id);
   await deleteTranscriptsForFiles(workspaceId, ids);
+  await deleteInsightsForFiles(workspaceId, ids);
   await removeFilesFromShares(workspaceId, ids);
   const liveBytes = files
     .filter((file) => !file.deletedAt)

@@ -104,7 +104,9 @@ export function CalendarItem({ item, onOpen, day, compact = false }) {
         {createElement(itemIcon(item), { className: 'h-4 w-4', 'aria-hidden': true })}
       </span>
       <span className="min-w-0 flex-1">
-        <span className={cn('block truncate text-sm font-medium', done && 'text-muted line-through')}>
+        <span
+          className={cn('block truncate text-sm font-medium', done && 'text-muted line-through')}
+        >
           {item.title}
         </span>
         <span className="text-muted block truncate text-xs">{details.join(' · ')}</span>

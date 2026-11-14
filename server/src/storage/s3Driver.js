@@ -225,7 +225,8 @@ export class S3Driver {
   // The first bytes of a stored object (for checking what the file really is).
   async readStart(key, bytes) {
     const chunks = [];
-    for await (const chunk of this.readStream(key, { start: 0, end: bytes - 1 })) chunks.push(chunk);
+    for await (const chunk of this.readStream(key, { start: 0, end: bytes - 1 }))
+      chunks.push(chunk);
     return Buffer.concat(chunks);
   }
 }

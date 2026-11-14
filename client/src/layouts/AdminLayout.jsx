@@ -8,6 +8,7 @@ import {
   ReceiptText,
   LifeBuoy,
   ScrollText,
+  Sparkles,
   Users,
 } from 'lucide-react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
@@ -22,6 +23,7 @@ const NAV = [
   { to: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
   { to: '/admin/sales', label: 'Sales', icon: IndianRupee },
   { to: '/admin/invoicing', label: 'Invoicing', icon: ReceiptText },
+  { to: '/admin/ai', label: 'AI assistant', icon: Sparkles },
   {
     to: '/admin/upgrade-requests',
     label: 'Upgrade requests',

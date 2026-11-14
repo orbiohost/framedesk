@@ -51,20 +51,28 @@ export function useConfirmCheckout(workspaceId) {
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
       queryClient.invalidateQueries({ queryKey: ['account-billing'] });
       queryClient.invalidateQueries({ queryKey: upgradeRequestKey(workspaceId) });
+      // A credit pack (or a plan's monthly allowance) changes the AI balance.
+      queryClient.invalidateQueries({ queryKey: featureKey(workspaceId, 'ai') });
     },
   });
 }
 
-export function useCheckoutQuote(workspaceId, { planCode, interval }, { enabled = true } = {}) {
+// selection: { planCode, interval } for a plan, or { packCode } for AI credits.
+export function useCheckoutQuote(
+  workspaceId,
+  { planCode, interval, packCode, product },
+  { enabled = true } = {},
+) {
+  const query = product
+    ? `product=${encodeURIComponent(product)}`
+    : packCode
+      ? `packCode=${encodeURIComponent(packCode)}`
+      : `planCode=${encodeURIComponent(planCode ?? '')}&interval=${interval}`;
   return useQuery({
-    queryKey: featureKey(workspaceId, 'checkout-quote', planCode, interval),
+    queryKey: featureKey(workspaceId, 'checkout-quote', product ?? packCode ?? planCode, interval),
     queryFn: async () =>
-      (
-        await api.get(
-          `/workspaces/${workspaceId}/checkout/quote?planCode=${encodeURIComponent(planCode)}&interval=${interval}`,
-        )
-      ).quote,
-    enabled: enabled && Boolean(planCode),
+      (await api.get(`/workspaces/${workspaceId}/checkout/quote?${query}`)).quote,
+    enabled: enabled && Boolean(planCode || packCode || product),
     staleTime: 30 * 1000,
   });
 }

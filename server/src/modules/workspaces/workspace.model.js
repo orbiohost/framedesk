@@ -33,6 +33,27 @@ const storageSchema = new Schema(
   { _id: false },
 );
 
+// AI assistant usage, kept on the account workspace like storage. The plan's
+// 5-hour and weekly limits are used first; purchased and granted credits
+// ("extra usage") never expire and are used once a limit is reached.
+const aiSchema = new Schema(
+  {
+    // Usage windows, like Claude's: a 5-hour session that starts with the first
+    // request after the last one ended, and a 7-day week that works the same way.
+    sessionStartedAt: { type: Date, default: null },
+    sessionUsed: { type: Number, default: 0, min: 0 },
+    weekStartedAt: { type: Date, default: null },
+    weekUsed: { type: Number, default: 0, min: 0 },
+    // Older monthly allowance, no longer used.
+    allowancePeriod: { type: String, default: null },
+    allowanceUsed: { type: Number, default: 0, min: 0 },
+    purchasedCredits: { type: Number, default: 0, min: 0 },
+    // Set by the platform admin to keep the assistant off for this account.
+    blocked: { type: Boolean, default: false },
+  },
+  { _id: false },
+);
+
 const workspaceSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 80 },
@@ -42,6 +63,7 @@ const workspaceSchema = new Schema(
     storagePoolId: { type: Schema.Types.ObjectId, ref: 'Workspace', default: null },
     billing: { type: billingSnapshotSchema, default: () => ({}) },
     storage: { type: storageSchema, default: () => ({}) },
+    ai: { type: aiSchema, default: () => ({}) },
   },
   { timestamps: true },
 );

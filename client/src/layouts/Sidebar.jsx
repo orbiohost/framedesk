@@ -15,6 +15,7 @@ import {
   NotebookPen,
   PanelLeftClose,
   PanelLeftOpen,
+  Plug,
   Plus,
   Receipt,
   Settings,
@@ -27,6 +28,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/ui/Avatar.jsx';
+import { AI_GRADIENT, AI_TEXT } from '../features/ai/aiStyle.js';
+import { useAiStatus } from '../features/ai/hooks.js';
+import { UsageRing } from '../features/ai/AiUsage.jsx';
+import { AiUsageDialog } from '../features/ai/AiUsageDialog.jsx';
 import { useCurrentUser, useLogout } from '../features/auth/hooks.js';
 import { needsUpgrade } from '../features/billing/pricing.js';
 import { UpgradeSidebarCard } from '../features/billing/UpgradeSidebarCard.jsx';
@@ -84,7 +89,7 @@ function CountBadge({ count, active }) {
       className={cn(
         // leading-none + a fixed 20px circle keeps a single digit dead centre;
         // longer counts grow sideways from min-w-5 with a little padding.
-        'ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-center text-[10px] leading-none font-semibold tabular-nums',
+        'ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-center text-[10px] font-semibold tabular-nums leading-none',
         active ? 'bg-surface/20 text-current' : 'bg-lavender text-accent dark:text-ink',
       )}
     >
@@ -124,6 +129,65 @@ function NavItem({ to, label, icon: Icon, end, count, compact }) {
         </>
       )}
     </NavLink>
+  );
+}
+
+// Its own sidebar section: a bright "Ask AI" link to the assistant page, with
+// how much of the current 5-hour session is used. Hidden while the assistant is off.
+function AiSection({ workspace, compact }) {
+  const status = useAiStatus(workspace.id, { enabled: canView(workspace) });
+  if (!status.data?.enabled) return null;
+  const to = `/w/${workspace.id}/ai`;
+  const sessionPercent = status.data.credits?.session?.percent ?? 0;
+
+  if (compact) {
+    return (
+      <NavLink
+        to={to}
+        title="Ask AI"
+        aria-label="Ask AI"
+        className={cn(
+          AI_GRADIENT,
+          'mx-auto mt-2 grid h-8 w-8 place-items-center rounded-full text-white shadow-sm shadow-fuchsia-500/30 transition-transform hover:scale-105',
+        )}
+      >
+        <Sparkles className="h-4 w-4" aria-hidden="true" />
+      </NavLink>
+    );
+  }
+
+  return (
+    <div>
+      <div className="text-muted mb-1 mt-4 px-3 text-[10px] font-semibold uppercase tracking-[0.14em]">
+        AI
+      </div>
+      <NavLink
+        to={to}
+        className={({ isActive }) =>
+          cn(
+            'group flex items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-2 text-[13px] transition-colors',
+            isActive ? 'bg-surface shadow-soft font-medium' : 'hover:bg-surface',
+          )
+        }
+      >
+        <span
+          className={cn(
+            AI_GRADIENT,
+            'grid h-6 w-6 shrink-0 place-items-center rounded-full text-white shadow-sm shadow-fuchsia-500/30 transition-transform group-hover:scale-110',
+          )}
+        >
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
+        <span className={cn(AI_TEXT, 'truncate font-semibold')}>Ask AI</span>
+        <span
+          className="text-muted ml-auto flex shrink-0 items-center gap-1 text-[11px] tabular-nums"
+          title={`${sessionPercent}% of this 5-hour session used`}
+        >
+          <UsageRing percent={sessionPercent} size={14} />
+          {sessionPercent}%
+        </span>
+      </NavLink>
+    </div>
   );
 }
 
@@ -218,6 +282,66 @@ function WorkspaceProjects({ workspace, openProjects }) {
   );
 }
 
+// AI usage above the storage meter: this session's share, the week's below.
+// Clicking opens the details, with a paid reset for owners.
+function SidebarAiUsage({ workspace, compact }) {
+  const status = useAiStatus(workspace.id, { enabled: canView(workspace) });
+  const [open, setOpen] = useState(false);
+  const credits = status.data?.credits;
+  if (!status.data?.enabled || !credits) return null;
+  const session = credits.session.percent;
+  const full = credits.limitedBy !== null && credits.extra === 0;
+  const bar = session >= 100 ? 'bg-danger' : session >= 80 ? 'bg-warning' : AI_GRADIENT;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="AI usage limits"
+        aria-label={compact ? `AI usage: ${session}% of this session` : undefined}
+        className={cn(
+          'hover:bg-subtle mb-1 block text-left',
+          compact
+            ? 'mx-auto grid h-9 w-9 place-items-center rounded-full'
+            : 'mx-1 rounded-xl px-2 py-1.5',
+        )}
+      >
+        {compact ? (
+          <UsageRing percent={session} size={18} />
+        ) : (
+          <>
+            <span className="flex items-center justify-between gap-2 text-xs">
+              <span className="flex items-center gap-1.5 font-medium">
+                <Sparkles className="text-accent h-3.5 w-3.5" aria-hidden="true" />
+                AI usage
+              </span>
+              <span className={cn('tabular-nums', full ? 'text-danger font-medium' : 'text-muted')}>
+                {full ? 'Limit reached' : `${session}% · 5 hr`}
+              </span>
+            </span>
+            <span className="bg-line/80 mt-1.5 block h-1.5 overflow-hidden rounded-full">
+              <span
+                className={cn('block h-full rounded-full transition-[width] duration-700', bar)}
+                style={{ width: `${Math.max(session, session > 0 ? 4 : 0)}%` }}
+              />
+            </span>
+            <span className="text-muted mt-1 block text-[11px] tabular-nums">
+              Weekly {credits.weekly.percent}% used
+            </span>
+          </>
+        )}
+      </button>
+      <AiUsageDialog
+        workspace={workspace}
+        status={status.data}
+        open={open}
+        onClose={() => setOpen(false)}
+      />
+    </>
+  );
+}
+
 const MENU_LINK =
   'hover:bg-subtle flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm text-ink/80 hover:text-ink';
 
@@ -290,6 +414,15 @@ function AccountFooter({ workspace, compact }) {
           >
             <Receipt className="h-4 w-4" aria-hidden="true" />
             Billing &amp; invoices
+          </Link>
+          <Link
+            to={`${base}/account?tab=connectors`}
+            onClick={close}
+            role="menuitem"
+            className={MENU_LINK}
+          >
+            <Plug className="h-4 w-4" aria-hidden="true" />
+            AI connectors
           </Link>
           {canAdminister(workspace) && (
             <>
@@ -457,6 +590,8 @@ export function Sidebar({ workspace, isOpen, onClose }) {
             </nav>
           )}
 
+          <AiSection workspace={workspace} compact={compact} />
+
           {!compact && canView(workspace) && (
             <>
               <SectionHeading
@@ -498,6 +633,7 @@ export function Sidebar({ workspace, isOpen, onClose }) {
         ) : (
           <UpgradeSidebarCard workspace={workspace} />
         )}
+        <SidebarAiUsage workspace={workspace} compact={compact} />
         <SidebarStorage workspace={workspace} compact={compact} />
         <AccountFooter workspace={workspace} compact={compact} />
       </aside>

@@ -1,6 +1,10 @@
 import mongoose, { Schema } from 'mongoose';
 import { workspaceScopePlugin } from '../../utils/workspaceScope.plugin.js';
 
+export const AI_CREDITS_CODE = 'ai-credits';
+// Paying to start the AI 5-hour and weekly limits over straight away.
+export const AI_RESET_CODE = 'ai-reset';
+
 export const PAYMENT_METHODS = ['upi', 'bank_transfer', 'card', 'cash', 'razorpay', 'other'];
 
 // GST charged on a payment, fixed when the payment is made.
@@ -66,8 +70,12 @@ const paymentSchema = new Schema(
     // which show a number derived from their id instead.
     invoiceNumber: { type: String, default: null },
     currency: { type: String, default: 'INR' },
+    // 'plan' pays for time on a plan; 'credits' buys AI credits (no period).
+    kind: { type: String, enum: ['plan', 'credits', 'reset'], default: 'plan' },
+    // For credit packs this is AI_CREDITS_CODE.
     planCode: { type: String, required: true },
-    interval: { type: String, enum: ['monthly', 'yearly'], required: true },
+    interval: { type: String, enum: ['monthly', 'yearly', null], default: null },
+    credits: { type: Number, min: 0, default: null },
     method: { type: String, enum: PAYMENT_METHODS, required: true },
     reference: { type: String, trim: true, maxlength: 120, default: null },
     offerCode: { type: String, default: null },
@@ -76,7 +84,8 @@ const paymentSchema = new Schema(
     // Where the time this payment bought begins (after any time already paid
     // for). null on older payments. A full refund takes back periodEnd - periodStart.
     periodStart: { type: Date, default: null },
-    periodEnd: { type: Date, required: true },
+    // null for credit packs.
+    periodEnd: { type: Date, default: null },
     // Set from Razorpay refund webhooks. refundedAt is set only on a full refund.
     refundedAmount: { type: Number, min: 0, default: 0 },
     refundedAt: { type: Date, default: null },

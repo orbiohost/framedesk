@@ -102,7 +102,9 @@ function ToolButton({ label, icon: Icon, active, disabled, onClick }) {
       onClick={onClick}
       className={cn(
         'grid h-7 w-7 place-items-center rounded-lg transition-colors disabled:opacity-40',
-        active ? 'bg-accent/15 text-accent' : 'text-muted enabled:hover:bg-subtle enabled:hover:text-ink',
+        active
+          ? 'bg-accent/15 text-accent'
+          : 'text-muted enabled:hover:bg-subtle enabled:hover:text-ink',
       )}
     >
       <Icon className="h-4 w-4" aria-hidden="true" />

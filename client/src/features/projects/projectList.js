@@ -1,5 +1,14 @@
 import { differenceInCalendarDays } from 'date-fns';
-import { Archive, ArchiveRestore, CircleCheck, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  CircleCheck,
+  Pencil,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
+import { openAi } from '../ai/aiBridge.js';
 import { formatDueLabel } from '../../lib/dates.js';
 import { isProjectOpen, projectStatus, projectTypeLabel } from './projectMeta.js';
 
@@ -93,8 +102,17 @@ export function matchesSearch(project, needle) {
 // Clicking the card opens it, so the menu only holds what changes it: finish or
 // reopen, archive or restore. Other statuses are set in Edit or on the project.
 // Managers can edit and change status; only owners and admins can delete.
-export function projectMenuItems({ project, canManage, canDelete, onAction }) {
+// askAi: the AI assistant is on, so "Ask AI about this project" leads the menu.
+export function projectMenuItems({ project, canManage, canDelete, onAction, askAi = false }) {
   const items = [];
+  if (askAi) {
+    items.push({
+      key: 'ask-ai',
+      label: 'Ask AI about this project',
+      icon: Sparkles,
+      onSelect: () => openAi({ project: { id: project.id, title: project.title } }),
+    });
+  }
   if (canManage) {
     const archived = project.status === 'archived';
     const completed = project.status === 'completed';
@@ -102,6 +120,7 @@ export function projectMenuItems({ project, canManage, canDelete, onAction }) {
       key: 'edit',
       label: 'Edit details',
       icon: Pencil,
+      divider: askAi,
       onSelect: () => onAction('edit', project),
     });
     if (!archived) {

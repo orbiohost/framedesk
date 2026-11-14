@@ -51,11 +51,7 @@ router.post(
   '/:uploadId/part-urls',
   validate({ params: idParams, body: partUrlsBody }),
   asyncHandler(async (req, res) => {
-    const result = await signDirectUploadParts(
-      req.user,
-      req.params.uploadId,
-      req.body.partNumbers,
-    );
+    const result = await signDirectUploadParts(req.user, req.params.uploadId, req.body.partNumbers);
     sendSuccess(res, result);
   }),
 );

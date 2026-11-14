@@ -3,7 +3,7 @@ import { PLANS } from '../plans/plans.catalog.js';
 import { toBillingProfile } from '../users/users.service.js';
 import { Workspace, storageLimitBytes } from '../workspaces/workspace.model.js';
 import { getSeller } from './billingSettings.service.js';
-import { Payment } from './payment.model.js';
+import { AI_CREDITS_CODE, AI_RESET_CODE, Payment } from './payment.model.js';
 import { effectiveBilling } from './planLifecycle.service.js';
 import { UpgradeRequest } from './upgradeRequest.model.js';
 
@@ -15,6 +15,8 @@ const ACROSS_OWNED = { crossWorkspace: true };
 const HISTORY_LIMIT = 200;
 
 export function planName(code) {
+  if (code === AI_CREDITS_CODE) return 'AI credits';
+  if (code === AI_RESET_CODE) return 'AI usage reset';
   return PLANS.find((plan) => plan.code === code)?.name ?? code ?? 'No plan';
 }
 
@@ -26,6 +28,7 @@ function legacyInvoiceNumber(payment) {
 }
 
 function periodStartOf(payment) {
+  if (!payment.periodEnd) return null;
   const start = new Date(payment.periodEnd);
   start.setMonth(start.getMonth() - (payment.interval === 'yearly' ? 12 : 1));
   return start;
@@ -45,6 +48,8 @@ function toPaymentDto(payment, workspaceNames) {
     seller: payment.seller ?? null,
     workspaceId: String(payment.workspaceId),
     workspaceName: workspaceNames.get(String(payment.workspaceId)) ?? 'Workspace',
+    kind: payment.kind ?? 'plan',
+    credits: payment.credits ?? null,
     planCode: payment.planCode,
     planName: planName(payment.planCode),
     interval: payment.interval,

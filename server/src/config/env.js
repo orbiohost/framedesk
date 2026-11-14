@@ -93,6 +93,18 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value || undefined),
+    // Google Gemini, for the AI assistant (file analysis and chat). Leave empty
+    // to keep the assistant off. Get a key at https://aistudio.google.com/apikey
+    GEMINI_API_KEY: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    // The default model; the admin panel can change it without a deploy.
+    GEMINI_MODEL: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || 'gemini-3.5-flash')
+      .pipe(z.string().regex(/^[\w.-]+$/, 'must be a model name like gemini-3.5-flash')),
     // Optional Redis (e.g. redis://redis:6379) for the request cache and shared
     // rate limits. Leave empty to run without it.
     REDIS_URL: z

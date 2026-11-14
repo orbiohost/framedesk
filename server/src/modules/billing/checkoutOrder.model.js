@@ -13,8 +13,13 @@ export const CHECKOUT_ORDER_TTL_MS = 30 * 60 * 1000;
 const checkoutOrderSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    planCode: { type: String, required: true },
-    interval: { type: String, enum: ['monthly', 'yearly'], required: true },
+    // 'plan' buys time on a plan; 'credits' buys a pack of AI credits.
+    // 'reset' starts the AI usage limits over.
+    kind: { type: String, enum: ['plan', 'credits', 'reset'], default: 'plan' },
+    planCode: { type: String, default: null },
+    interval: { type: String, enum: ['monthly', 'yearly', null], default: null },
+    packCode: { type: String, default: null },
+    credits: { type: Number, min: 0, default: null },
     offerCode: { type: String, default: null },
     taxableAmount: { type: Number, required: true, min: 0 },
     tax: { type: taxSnapshotSchema, default: null },

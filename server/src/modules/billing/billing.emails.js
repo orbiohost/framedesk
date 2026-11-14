@@ -60,8 +60,20 @@ export function paymentReceiptEmail({ payment, billedTo, pdf, fileName }) {
     text: [
       `Hi ${billedTo.name},`,
       '',
-      `We received ${moneyFormat.format(payment.amount)} for the ${payment.planName} plan (${payment.interval}) on ${payment.workspaceName}.`,
-      `It is paid until ${formatDate(payment.periodEnd)}.`,
+      ...(payment.kind === 'reset'
+        ? [
+            `We received ${moneyFormat.format(payment.amount)} for an AI usage limit reset on ${payment.workspaceName}.`,
+            'Your 5-hour and weekly AI limits have started over.',
+          ]
+        : payment.kind === 'credits'
+          ? [
+              `We received ${moneyFormat.format(payment.amount)} for ${Number(payment.credits ?? 0).toLocaleString('en-IN')} AI credits on ${payment.workspaceName}.`,
+              'The credits are in your account now and never expire.',
+            ]
+          : [
+              `We received ${moneyFormat.format(payment.amount)} for the ${payment.planName} plan (${payment.interval}) on ${payment.workspaceName}.`,
+              `It is paid until ${formatDate(payment.periodEnd)}.`,
+            ]),
       '',
       'Your invoice is attached. You can also find every invoice here:',
       billingLink(payment.workspaceId),

@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextAreaField } from '../../components/ui/TextAreaField.jsx';
+import { Switch } from '../../components/ui/Switch.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { SettingsRow, SettingsSection } from '../../features/account/SettingsSection.jsx';
 import {
@@ -19,7 +20,6 @@ import {
 } from '../../features/admin/hooks.js';
 import { dateTime } from '../../features/admin/adminFormat.js';
 import { GSTIN_PATTERN, STATE_OPTIONS, stateFromGstin } from '../../features/billing/gstStates.js';
-import { cn } from '../../lib/cn.js';
 import { applyServerFieldErrors } from '../../lib/forms.js';
 
 const RATE_OPTIONS = [0, 5, 12, 18, 28].map((rate) => ({ value: String(rate), label: `${rate}%` }));
@@ -83,37 +83,6 @@ function toFormValues(settings) {
 
 function toPayload(values) {
   return { ...values, gstRate: Number(values.gstRate) };
-}
-
-// A 44x24 track with a 20px knob: 2px of space on every side, on or off.
-function Switch({ checked, onChange, label, description }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="group inline-flex items-center gap-3 rounded-full text-left"
-    >
-      <span
-        className={cn(
-          'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ease-out',
-          checked ? 'bg-accent' : 'bg-line group-hover:bg-muted/40',
-        )}
-      >
-        <span
-          className={cn(
-            'bg-surface absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-sm transition-transform duration-200 ease-out',
-            checked ? 'translate-x-5' : 'translate-x-0',
-          )}
-        />
-      </span>
-      <span className="text-sm">
-        <span className="font-medium">{label}</span>
-        {description && <span className="text-muted"> · {description}</span>}
-      </span>
-    </button>
-  );
 }
 
 function StatusLine({ ok, children }) {

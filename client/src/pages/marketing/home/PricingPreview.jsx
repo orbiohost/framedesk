@@ -1,3 +1,4 @@
+import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Skeleton } from '../../../components/ui/Skeleton.jsx';
@@ -6,6 +7,7 @@ import { IntervalToggle } from '../../../features/billing/IntervalToggle.jsx';
 import { OfferCountdown } from '../../../features/billing/OfferCountdown.jsx';
 import { PlanCard, PlanGrid } from '../../../features/billing/PlanCard.jsx';
 import { cn } from '../../../lib/cn.js';
+import { formatInr } from '../../../lib/format.js';
 
 function SignupLink({ plan }) {
   return (
@@ -18,6 +20,34 @@ function SignupLink({ plan }) {
     >
       Start free, then {plan.name}
     </Link>
+  );
+}
+
+// Shown while the AI assistant is on: what credits are and what extra packs cost.
+function AiCreditsNote({ ai }) {
+  const cheapest = [...ai.packs].sort((a, b) => a.price - b.price)[0];
+  return (
+    <div className="border-line mt-6 flex flex-col gap-3 rounded-lg border p-6 md:flex-row md:items-center md:gap-6">
+      <span className="bg-lavender text-accent dark:text-ink grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
+        <Sparkles className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <div className="flex-1">
+        <p className="font-medium">AI assistant included</p>
+        <p className="text-muted text-sm">
+          It watches your clips, reads your documents and transcripts, and answers questions about
+          them. Usage refreshes every {ai.sessionHours} hours, within a weekly limit; bigger plans
+          get more, and the free trial includes it too.
+        </p>
+      </div>
+      {cheapest && (
+        <p className="text-sm md:text-right">
+          <span className="text-muted">Need more? Extra usage from</span>{' '}
+          <span className="font-medium">
+            {formatInr(cheapest.price)} for {cheapest.credits.toLocaleString('en-IN')} credits
+          </span>
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -60,6 +90,7 @@ export function PricingPreview() {
                 />
               ))}
             </PlanGrid>
+            {pricing.ai && <AiCreditsNote ai={pricing.ai} />}
           </>
         )}
       </div>

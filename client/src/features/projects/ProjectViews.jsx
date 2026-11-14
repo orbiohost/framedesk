@@ -2,6 +2,7 @@ import { CalendarDays, Flag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/cn.js';
 import { isPressingPriority, priorityLabel } from '../../lib/priorities.js';
+import { useAiAvailable } from '../ai/aiBridge.js';
 import { ActionMenu } from '../files/ActionMenu.jsx';
 import { dueInfo, projectMenuItems, taskPercent } from './projectList.js';
 import { projectTypeLabel } from './projectMeta.js';
@@ -70,11 +71,12 @@ function subtitle(project) {
 }
 
 function Menu({ project, menu, className }) {
+  const askAi = useAiAvailable();
   return (
     <ActionMenu
       label={`Actions for ${project.title}`}
       title={project.title}
-      items={projectMenuItems({ project, ...menu })}
+      items={projectMenuItems({ project, ...menu, askAi })}
       className={className}
     />
   );

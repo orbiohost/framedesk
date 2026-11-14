@@ -134,6 +134,8 @@ function Stat({ label, value, hint }) {
 
 function BillingStats({ billing }) {
   const last = billing.payments[0];
+  // Credit packs buy no time, so "paid until" comes from the newest plan payment.
+  const lastPlan = billing.payments.find((payment) => (payment.kind ?? 'plan') === 'plan');
   return (
     <div className="bg-surface border-line/60 shadow-soft divide-line/70 grid grid-cols-1 divide-y rounded-3xl border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
       <Stat
@@ -148,8 +150,8 @@ function BillingStats({ billing }) {
       />
       <Stat
         label="Paid until"
-        value={last ? shortDate(last.periodEnd) : '—'}
-        hint={last ? `${last.planName}, ${last.interval}` : 'No paid period'}
+        value={lastPlan ? shortDate(lastPlan.periodEnd) : '—'}
+        hint={lastPlan ? `${lastPlan.planName}, ${lastPlan.interval}` : 'No paid period'}
       />
     </div>
   );
@@ -215,15 +217,31 @@ function PaymentHistory({ payments, onView }) {
               <span className="text-muted block text-xs">{shortDate(payment.paidAt)}</span>
             </button>
             <div className="hidden min-w-0 md:block">
-              <p className="truncate text-sm">
-                {payment.planName}{' '}
-                <span className="text-muted">
-                  · {payment.interval === 'yearly' ? 'Yearly' : 'Monthly'}
-                </span>
-              </p>
-              <p className="text-muted truncate text-xs">
-                {shortDate(payment.periodStart)} – {shortDate(payment.periodEnd)}
-              </p>
+              {payment.kind === 'reset' ? (
+                <>
+                  <p className="truncate text-sm">AI usage limit reset</p>
+                  <p className="text-muted truncate text-xs">One-time</p>
+                </>
+              ) : payment.kind === 'credits' ? (
+                <>
+                  <p className="truncate text-sm">
+                    {payment.credits?.toLocaleString('en-IN')} AI credits
+                  </p>
+                  <p className="text-muted truncate text-xs">One-time pack</p>
+                </>
+              ) : (
+                <>
+                  <p className="truncate text-sm">
+                    {payment.planName}{' '}
+                    <span className="text-muted">
+                      · {payment.interval === 'yearly' ? 'Yearly' : 'Monthly'}
+                    </span>
+                  </p>
+                  <p className="text-muted truncate text-xs">
+                    {shortDate(payment.periodStart)} – {shortDate(payment.periodEnd)}
+                  </p>
+                </>
+              )}
             </div>
             <p className="text-muted hidden truncate text-sm md:block">
               {paymentMethodLabel(payment)}

@@ -317,10 +317,23 @@ export function renderInvoicePdf({ payment, seller, billedTo }) {
   });
 
   y += 50;
+  const isCredits = payment.kind === 'credits';
+  const isReset = payment.kind === 'reset';
   const intervalLabel = payment.interval === 'yearly' ? 'Yearly' : 'Monthly';
-  canvas.text(`${payment.planName} plan`, columns.description, y, { size: 10.5, font: 'bold' });
   canvas.text(
-    `${formatDate(payment.periodStart)} – ${formatDate(payment.periodEnd)}`,
+    isReset
+      ? 'AI usage limit reset'
+      : isCredits
+        ? `${Number(payment.credits ?? 0).toLocaleString('en-IN')} AI credits`
+        : `${payment.planName} plan`,
+    columns.description,
+    y,
+    { size: 10.5, font: 'bold' },
+  );
+  canvas.text(
+    isCredits || isReset
+      ? formatDate(payment.paidAt)
+      : `${formatDate(payment.periodStart)} – ${formatDate(payment.periodEnd)}`,
     columns.period,
     y,
     { size: 10 },
@@ -336,10 +349,19 @@ export function renderInvoicePdf({ payment, seller, billedTo }) {
     },
   );
   y += 15;
-  canvas.text(`${intervalLabel} subscription`, columns.description, y, {
-    size: 9,
-    color: COLORS.muted,
-  });
+  canvas.text(
+    isReset
+      ? '5-hour and weekly limits started over'
+      : isCredits
+        ? 'One-time credit pack'
+        : `${intervalLabel} subscription`,
+    columns.description,
+    y,
+    {
+      size: 9,
+      color: COLORS.muted,
+    },
+  );
   if (payment.tax?.sacCode) {
     y += 13;
     canvas.text(`SAC ${payment.tax.sacCode}`, columns.description, y, {

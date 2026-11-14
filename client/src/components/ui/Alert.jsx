@@ -19,7 +19,7 @@ export function Alert({ tone = 'info', children, className }) {
       )}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      <div>{children}</div>
+      <div className="min-w-0 break-words [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import mongoose from 'mongoose';
 import { env } from '../../config/env.js';
 import { storageConfig } from '../../config/storage.js';
+import { isGeminiConfigured } from '../ai/gemini.client.js';
 
 async function databaseHealth() {
   const started = performance.now();
@@ -36,7 +37,8 @@ export async function getSystemHealth() {
     },
     uploads: { pending: await pendingUploads() },
     email: { transport: env.MAIL_TRANSPORT },
+    ai: { geminiConfigured: isGeminiConfigured() },
     // Not part of this build yet; listed so the page says so plainly.
-    notConfigured: ['Background job queue (Redis/BullMQ)', 'Local AI (Ollama)', 'Razorpay'],
+    notConfigured: ['Background job queue (Redis/BullMQ)', 'Razorpay'],
   };
 }

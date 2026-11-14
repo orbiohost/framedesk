@@ -37,7 +37,9 @@ export const TextAreaField = forwardRef(function TextAreaField(
             {...aria}
             {...textareaProps}
           />
-          {dictation.button && <span className="absolute bottom-2.5 right-1">{dictation.button}</span>}
+          {dictation.button && (
+            <span className="absolute bottom-2.5 right-1">{dictation.button}</span>
+          )}
         </div>
       )}
     </FieldShell>

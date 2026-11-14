@@ -12,6 +12,7 @@ import {
   Pencil,
   Share2,
   Trash2,
+  Sparkles,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom';
@@ -19,6 +20,8 @@ import { Alert } from '../../../components/ui/Alert.jsx';
 import { Button } from '../../../components/ui/Button.jsx';
 import { EmptyState } from '../../../components/ui/EmptyState.jsx';
 import { Skeleton } from '../../../components/ui/Skeleton.jsx';
+import { openAi, useAiAvailable } from '../../../features/ai/aiBridge.js';
+import { AI_GRADIENT } from '../../../features/ai/aiStyle.js';
 import { ActionMenu } from '../../../features/files/ActionMenu.jsx';
 import { ConfirmDialog } from '../../../features/files/FileDialogs.jsx';
 import { useDeleteProject, useProject, useSaveProject } from '../../../features/projects/hooks.js';
@@ -110,6 +113,7 @@ export function ProjectLayout() {
   const { projectId } = useParams();
   const { data: project, isPending, isError } = useProject(workspace.id, projectId);
   const [isEditing, setIsEditing] = useState(false);
+  const askAi = useAiAvailable();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const deleteProject = useDeleteProject(workspace.id);
@@ -208,6 +212,15 @@ export function ProjectLayout() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {manager && <StatusSelect project={project} save={save} />}
+          {askAi && (
+            <Button
+              variant="accent"
+              onClick={() => openAi({ project: { id: project.id, title: project.title } })}
+              className={cn(AI_GRADIENT, 'border-0 text-white enabled:hover:opacity-90')}
+            >
+              <Sparkles className="h-4 w-4" aria-hidden="true" /> Ask AI
+            </Button>
+          )}
           {manager && (
             <Button variant="secondary" onClick={() => setIsSharing(true)}>
               <Share2 className="h-4 w-4" aria-hidden="true" /> Share

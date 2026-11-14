@@ -58,10 +58,11 @@ class RedisWithMemoryFallbackStore {
   }
 }
 
-function createLimiter({ name, windowMs, limit, message }) {
+function createLimiter({ name, windowMs, limit, message, keyGenerator }) {
   return rateLimit({
     windowMs,
     limit,
+    ...(keyGenerator && { keyGenerator }),
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     store: new RedisWithMemoryFallbackStore(name),
@@ -113,10 +114,36 @@ export const checkoutLimiter = createLimiter({
   message: 'Too many checkout attempts. Please wait a few minutes and try again.',
 });
 
+// Each question is a Gemini call over the whole file library.
+export const aiChatLimiter = createLimiter({
+  name: 'ai-chat',
+  windowMs: FIFTEEN_MINUTES,
+  limit: 60,
+  message: 'Too many questions in a short time. Please wait a few minutes.',
+});
+
 // Each dictated note runs the speech model, so keep it to a sensible pace.
 export const dictationLimiter = createLimiter({
   name: 'dictation',
   windowMs: FIFTEEN_MINUTES,
   limit: 60,
   message: 'Too many recordings in a short time. Please wait a few minutes.',
+});
+
+// OAuth sign-in for AI connectors (registration, token exchange). Calls come
+// from the assistants' servers, so each IP stands for many people.
+export const oauthLimiter = createLimiter({
+  name: 'oauth',
+  windowMs: FIFTEEN_MINUTES,
+  limit: 600,
+});
+
+// AI connector tool calls, counted per connection rather than per IP: every
+// Claude or ChatGPT user reaches us from the same few addresses.
+export const mcpLimiter = createLimiter({
+  name: 'mcp',
+  windowMs: FIFTEEN_MINUTES,
+  limit: 1200,
+  message: 'Too many requests from this AI connection. Please wait a few minutes.',
+  keyGenerator: (req) => `grant:${req.connector?.grant?._id ?? req.ip}`,
 });

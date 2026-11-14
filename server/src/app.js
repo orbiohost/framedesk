@@ -12,6 +12,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import { globalLimiter, uploadLimiter } from './middleware/rateLimit.js';
 import { razorpayWebhookRouter } from './modules/billing/razorpayWebhook.js';
+import { connectorPublicRouter } from './modules/connectors/connectors.public.js';
 import uploadsRoutes from './modules/files/uploads.routes.js';
 import { apiRouter } from './modules/index.js';
 import { sendSuccess } from './utils/apiResponse.js';
@@ -33,6 +34,10 @@ export function createApp() {
   app.use(helmet());
   // gzip JSON responses. Media never passes through the API: browsers fetch it from S3.
   app.use(compression());
+  // AI connectors (MCP + OAuth for Claude, ChatGPT, Gemini...). Ahead of the
+  // app's CORS, cookie and CSRF handling: other apps call these with their own
+  // bearer tokens, from any origin.
+  app.use(connectorPublicRouter);
   app.use(cors({ origin: env.CLIENT_URL, credentials: true }));
   // Ahead of express.json(): the webhook signature is checked against the raw body.
   app.use('/api/billing', razorpayWebhookRouter);

@@ -179,7 +179,9 @@ export async function completeDirectUpload(user, uploadId) {
     file = await registerFile(pending);
   } catch (err) {
     // Refused (file type, quota, permission): the object is removed again.
-    await getStorageDriver().delete(pending.storageKey).catch(() => {});
+    await getStorageDriver()
+      .delete(pending.storageKey)
+      .catch(() => {});
     await PendingUpload.deleteOne({ _id: pending._id });
     throw err;
   }

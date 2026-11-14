@@ -20,6 +20,8 @@ function toPaymentDto(payment) {
     taxableAmount: payment.taxableAmount ?? null,
     tax: payment.tax ?? null,
     customerGstin: payment.billedTo?.gstin ?? null,
+    kind: payment.kind ?? 'plan',
+    credits: payment.credits ?? null,
     planCode: payment.planCode,
     interval: payment.interval,
     method: payment.method,
@@ -75,6 +77,7 @@ const CSV_COLUMNS = [
   ['Workspace', (p) => p.workspace?.name],
   ['Plan', (p) => p.planCode],
   ['Billing', (p) => p.interval],
+  ['AI credits', (p) => p.credits],
   ['Amount (INR)', (p) => p.amount],
   ['Taxable value (INR)', (p) => p.taxableAmount],
   ['CGST (INR)', (p) => p.tax?.cgst],
@@ -85,7 +88,7 @@ const CSV_COLUMNS = [
   ['Method', (p) => p.method],
   ['Reference', (p) => p.reference],
   ['Offer', (p) => p.offerCode],
-  ['Paid until', (p) => p.periodEnd.toISOString()],
+  ['Paid until', (p) => p.periodEnd?.toISOString()],
   ['Recorded by', (p) => p.recordedBy],
 ];
 

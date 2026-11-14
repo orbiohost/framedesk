@@ -11,6 +11,7 @@ import {
   usePricing,
   useRequestUpgrade,
 } from '../../features/billing/hooks.js';
+import { CreditsSection } from '../../features/ai/CreditsSection.jsx';
 import { CheckoutDialog } from '../../features/billing/CheckoutDialog.jsx';
 import { IntervalToggle } from '../../features/billing/IntervalToggle.jsx';
 import { OfferCountdown } from '../../features/billing/OfferCountdown.jsx';
@@ -128,6 +129,15 @@ export function UpgradePage() {
           ? 'Pay securely by UPI, card or netbanking; your plan switches on as soon as it is paid, and paying again before it ends adds the time on top.'
           : 'Nothing is charged until you pay the link we send.'}
       </p>
+      {pricing.ai && (
+        <CreditsSection
+          workspace={workspace}
+          ai={pricing.ai}
+          payOnline={payOnline}
+          taxNote={pricing.tax?.applies ? `, plus ${pricing.tax.rate}% GST` : ''}
+          onBuy={(packCode) => setCheckout({ packCode })}
+        />
+      )}
       <CheckoutDialog
         workspaceId={workspace.id}
         selection={checkout}

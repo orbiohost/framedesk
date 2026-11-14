@@ -1,4 +1,12 @@
-import { ArrowDownUp, ChevronDown, FolderKanban, LayoutGrid, List, Plus, SearchX } from 'lucide-react';
+import {
+  ArrowDownUp,
+  ChevronDown,
+  FolderKanban,
+  LayoutGrid,
+  List,
+  Plus,
+  SearchX,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Alert } from '../../../components/ui/Alert.jsx';

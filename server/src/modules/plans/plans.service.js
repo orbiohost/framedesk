@@ -1,4 +1,5 @@
 import { AppError } from '../../utils/AppError.js';
+import { getAiSettings, publicAiPricing } from '../ai/aiSettings.service.js';
 import { getGstRules } from '../billing/billingSettings.service.js';
 import { isRazorpayEnabled } from '../billing/razorpay.client.js';
 import { CURRENCY, LAUNCH_OFFER, PLANS, YEARLY_MONTHS_CHARGED } from './plans.catalog.js';
@@ -19,7 +20,7 @@ function planPrices(plan) {
   };
 }
 
-function toPublicPlan(plan) {
+function toPublicPlan(plan, ai) {
   return {
     code: plan.code,
     name: plan.name,
@@ -30,6 +31,8 @@ function toPublicPlan(plan) {
     maxMembers: plan.maxMembers ?? null,
     highlighted: Boolean(plan.highlighted),
     prices: planPrices(plan),
+    // AI usage relative to the smallest plan (1, 5, 15...); null while the assistant is off.
+    aiUsage: ai ? (ai.usageMultiplier[plan.code] ?? 1) : null,
   };
 }
 
@@ -39,11 +42,13 @@ function toPublicOffer() {
 }
 
 export async function getPricing(now = new Date()) {
-  const gst = await getGstRules();
+  const [gst, aiSettings] = await Promise.all([getGstRules(), getAiSettings()]);
+  const ai = publicAiPricing(aiSettings);
   return {
     currency: CURRENCY,
     yearlyMonthsCharged: YEARLY_MONTHS_CHARGED,
-    plans: PLANS.map(toPublicPlan),
+    plans: PLANS.map((plan) => toPublicPlan(plan, ai)),
+    ai,
     offer: isOfferLive(now) ? toPublicOffer() : null,
     // GST is added on top of these prices when it applies.
     tax: { applies: gst.applies, rate: gst.rate, name: 'GST' },

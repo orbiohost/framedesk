@@ -6,6 +6,7 @@ import {
   CreditCard,
   DatabaseBackup,
   KeyRound,
+  Plug,
   Settings,
   UserRound,
 } from 'lucide-react';
@@ -15,6 +16,7 @@ import { Avatar } from '../../components/ui/Avatar.jsx';
 import { Dialog } from '../../components/ui/Dialog.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { BillingSection } from '../../features/account/BillingSection.jsx';
+import { ConnectorsSection } from '../../features/connectors/ConnectorsSection.jsx';
 import { ProfileSection } from '../../features/account/ProfileSection.jsx';
 import { SecuritySection } from '../../features/account/SecuritySection.jsx';
 import { SettingsSection } from '../../features/account/SettingsSection.jsx';
@@ -43,7 +45,8 @@ function AccountHeader({ user, workspace, onChangePicture }) {
             <Camera className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
-        <div className="min-w-0 flex-1 pb-0.5">
+        {/* Wide enough for the name; the plan badge wraps below on phones. */}
+        <div className="min-w-[12rem] flex-1 pb-0.5">
           <h1 className="font-display truncate text-2xl leading-tight">{user.name}</h1>
           <p className="text-muted mt-0.5 flex flex-wrap items-center gap-x-2 text-sm">
             <span className="truncate">{user.email}</span>
@@ -55,7 +58,7 @@ function AccountHeader({ user, workspace, onChangePicture }) {
           </p>
         </div>
         {workspace && (
-          <div className="border-line/70 bg-subtle/50 rounded-2xl border px-3.5 py-2 text-right">
+          <div className="border-line/70 bg-subtle/50 w-full rounded-2xl border px-3.5 py-2 sm:w-auto sm:text-right">
             <p className="text-muted text-[11px] uppercase tracking-[0.12em]">{workspace.name}</p>
             <p className="text-sm font-medium">{planLabel(workspace.billing)}</p>
           </div>
@@ -139,6 +142,7 @@ export function AccountPage() {
     { id: 'profile', label: 'Profile', icon: UserRound },
     { id: 'security', label: 'Security', icon: KeyRound },
     { id: 'billing', label: 'Billing & invoices', icon: CreditCard },
+    { id: 'connectors', label: 'AI connectors', icon: Plug },
     ...(isAdmin ? [{ id: 'workspace', label: 'Workspace', icon: Settings }] : []),
   ];
   const requested = searchParams.get('tab');
@@ -158,6 +162,7 @@ export function AccountPage() {
       {active === 'profile' && <ProfileSection user={user} onChangePicture={openPicker} />}
       {active === 'security' && <SecuritySection />}
       {active === 'billing' && <BillingSection user={user} />}
+      {active === 'connectors' && <ConnectorsSection />}
       {active === 'workspace' && isAdmin && <WorkspaceAdminSection workspace={workspace} />}
 
       <Dialog

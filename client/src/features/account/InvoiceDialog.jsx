@@ -7,6 +7,12 @@ import { paymentMethodLabel, shortDate } from '../admin/adminFormat.js';
 import { TaxBreakdown } from '../billing/TaxBreakdown.jsx';
 import { useInvoicePdf } from '../users/hooks.js';
 
+// Credit packs have no service period: they are used from the day they are paid.
+function servicePeriod(payment) {
+  if (payment.kind === 'credits' || payment.kind === 'reset') return shortDate(payment.paidAt);
+  return `${shortDate(payment.periodStart)} – ${shortDate(payment.periodEnd)}`;
+}
+
 function billedToLines(billedTo) {
   const cityLine = [billedTo.city, billedTo.state, billedTo.postalCode].filter(Boolean).join(', ');
   return [
@@ -97,9 +103,19 @@ function InvoiceSheet({ payment, seller, billedTo }) {
           </div>
           <div className="grid grid-cols-[1fr_auto] gap-4 px-4 py-4 sm:grid-cols-[1fr_12rem_auto]">
             <div>
-              <p className="font-semibold">{payment.planName} plan</p>
+              <p className="font-semibold">
+                {payment.kind === 'reset'
+                  ? 'AI usage limit reset'
+                  : payment.kind === 'credits'
+                    ? `${payment.credits?.toLocaleString('en-IN')} AI credits`
+                    : `${payment.planName} plan`}
+              </p>
               <p className="text-muted text-sm">
-                {payment.interval === 'yearly' ? 'Yearly' : 'Monthly'} subscription
+                {payment.kind === 'reset'
+                  ? '5-hour and weekly limits started over'
+                  : payment.kind === 'credits'
+                    ? 'One-time credit pack'
+                    : `${payment.interval === 'yearly' ? 'Yearly' : 'Monthly'} subscription`}
               </p>
               {payment.tax?.sacCode && (
                 <p className="text-muted text-sm">SAC {payment.tax.sacCode}</p>
@@ -107,13 +123,9 @@ function InvoiceSheet({ payment, seller, billedTo }) {
               {payment.offerCode && (
                 <p className="text-accent text-sm">Offer applied: {payment.offerCode}</p>
               )}
-              <p className="text-muted text-sm sm:hidden">
-                {shortDate(payment.periodStart)} – {shortDate(payment.periodEnd)}
-              </p>
+              <p className="text-muted text-sm sm:hidden">{servicePeriod(payment)}</p>
             </div>
-            <p className="hidden text-sm sm:block">
-              {shortDate(payment.periodStart)} – {shortDate(payment.periodEnd)}
-            </p>
+            <p className="hidden text-sm sm:block">{servicePeriod(payment)}</p>
             <p className="text-right font-semibold tabular-nums">
               {formatInrExact(payment.taxableAmount)}
             </p>

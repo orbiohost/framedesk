@@ -1,5 +1,6 @@
 import { getStorageDriver } from '../../storage/storageDriver.js';
 import { logger } from '../../utils/logger.js';
+import { requeueForAnalysis } from '../ai/analysisWorker.js';
 import { StoredFile } from '../files/file.model.js';
 import { Transcript } from './transcript.model.js';
 import { whisper } from './whisperClient.js';
@@ -115,6 +116,10 @@ async function poll(transcript) {
   await Transcript.updateOne({ ...scope, whisperJobId: transcript.whisperJobId }, update);
   const finished = update.$set.whisperJobId === null;
   if (finished) await whisper.cancelJob(transcript.whisperJobId).catch(() => {});
+  // A file the assistant couldn't open (too big, odd format) can now be read from its words.
+  if (job.status === 'done') {
+    await requeueForAnalysis(transcript.workspaceId, transcript.fileId).catch(() => {});
+  }
   return finished;
 }
 

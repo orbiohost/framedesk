@@ -8,7 +8,7 @@ import { invoiceFromPayment } from './accountBilling.service.js';
 import { paymentReceiptEmail } from './billing.emails.js';
 import { invoiceFileName, renderInvoicePdf } from './invoicePdf.js';
 import { getBillingSettings, nextInvoiceNumber, sellerFrom } from './billingSettings.service.js';
-import { Payment } from './payment.model.js';
+import { AI_CREDITS_CODE, AI_RESET_CODE, Payment } from './payment.model.js';
 import { UpgradeRequest } from './upgradeRequest.model.js';
 
 // Turning money received into a paid period. Shared by payments an admin
@@ -132,6 +132,36 @@ export async function recordPaidPeriod(workspace, fields) {
 }
 
 /**
+ * Records a payment for a pack of AI credits on the account workspace, with
+ * its own invoice number. The caller adds the credits (credits.service.js).
+ */
+// kind 'credits' (a pack) or 'reset' (AI usage limits started over).
+export async function recordCreditPurchase(workspace, { kind = 'credits', ...fields }) {
+  const paidAt = fields.paidAt ?? new Date();
+  const settings = await getBillingSettings();
+  // As in recordPaidPeriod: saved first, numbered after, so duplicates use no number.
+  const created = await Payment.create({
+    ...fields,
+    kind,
+    planCode: kind === 'reset' ? AI_RESET_CODE : AI_CREDITS_CODE,
+    credits: kind === 'reset' ? null : fields.credits,
+    interval: null,
+    workspaceId: workspace._id,
+    paidAt,
+    periodStart: null,
+    periodEnd: null,
+    seller: sellerFrom(settings),
+  });
+  const payment = await Payment.findOneAndUpdate(
+    { _id: created._id, workspaceId: workspace._id },
+    { $set: { invoiceNumber: await nextInvoiceNumber(settings.invoicePrefix, paidAt) } },
+    { new: true },
+  ).lean();
+  sendReceipt(payment, workspace);
+  return payment;
+}
+
+/**
  * Takes back the paid time a fully refunded payment bought. Partial refunds are
  * only recorded; an admin decides what they mean. Runs once per payment: the
  * conditional update makes repeated refund webhooks harmless.
@@ -152,6 +182,8 @@ export async function revokeRefundedPayment(paymentId, { refundedPaise, fullyRef
     .setOptions({ crossWorkspace: true })
     .lean();
   if (!payment || !fullyRefunded) return payment ? { payment, revoked: false } : null;
+  // Credit packs bought no time; checkout.service.js takes the credits back.
+  if (payment.kind !== 'plan' || !payment.periodEnd) return { payment, revoked: true };
 
   const start = payment.periodStart ?? payment.paidAt;
   const boughtMs = new Date(payment.periodEnd) - new Date(start);

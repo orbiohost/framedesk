@@ -66,9 +66,7 @@ function DashboardHeader({ workspace, firstName, updatedAt, onAdd, editing, onCu
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {team.length > 0 && (
-            <AvatarStack people={team} max={4} />
-          )}
+          {team.length > 0 && <AvatarStack people={team} max={4} />}
           <button
             type="button"
             onClick={onCustomize}

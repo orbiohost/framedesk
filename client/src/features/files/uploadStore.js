@@ -224,10 +224,16 @@ async function run(job) {
     if (job.paused) return;
 
     patchItem(item.id, { saving: true, uploadedBytes: item.size });
-    await completeWithRetry(job);
+    const finished = await completeWithRetry(job);
     removeLocal(job.resumeKey);
     jobs.delete(item.id);
-    patchItem(item.id, { status: 'done', saving: false, uploadedBytes: item.size });
+    patchItem(item.id, {
+      status: 'done',
+      saving: false,
+      uploadedBytes: item.size,
+      // The stored file, for callers that use it straight away (the AI chat).
+      fileId: finished?.fileId ?? null,
+    });
     onFinished(item);
   } catch (error) {
     if (job.paused) return; // the viewer paused or cancelled it
@@ -283,6 +289,7 @@ export function setUploadFinishedHandler(handler) {
   onFinished = handler;
 }
 
+// Returns the new uploads' ids (see getSnapshot for their progress).
 // extraMetadata: more upload details, e.g. { transcribe: 'transcribe', transcribeLanguage: 'hi' }
 // from the Transcribe page, so the server queues a transcript once the file is stored.
 export async function addUploads({
@@ -294,6 +301,7 @@ export async function addUploads({
   extraMetadata = {},
 }) {
   await ensureCsrfToken();
+  const ids = [];
   for (const file of files) {
     const item = {
       id: crypto.randomUUID(),
@@ -313,9 +321,11 @@ export async function addUploads({
     items = [...items, item];
     const job = createJob(item, file);
     jobs.set(item.id, job);
+    ids.push(item.id);
     run(job);
   }
   emit();
+  return ids;
 }
 
 export function pauseUpload(id) {

@@ -851,7 +851,9 @@ export function MediaPlayer({
             tone === 'light' ? 'hover:bg-subtle' : 'hover:bg-white/15',
           )}
         >
-          {showRemaining && Number.isFinite(duration) && duration > 0 ? `-${formatTime(remaining)}` : formatTime(time)}
+          {showRemaining && Number.isFinite(duration) && duration > 0
+            ? `-${formatTime(remaining)}`
+            : formatTime(time)}
           <span className="opacity-55">
             {' '}
             / {Number.isFinite(duration) && duration > 0 ? formatTime(duration) : '--:--'}

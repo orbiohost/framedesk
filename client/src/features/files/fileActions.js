@@ -7,9 +7,11 @@ import {
   Pencil,
   RotateCcw,
   Share2,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
+import { openAi } from '../ai/aiBridge.js';
 
 // The actions offered for one file, shared by the list's row buttons and the
 // grid's card menu. `title` is the full label for icon-only buttons.
@@ -84,8 +86,17 @@ export function fileActionItems({ file, inTrash, canEdit, canTranscribe = false,
 }
 
 // The same actions shaped for ActionMenu, with a line above the destructive ones.
-export function fileMenuItems({ file, inTrash, canEdit, canTranscribe, linked, onAction }) {
-  return fileActionItems({ file, inTrash, canEdit, canTranscribe, linked }).map(
+// askAi: the AI assistant is on, so "Ask AI about this file" follows the first item.
+export function fileMenuItems({
+  file,
+  inTrash,
+  canEdit,
+  canTranscribe,
+  linked,
+  onAction,
+  askAi = false,
+}) {
+  const items = fileActionItems({ file, inTrash, canEdit, canTranscribe, linked }).map(
     (item, index, all) => ({
       key: item.action,
       label: item.label,
@@ -95,6 +106,15 @@ export function fileMenuItems({ file, inTrash, canEdit, canTranscribe, linked, o
       onSelect: () => onAction(item.action, file),
     }),
   );
+  if (askAi && !inTrash && items.length > 0) {
+    items.splice(1, 0, {
+      key: 'ask-ai',
+      label: 'Ask AI about this file',
+      icon: Sparkles,
+      onSelect: () => openAi({ file: { id: file.id, name: file.name, category: file.category } }),
+    });
+  }
+  return items;
 }
 
 // Keyboard shortcuts on a focused file: Enter opens, F2 renames, Delete trashes.

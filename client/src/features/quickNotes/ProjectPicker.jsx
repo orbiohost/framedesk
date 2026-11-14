@@ -86,7 +86,7 @@ export function ProjectPicker({
               }}
               placeholder="Find a project"
               aria-label="Find a project"
-              className="border-line bg-bg placeholder:text-muted/70 mb-1 h-9 w-full rounded-xl border px-3 text-sm"
+              className="border-line bg-bg placeholder:text-muted/70 mb-1 h-9 w-full rounded-xl border px-3 text-sm transition-shadow focus-visible:border-accent/60 focus-visible:ring-[3px] focus-visible:ring-accent/15"
             />
             <ul role="listbox" aria-multiselectable="true" className="max-h-60 overflow-y-auto">
               {matches.length === 0 && (

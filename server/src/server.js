@@ -2,6 +2,7 @@ import { env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
 import { createApp } from './app.js';
+import { startAnalysisWorker, stopAnalysisWorker } from './modules/ai/analysisWorker.js';
 import { startPlanLifecycle, stopPlanLifecycle } from './modules/billing/planLifecycle.service.js';
 import { startUploadSweeper, stopUploadSweeper } from './modules/files/directUploads.service.js';
 import {
@@ -21,6 +22,7 @@ function registerGracefulShutdown(server) {
   function shutdown(signal) {
     logger.info({ signal }, 'Shutting down');
     stopTranscriptWorker();
+    stopAnalysisWorker();
     stopUploadSweeper();
     stopStorageReconciler();
     stopPlanLifecycle();
@@ -46,6 +48,7 @@ async function start() {
   server.requestTimeout = 60 * 60 * 1000;
   registerGracefulShutdown(server);
   startTranscriptWorker();
+  startAnalysisWorker();
   startUploadSweeper();
   startStorageReconciler();
   startPlanLifecycle();

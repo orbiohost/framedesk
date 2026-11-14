@@ -133,3 +133,60 @@ export function useSampleInvoice() {
     onError: (_error, target) => target?.close(),
   });
 }
+
+// ---- AI assistant: settings, usage and per-account credits ----
+
+export function useAdminAi() {
+  return useQuery({ queryKey: adminKey('ai'), queryFn: () => api.get('/admin/ai') });
+}
+
+export function useUpdateAdminAi() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => api.put('/admin/ai', input),
+    onSuccess: (data) => {
+      queryClient.setQueryData(adminKey('ai'), data);
+      // Credits per plan and packs show on the pricing pages; the switch shows in every workspace.
+      queryClient.invalidateQueries({ queryKey: ['pricing'] });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[2] === 'ai' });
+      queryClient.invalidateQueries({ queryKey: adminKey('ai-accounts') });
+    },
+  });
+}
+
+export function useAdminAiAccounts(params) {
+  return useQuery({
+    queryKey: adminKey('ai-accounts', params),
+    queryFn: async () => (await api.get(`/admin/ai/accounts${toQueryString(params)}`)).accounts,
+    placeholderData: (previous) => previous,
+  });
+}
+
+export function useAdjustAiCredits() {
+  return useAdminMutation(({ workspaceId, ...change }) =>
+    api.post(`/admin/ai/accounts/${workspaceId}/credits`, change),
+  );
+}
+
+export function useSetAiAccess() {
+  return useAdminMutation(({ workspaceId, blocked }) =>
+    api.post(`/admin/ai/accounts/${workspaceId}/access`, { blocked }),
+  );
+}
+
+export function useAdminAiLedger(workspaceId) {
+  return useInfiniteQuery({
+    queryKey: adminKey('ai-ledger', workspaceId),
+    queryFn: ({ pageParam }) =>
+      api.get(`/admin/ai/accounts/${workspaceId}/ledger${toQueryString({ cursor: pageParam })}`),
+    initialPageParam: undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: Boolean(workspaceId),
+  });
+}
+
+export function useResetAiLimits() {
+  return useAdminMutation(({ workspaceId }) =>
+    api.post(`/admin/ai/accounts/${workspaceId}/reset-limits`),
+  );
+}

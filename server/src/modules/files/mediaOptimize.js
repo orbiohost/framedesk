@@ -78,7 +78,8 @@ function runFfmpeg(args, timeoutMs) {
     child.on('close', (code, signal) => {
       clearTimeout(timer);
       if (code === 0) resolve();
-      else reject(new Error(`ffmpeg ${signal ? `killed (${signal})` : `exited ${code}`}: ${stderr}`));
+      else
+        reject(new Error(`ffmpeg ${signal ? `killed (${signal})` : `exited ${code}`}: ${stderr}`));
     });
   });
 }
@@ -139,7 +140,8 @@ export async function optimizeForStreaming(filePath, mime) {
     );
     const { size } = await fs.stat(outPath);
     // A remux is never much smaller; a tiny result means streams were dropped.
-    if (size < originalSize * 0.9) throw new Error(`remux lost data (${size} of ${originalSize} bytes)`);
+    if (size < originalSize * 0.9)
+      throw new Error(`remux lost data (${size} of ${originalSize} bytes)`);
     await fs.rename(outPath, filePath);
     return { size, changed: true };
   } catch (err) {

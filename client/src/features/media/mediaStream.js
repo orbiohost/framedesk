@@ -12,7 +12,8 @@ const POSITION_INTERVAL_MS = 2000;
 export function registerMediaWorker() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
   if (!window.isSecureContext) return;
-  const register = () => navigator.serviceWorker.register(WORKER_URL, { scope: '/' }).catch(() => {});
+  const register = () =>
+    navigator.serviceWorker.register(WORKER_URL, { scope: '/' }).catch(() => {});
   if (document.readyState === 'complete') register();
   else window.addEventListener('load', register, { once: true });
 }

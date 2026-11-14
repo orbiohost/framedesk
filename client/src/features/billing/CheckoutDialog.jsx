@@ -94,7 +94,11 @@ function PaidState({ result, planName, workspaceId, showInvoiceLink, onClose }) 
       </span>
       <p className="font-display mt-4 text-2xl">Payment received</p>
       <p className="text-muted mt-1 text-sm">
-        {planName} is active until {shortDate(result.periodEnd)}.{' '}
+        {result.kind === 'reset'
+          ? 'Your AI usage limits have been reset. Ask away.'
+          : result.kind === 'credits'
+            ? `${result.credits?.toLocaleString('en-IN')} AI credits are in your account.`
+            : `${planName} is active until ${shortDate(result.periodEnd)}.`}{' '}
         {showInvoiceLink
           ? 'Your invoice is ready and a copy is on its way by email.'
           : 'The invoice has been emailed to the workspace owner.'}
@@ -119,9 +123,21 @@ function Review({ summary, intervalLabel, canEditDetails, onEditDetails }) {
     <>
       <div className="flex items-baseline justify-between gap-4">
         <div>
-          <p className="font-medium">{summary.planName} plan</p>
+          <p className="font-medium">
+            {summary.kind === 'reset'
+              ? 'AI usage limit reset'
+              : summary.kind === 'credits'
+                ? `${summary.credits?.toLocaleString('en-IN')} AI credits`
+                : `${summary.planName} plan`}
+          </p>
           <p className="text-muted text-sm">
-            {intervalLabel === 'yearly' ? '12 months' : '1 month'}
+            {summary.kind === 'reset'
+              ? 'Your 5-hour and weekly limits start over right away'
+              : summary.kind === 'credits'
+                ? 'One-time pack · never expires'
+                : intervalLabel === 'yearly'
+                  ? '12 months'
+                  : '1 month'}
             {summary.offerCode && (
               <span className="text-accent"> · {summary.offerCode} applied</span>
             )}
@@ -194,7 +210,11 @@ export function CheckoutDialog({ workspaceId, selection, onClose }) {
         // The money has moved; the webhook will finish activating the plan.
         setError(
           `Your payment went through, but we couldn't confirm it just now (${confirmError.message}). ` +
-            'Your plan will switch on within a few minutes; refresh this page to check.',
+            (isReset
+              ? 'Your limits will reset within a few minutes; refresh this page to check.'
+              : isCredits
+                ? 'Your credits will be added within a few minutes; refresh this page to check.'
+                : 'Your plan will switch on within a few minutes; refresh this page to check.'),
         );
         setStage('review');
       }
@@ -206,14 +226,32 @@ export function CheckoutDialog({ workspaceId, selection, onClose }) {
 
   const busy = stage === 'paying' || stage === 'razorpay' || stage === 'confirming';
   const intervalLabel = selection?.interval === 'yearly' ? 'yearly' : 'monthly';
+  const isCredits = Boolean(selection?.packCode);
+  const isReset = selection?.product === 'ai-reset';
 
   return (
     <Dialog
       open={open && stage !== 'razorpay'}
       onClose={close}
       wide={showDetails}
-      title={stage === 'paid' ? 'All set' : `Upgrade to ${summary?.planName ?? 'your new plan'}`}
-      description={stage === 'paid' ? undefined : `Billed ${intervalLabel}, paid in advance.`}
+      title={
+        stage === 'paid'
+          ? 'All set'
+          : isReset
+            ? 'Reset AI usage limits'
+            : isCredits
+              ? 'Buy AI credits'
+              : `Upgrade to ${summary?.planName ?? 'your new plan'}`
+      }
+      description={
+        stage === 'paid'
+          ? undefined
+          : isReset
+            ? 'Start your 5-hour and weekly limits over now, without waiting.'
+            : isCredits
+              ? 'Used by the AI assistant across all your workspaces.'
+              : `Billed ${intervalLabel}, paid in advance.`
+      }
     >
       {stage === 'paid' && result ? (
         <PaidState

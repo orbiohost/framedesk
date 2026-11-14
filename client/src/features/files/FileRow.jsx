@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { formatDate } from '../../lib/dates.js';
 import { formatBytes } from '../../lib/format.js';
+import { useAiAvailable } from '../ai/aiBridge.js';
 import { ActionMenu } from './ActionMenu.jsx';
 import { fileMenuItems, handleFileShortcut } from './fileActions.js';
 import { fileStatus } from './fileMeta.js';
@@ -90,6 +91,7 @@ export function FileRow({
   // Under a project it is only linked to, a file can't be renamed or trashed.
   const shortcutEdit = canEdit && !linked;
   const warmHandlers = useWarmHandlers(file, onWarm, !inTrash);
+  const askAi = useAiAvailable();
   const date = formatDate(inTrash ? file.deletedAt : file.createdAt);
 
   return (
@@ -109,10 +111,7 @@ export function FileRow({
     >
       {onToggleSelect && (
         // The cell is the tap target; it must not also open the file.
-        <td
-          className="py-2 pl-4 pr-0"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <td className="py-2 pl-4 pr-0" onClick={(event) => event.stopPropagation()}>
           <input
             type="checkbox"
             aria-label={`Select ${file.name}`}
@@ -161,7 +160,15 @@ export function FileRow({
           <ActionMenu
             label={`Actions for ${file.name}`}
             title={file.name}
-            items={fileMenuItems({ file, inTrash, canEdit, canTranscribe, linked, onAction })}
+            items={fileMenuItems({
+              file,
+              inTrash,
+              canEdit,
+              canTranscribe,
+              linked,
+              onAction,
+              askAi,
+            })}
             revealOnHover
           />
         </div>

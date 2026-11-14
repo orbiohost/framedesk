@@ -1,4 +1,6 @@
 import { recordAudit } from '../admin/auditLog.service.js';
+import { AiConversation } from '../ai/aiConversation.model.js';
+import { AiInsight } from '../ai/aiInsight.model.js';
 import { UpgradeRequest } from '../billing/upgradeRequest.model.js';
 import { Event } from '../calendar/event.model.js';
 import { Message } from '../chat/message.model.js';
@@ -17,6 +19,7 @@ import { Workspace } from './workspace.model.js';
 
 // Everything that belongs to one workspace. Payments are kept on purpose:
 // they are the billing record, and admins still need them after a workspace goes.
+// The AI credit ledger stays for the same reason.
 const WORKSPACE_DATA = [
   Folder,
   Task,
@@ -29,6 +32,8 @@ const WORKSPACE_DATA = [
   DashboardLayout,
   UpgradeRequest,
   FileShare,
+  AiConversation,
+  AiInsight,
 ];
 
 async function assertCanDelete(workspace, membership, userId, confirmName) {

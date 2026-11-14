@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button.jsx';
 import { cn } from '../../lib/cn.js';
 import { formatDate } from '../../lib/dates.js';
 import { formatBytes } from '../../lib/format.js';
+import { useAiAvailable } from '../ai/aiBridge.js';
 import { ActionMenu } from './ActionMenu.jsx';
 import { folderMenuItems } from './folderActions.js';
 import { fileMenuItems, handleFileShortcut } from './fileActions.js';
@@ -27,7 +28,8 @@ function FileCard({
   const selected = selection?.ids.has(file.id) ?? false;
   const status = fileStatus(file.status);
   const warmHandlers = useWarmHandlers(file, onWarm, !inTrash);
-  const items = fileMenuItems({ file, inTrash, canEdit, canTranscribe, onAction });
+  const askAi = useAiAvailable();
+  const items = fileMenuItems({ file, inTrash, canEdit, canTranscribe, onAction, askAi });
   const body = (
     <>
       <div className="relative overflow-hidden rounded-xl">

@@ -2,6 +2,9 @@ import { Types } from 'mongoose';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
 import { recordAudit } from '../admin/auditLog.service.js';
+import { findPack, getAiSettings, isAiLive } from '../ai/aiSettings.service.js';
+import { CreditLedger } from '../ai/creditLedger.model.js';
+import { addCredits, resetPriceFor, resetUsageWindows } from '../ai/credits.service.js';
 import { quote } from '../plans/plans.service.js';
 import { Workspace } from '../workspaces/workspace.model.js';
 import { planName } from './accountBilling.service.js';
@@ -21,6 +24,7 @@ import {
   applyPlan,
   billedToSnapshot,
   closeOpenUpgradeRequests,
+  recordCreditPurchase,
   recordPaidPeriod,
   revokeRefundedPayment,
 } from './subscription.service.js';
@@ -34,6 +38,13 @@ import {
 
 const ACROSS = { crossWorkspace: true };
 
+function orderLabel(order) {
+  if (order.kind === 'reset') return 'AI usage limit reset';
+  return order.kind === 'credits'
+    ? `${order.credits.toLocaleString('en-IN')} AI credits`
+    : `${planName(order.planCode)} plan, ${order.interval}`;
+}
+
 async function toCheckoutDto(order, user) {
   const seller = sellerFrom(await getBillingSettings());
   return {
@@ -43,9 +54,12 @@ async function toCheckoutDto(order, user) {
     currency: order.currency,
     expiresAt: order.expiresAt,
     businessName: seller.name,
-    description: `${planName(order.planCode)} plan, ${order.interval}`,
+    description: orderLabel(order),
     prefill: { name: user.name, email: user.email, contact: order.billedTo?.phone ?? '' },
     summary: {
+      kind: order.kind ?? 'plan',
+      packCode: order.packCode,
+      credits: order.credits,
       planCode: order.planCode,
       planName: planName(order.planCode),
       interval: order.interval,
@@ -57,9 +71,53 @@ async function toCheckoutDto(order, user) {
   };
 }
 
-// Price, GST and who the invoice goes to, for a plan bought on this account.
-async function priceFor(pool, planCode, interval) {
+// What is being bought: a plan for an interval, or a pack of AI credits.
+// The price always comes from the server's own catalogue.
+async function itemFor(pool, { planCode, interval, packCode, product }) {
+  if (product === 'ai-reset') {
+    const settings = await getAiSettings();
+    if (!isAiLive(settings)) {
+      throw AppError.unavailable('The AI assistant is off right now', 'AI_OFF');
+    }
+    const price = resetPriceFor(pool, settings);
+    if (!price) {
+      throw AppError.badRequest('Limit resets need an active plan or trial', 'RESET_UNAVAILABLE');
+    }
+    return {
+      kind: 'reset',
+      packCode: null,
+      credits: null,
+      planCode: null,
+      interval: null,
+      amount: price,
+      offerCode: null,
+    };
+  }
+  if (packCode) {
+    const settings = await getAiSettings();
+    if (!isAiLive(settings)) {
+      throw AppError.unavailable('AI credits are not on sale right now', 'AI_OFF');
+    }
+    const pack = findPack(settings, packCode);
+    if (!pack) throw AppError.badRequest('Unknown credit pack', 'UNKNOWN_PACK');
+    return {
+      kind: 'credits',
+      packCode: pack.code,
+      credits: pack.credits,
+      planCode: null,
+      interval: null,
+      amount: pack.price,
+      offerCode: null,
+    };
+  }
   const { amount, offerCode } = quote(planCode, interval);
+  return { kind: 'plan', planCode, interval, packCode: null, credits: null, amount, offerCode };
+}
+
+// Price, GST and who the invoice goes to, for something bought on this account.
+async function priceFor(pool, selection) {
+  const item = await itemFor(pool, selection);
+  const { amount } = item;
   const [billedTo, settings] = await Promise.all([
     billedToSnapshot(pool.ownerId),
     getBillingSettings(),
@@ -68,21 +126,26 @@ async function priceFor(pool, planCode, interval) {
     rules: gstFrom(settings),
     buyer: billedTo,
   });
-  return { offerCode, billedTo, taxableAmount, tax, total };
+  return { item, billedTo, taxableAmount, tax, total };
+}
+
+function itemSummary(item) {
+  return {
+    kind: item.kind,
+    planCode: item.planCode,
+    planName: item.kind === 'plan' ? planName(item.planCode) : null,
+    interval: item.interval,
+    packCode: item.packCode,
+    credits: item.credits,
+    offerCode: item.offerCode,
+  };
 }
 
 // What checkout will charge, without creating an order.
-export async function previewCheckout({ pool }, { planCode, interval }) {
-  const { offerCode, billedTo, taxableAmount, tax, total } = await priceFor(
-    pool,
-    planCode,
-    interval,
-  );
+export async function previewCheckout({ pool }, selection) {
+  const { item, billedTo, taxableAmount, tax, total } = await priceFor(pool, selection);
   return {
-    planCode,
-    planName: planName(planCode),
-    interval,
-    offerCode,
+    ...itemSummary(item),
     taxableAmount,
     tax,
     amount: total,
@@ -91,30 +154,38 @@ export async function previewCheckout({ pool }, { planCode, interval }) {
   };
 }
 
-export async function createCheckout({ pool, user }, { planCode, interval }) {
+export async function createCheckout({ pool, user }, selection) {
   if (!isRazorpayEnabled()) {
     throw AppError.unavailable('Online payments are not set up yet', 'PAYMENTS_DISABLED');
   }
-  const { offerCode, billedTo, taxableAmount, tax, total } = await priceFor(
-    pool,
-    planCode,
-    interval,
-  );
+  const { item, billedTo, taxableAmount, tax, total } = await priceFor(pool, selection);
+  const { kind, planCode, interval, packCode, credits, offerCode } = item;
   const amountPaise = Math.round(total * 100);
 
   const id = new Types.ObjectId();
   const razorpayOrder = await createOrder({
     amountPaise,
     receipt: `fd_${id}`,
-    notes: { workspaceId: String(pool._id), planCode, interval, userId: String(user._id) },
+    notes: {
+      workspaceId: String(pool._id),
+      ...(kind === 'credits'
+        ? { packCode, credits: String(credits) }
+        : kind === 'reset'
+          ? { product: 'ai-reset' }
+          : { planCode, interval }),
+      userId: String(user._id),
+    },
   });
 
   const order = await CheckoutOrder.create({
     _id: id,
     workspaceId: pool._id,
     userId: user._id,
+    kind,
     planCode,
     interval,
+    packCode,
+    credits,
     offerCode,
     taxableAmount,
     tax,
@@ -185,6 +256,9 @@ export async function fulfilOrder(order, paymentId, { paymentEntity } = {}) {
   const razorpayPayment = await capturedPaymentFor(order, paymentId, paymentEntity);
   const workspace = await Workspace.findById(order.workspaceId).lean();
   if (!workspace) throw AppError.notFound('Workspace not found');
+  if (order.kind === 'credits' || order.kind === 'reset') {
+    return fulfilCreditOrder(order, workspace, paymentId, razorpayPayment);
+  }
 
   let payment;
   try {
@@ -250,6 +324,72 @@ export async function fulfilOrder(order, paymentId, { paymentEntity } = {}) {
   return payment;
 }
 
+// A credit pack: record the payment (with an invoice), then add the credits.
+// Both steps are idempotent, so checkout and the webhook may both get here.
+async function fulfilCreditOrder(order, workspace, paymentId, razorpayPayment) {
+  let payment;
+  try {
+    payment = await recordCreditPurchase(workspace, {
+      kind: order.kind,
+      amount: order.amount,
+      taxableAmount: order.taxableAmount,
+      tax: order.tax,
+      billedTo: order.billedTo,
+      credits: order.credits,
+      method: 'razorpay',
+      source: 'razorpay',
+      reference: paymentId,
+      paidAt: razorpayPayment.created_at ? new Date(razorpayPayment.created_at * 1000) : new Date(),
+      razorpay: { orderId: order.razorpayOrderId, paymentId, method: razorpayPayment.method },
+    });
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+    payment = await Payment.findOne({ 'razorpay.paymentId': paymentId }).setOptions(ACROSS).lean();
+  }
+  if (order.kind === 'reset') {
+    // Once per payment: the ledger row is unique per payment and kind.
+    const first = await CreditLedger.create({
+      workspaceId: workspace._id,
+      kind: 'reset',
+      credits: 0,
+      userId: order.userId,
+      paymentId: payment._id,
+      note: 'Usage limits reset',
+    }).catch((error) => {
+      if (isDuplicateKey(error)) return null;
+      throw error;
+    });
+    if (first) await resetUsageWindows(workspace._id);
+  } else {
+    // Counted once per payment, however often this runs.
+    await addCredits(workspace._id, payment.credits ?? order.credits, {
+      kind: 'purchase',
+      userId: order.userId,
+      paymentId: payment._id,
+      note: `Bought ${order.credits} credits`,
+    });
+  }
+  await CheckoutOrder.updateOne(
+    { _id: order._id, workspaceId: order.workspaceId },
+    {
+      $set: {
+        status: 'paid',
+        razorpayPaymentId: paymentId,
+        paymentId: payment._id,
+        paidAt: payment.paidAt,
+        failureReason: null,
+      },
+    },
+  );
+  await recordAudit({
+    actorId: order.userId,
+    action: order.kind === 'reset' ? 'payment.razorpay_ai_reset' : 'payment.razorpay_credits',
+    workspaceId: workspace._id,
+    details: { amount: order.amount, credits: order.credits, packCode: order.packCode, paymentId },
+  }).catch((error) => logger.error({ err: error }, 'Could not write audit entry'));
+  return payment;
+}
+
 /**
  * A refund made in the Razorpay dashboard (or a lost dispute). Always re-reads
  * the payment from Razorpay rather than trusting the event's copy.
@@ -266,6 +406,14 @@ export async function handleRefund(razorpayPaymentId) {
 
   const result = await revokeRefundedPayment(payment._id, { refundedPaise, fullyRefunded });
   if (!result) return;
+  if (payment.kind === 'credits' && fullyRefunded) {
+    // Takes back what is left of the refunded credits (never below zero).
+    await addCredits(payment.workspaceId, -(payment.credits ?? 0), {
+      kind: 'refund',
+      paymentId: payment._id,
+      note: 'Credit pack refunded',
+    });
+  }
   await recordAudit({
     actorId: null,
     action: fullyRefunded ? 'payment.refunded' : 'payment.partially_refunded',
@@ -305,9 +453,11 @@ export async function confirmCheckout({ pool }, { orderId, paymentId, signature 
   const payment = await fulfilOrder(order, paymentId);
   return {
     paid: true,
+    kind: payment.kind ?? 'plan',
     paymentId: String(payment._id),
     planCode: payment.planCode,
     periodEnd: payment.periodEnd,
+    credits: payment.credits ?? null,
   };
 }
 

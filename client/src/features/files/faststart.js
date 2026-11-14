@@ -72,7 +72,8 @@ function shiftChunkOffsets(view, start, end, { shift, from, to }) {
     const type = boxType(view, offset);
     if (type === 'cmov') return false; // compressed index
     if (CONTAINERS.has(type)) {
-      if (!shiftChunkOffsets(view, offset + header, offset + size, { shift, from, to })) return false;
+      if (!shiftChunkOffsets(view, offset + header, offset + size, { shift, from, to }))
+        return false;
     } else if (type === 'stco' || type === 'co64') {
       const wide = type === 'co64';
       const count = view.getUint32(offset + header + 4);

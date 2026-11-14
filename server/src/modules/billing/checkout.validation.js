@@ -1,10 +1,16 @@
 import { z } from 'zod';
 import { BILLING_INTERVALS } from '../plans/plans.service.js';
 
-export const createCheckoutSchema = z.object({
-  planCode: z.string().trim().min(1).max(40),
-  interval: z.enum(BILLING_INTERVALS),
-});
+// Either a plan for an interval, or a pack of AI credits.
+export const createCheckoutSchema = z.union([
+  z.object({
+    planCode: z.string().trim().min(1).max(40),
+    interval: z.enum(BILLING_INTERVALS),
+  }),
+  z.object({ packCode: z.string().trim().min(1).max(40) }),
+  // Reset the AI usage limits now.
+  z.object({ product: z.literal('ai-reset') }),
+]);
 
 const razorpayId = (prefix) =>
   z

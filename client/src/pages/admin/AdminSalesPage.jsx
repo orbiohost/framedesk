@@ -97,7 +97,11 @@ export function AdminSalesPage() {
                   <td className="px-4 py-2.5">
                     <span className="block">{payment.workspace?.name ?? 'Deleted workspace'}</span>
                     <span className="text-muted block text-xs">
-                      {PLAN_NAMES[payment.planCode]}, {payment.interval}
+                      {payment.kind === 'reset'
+                        ? 'AI usage limit reset'
+                        : payment.kind === 'credits'
+                          ? `${payment.credits?.toLocaleString('en-IN')} AI credits`
+                          : `${PLAN_NAMES[payment.planCode]}, ${payment.interval}`}
                       {payment.offerCode && ` · ${payment.offerCode}`}
                     </span>
                   </td>
@@ -111,7 +115,7 @@ export function AdminSalesPage() {
                     )}
                   </td>
                   <td className="text-muted hidden px-4 py-2.5 lg:table-cell">
-                    {shortDate(payment.periodEnd)}
+                    {payment.periodEnd ? shortDate(payment.periodEnd) : '—'}
                   </td>
                 </tr>
               ))}

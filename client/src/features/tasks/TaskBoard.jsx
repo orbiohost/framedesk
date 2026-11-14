@@ -128,7 +128,7 @@ export function TaskBoard({ tasks, canEdit, showProject = false, onOpen, onMove 
       onDragCancel={() => setActiveTask(null)}
       onDragEnd={handleDragEnd}
     >
-      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0">
+      <div className="-mx-3 flex gap-3 overflow-x-auto px-3 pb-2 sm:-mx-4 sm:px-4 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0">
         {TASK_STATUS_OPTIONS.map(({ value, label }) => (
           <Column key={value} status={value} label={label} tasks={columns[value]}>
             {columns[value].map((task) => (

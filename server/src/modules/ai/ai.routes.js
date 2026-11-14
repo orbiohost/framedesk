@@ -1,0 +1,170 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { aiChatLimiter } from '../../middleware/rateLimit.js';
+import { canAdminister, canEdit, canView } from '../../middleware/requireWorkspaceRole.js';
+import { validate } from '../../middleware/validate.js';
+import { AppError } from '../../utils/AppError.js';
+import { sendSuccess } from '../../utils/apiResponse.js';
+import { asyncHandler } from '../../utils/asyncHandler.js';
+import { logger } from '../../utils/logger.js';
+import { objectId } from '../../utils/zodHelpers.js';
+import { viewerOf } from '../files/folderAccess.js';
+import {
+  deleteThread,
+  getAiStatus,
+  getThread,
+  getUploadFolder,
+  listThreads,
+  MAX_ATTACHED,
+  renameThread,
+  searchFiles,
+  streamAnswer,
+} from './aiChat.service.js';
+import { listLedger } from './credits.service.js';
+
+// Mounted at /workspaces/:workspaceId/ai.
+const router = Router();
+
+const askSchema = z.object({
+  text: z.string().trim().min(1, 'Type a question').max(4000),
+  // Which chat this belongs to; leave out to start a new one.
+  threadId: objectId.optional(),
+  // Set by picking a project with "/": only that project's files are used.
+  projectId: objectId.optional(),
+  // Files attached with "@" or uploaded in the chat.
+  fileIds: z.array(objectId).max(MAX_ATTACHED, `Attach up to ${MAX_ATTACHED} files`).optional(),
+});
+const filesQuery = z.object({
+  q: z.string().trim().max(120).optional(),
+  projectId: objectId.optional(),
+});
+const threadParam = z.object({ threadId: objectId });
+const renameSchema = z.object({ title: z.string().trim().min(1).max(120) });
+const historyQuery = z.object({ cursor: objectId.optional() });
+
+function context(req) {
+  return { workspace: req.workspace, pool: req.storagePool, user: req.user, viewer: viewerOf(req) };
+}
+
+router.get(
+  '/status',
+  canView,
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, { status: await getAiStatus(context(req)) });
+  }),
+);
+
+router.get(
+  '/threads',
+  canView,
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, { threads: await listThreads(context(req)) });
+  }),
+);
+
+router.get(
+  '/threads/:threadId',
+  canView,
+  validate({ params: threadParam }),
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, await getThread(context(req), req.params.threadId));
+  }),
+);
+
+router.patch(
+  '/threads/:threadId',
+  canView,
+  validate({ params: threadParam, body: renameSchema }),
+  asyncHandler(async (req, res) => {
+    await renameThread(context(req), req.params.threadId, req.body);
+    sendSuccess(res, { renamed: true });
+  }),
+);
+
+router.delete(
+  '/threads/:threadId',
+  canView,
+  validate({ params: threadParam }),
+  asyncHandler(async (req, res) => {
+    await deleteThread(context(req), req.params.threadId);
+    sendSuccess(res, { deleted: true });
+  }),
+);
+
+// The "@" picker: files to attach to a question.
+router.get(
+  '/files',
+  canView,
+  validate({ query: filesQuery }),
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, { files: await searchFiles(context(req), req.query) });
+  }),
+);
+
+// Where files uploaded in the chat are stored (a Drive folder, made on first use).
+router.post(
+  '/upload-folder',
+  canEdit,
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, { folder: await getUploadFolder(context(req)) });
+  }),
+);
+
+// The answer streams back as server-sent events, so words appear as they are
+// written: event "thread", then "status"/"delta" events, then "done" (or "error").
+router.post('/ask', aiChatLimiter, canView, validate({ body: askSchema }), async (req, res) => {
+  res.status(200).set({
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    // no-transform keeps compression() from buffering the stream.
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    // Tells nginx (the web container) not to buffer either.
+    'X-Accel-Buffering': 'no',
+    // Already "encoded": keeps LiteSpeed's dynamic gzip (on for text/*) from
+    // holding words back to compress them in batches.
+    'Content-Encoding': 'identity',
+  });
+  res.flushHeaders();
+
+  const controller = new AbortController();
+  // The person pressed Stop (or closed the tab).
+  res.on('close', () => {
+    if (!res.writableFinished) controller.abort();
+  });
+  const emit = (event, data) => {
+    if (res.writableEnded) return;
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+  // Keeps proxies from closing a quiet connection while a long video is studied.
+  const heartbeat = setInterval(() => !res.writableEnded && res.write(': ping\n\n'), 15_000);
+
+  try {
+    await streamAnswer(context(req), req.body, { emit, signal: controller.signal });
+  } catch (error) {
+    const known = error instanceof AppError;
+    if (!known) logger.error({ err: error }, 'AI answer failed');
+    emit('error', {
+      status: known ? error.statusCode : 500,
+      code: known ? error.code : 'INTERNAL',
+      message: known
+        ? error.message
+        : 'The AI assistant could not answer just now. Please try again.',
+      details: known ? (error.details ?? null) : null,
+    });
+  } finally {
+    clearInterval(heartbeat);
+    res.end();
+  }
+});
+
+// How the account's AI usage was spent. Owners and admins only, like billing.
+router.get(
+  '/credits/history',
+  canAdminister,
+  validate({ query: historyQuery }),
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, await listLedger(req.storagePool._id, req.query));
+  }),
+);
+
+export default router;

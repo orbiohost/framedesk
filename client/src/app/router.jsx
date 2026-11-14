@@ -83,6 +83,14 @@ export const router = createBrowserRouter([
         path: '/app',
         lazy: page(() => import('../pages/app/WorkspaceRedirectPage.jsx'), 'WorkspaceRedirectPage'),
       },
+      // Consent screen for AI connectors (Claude, ChatGPT...) signing in over OAuth.
+      {
+        path: '/connect/authorize',
+        lazy: page(
+          () => import('../pages/connect/ConnectAuthorizePage.jsx'),
+          'ConnectAuthorizePage',
+        ),
+      },
       {
         path: '/app/new-workspace',
         lazy: page(() => import('../pages/app/NewWorkspacePage.jsx'), 'NewWorkspacePage'),
@@ -136,6 +144,10 @@ export const router = createBrowserRouter([
                   () => import('../pages/admin/AdminInvoicingPage.jsx'),
                   'AdminInvoicingPage',
                 ),
+              },
+              {
+                path: 'ai',
+                lazy: page(() => import('../pages/admin/AdminAiPage.jsx'), 'AdminAiPage'),
               },
               {
                 path: 'audit-log',
@@ -211,6 +223,10 @@ export const router = createBrowserRouter([
               {
                 path: 'drive',
                 lazy: page(() => import('../pages/app/DrivePage.jsx'), 'DrivePage'),
+              },
+              {
+                path: 'ai',
+                lazy: page(() => import('../pages/app/AiPage.jsx'), 'AiPage'),
               },
               {
                 path: 'transcribe',

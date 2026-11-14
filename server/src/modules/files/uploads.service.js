@@ -113,4 +113,3 @@ export async function prepareUpload(user, clientMetadata, size) {
     linkedProjectIds: linkedProjectIds.join(','),
   };
 }
-

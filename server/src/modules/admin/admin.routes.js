@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/authenticate.js';
 import { validate } from '../../middleware/validate.js';
 import { AppError } from '../../utils/AppError.js';
+import aiAdminRoutes from '../ai/aiAdmin.routes.js';
 import * as admin from './admin.controller.js';
 import * as billing from './adminBilling.controller.js';
 import * as invoicing from './adminInvoicing.controller.js';
@@ -37,6 +38,7 @@ router.use(authenticate, requireSuperadmin);
 
 router.get('/dashboard', admin.dashboard);
 router.get('/system', admin.system);
+router.use('/ai', aiAdminRoutes);
 router.get('/audit-log', validate({ query: cursorQuery }), admin.auditLog);
 
 router.get('/users', validate({ query: usersQuerySchema }), users.list);

@@ -3,6 +3,7 @@ import { workspaceScopePlugin } from '../../utils/workspaceScope.plugin.js';
 import { FILE_CATEGORIES } from './fileTypes.js';
 
 export const FILE_STATUSES = ['raw', 'in_progress', 'approved', 'final'];
+export const AI_STATES = ['processing', 'done', 'skipped', 'failed', 'no_credits'];
 
 const fileSchema = new Schema(
   {
@@ -27,6 +28,11 @@ const fileSchema = new Schema(
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     deletedAt: { type: Date, default: null },
     deletedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    // The AI assistant's analysis queue (see ai/analysisWorker.js). null means
+    // "not looked at yet"; the result itself lives in AiInsight.
+    aiState: { type: String, enum: [...AI_STATES, null], default: null },
+    aiRetryAt: { type: Date, default: null },
+    aiAttempts: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
@@ -35,6 +41,8 @@ fileSchema.plugin(workspaceScopePlugin);
 fileSchema.index({ workspaceId: 1, folderId: 1, deletedAt: 1, _id: -1 });
 fileSchema.index({ workspaceId: 1, projectId: 1, deletedAt: 1 });
 fileSchema.index({ workspaceId: 1, linkedProjectIds: 1, deletedAt: 1 });
+// The analysis worker's queue, across workspaces.
+fileSchema.index({ aiState: 1, deletedAt: 1, _id: -1 });
 
 // Named StoredFile in code so it never shadows the global File class.
 export const StoredFile = mongoose.model('File', fileSchema);

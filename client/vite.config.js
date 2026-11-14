@@ -14,6 +14,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://localhost:4000',
+      // OAuth discovery for AI connectors.
+      '/.well-known/oauth-': 'http://localhost:4000',
     },
   },
 });

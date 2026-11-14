@@ -91,7 +91,8 @@ function summary(items) {
 }
 
 // Mounted once in the app shell, so uploads survive moving between pages.
-export function UploadTray() {
+// raised: sits above the AI assistant button in the corner.
+export function UploadTray({ raised = false }) {
   const items = useUploads();
   const queryClient = useQueryClient();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -117,7 +118,10 @@ export function UploadTray() {
   return (
     <section
       aria-label="Uploads"
-      className="border-line bg-surface fixed bottom-4 right-4 z-30 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-lg border shadow-2xl"
+      className={cn(
+        'border-line bg-surface fixed right-4 z-30 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-lg border shadow-2xl',
+        raised ? 'bottom-20' : 'bottom-4',
+      )}
     >
       <header className="pill-active flex items-center gap-2 px-4 py-2.5">
         <p className="flex-1 truncate text-sm font-medium" aria-live="polite">

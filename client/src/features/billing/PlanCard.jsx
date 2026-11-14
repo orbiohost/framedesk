@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react';
+import { Check, Sparkles } from 'lucide-react';
 import { cn } from '../../lib/cn.js';
 import { formatInr } from '../../lib/format.js';
 import { priceFor, storageLabel } from './pricing.js';
@@ -43,6 +43,13 @@ export function PlanCard({ plan, interval, offer, action, badge }) {
         <span className="font-medium">{storageLabel(plan)}</span>{' '}
         <span className="text-muted">of storage</span>
       </p>
+      {plan.aiUsage > 0 && (
+        <p className="mt-1 flex items-center gap-1.5 text-sm">
+          <Sparkles className="text-accent h-3.5 w-3.5" aria-hidden="true" />
+          <span className="font-medium">AI assistant</span>
+          {plan.aiUsage > 1 && <span className="text-muted">· {plan.aiUsage}× more usage</span>}
+        </p>
+      )}
       <ul className="mt-6 flex-1 space-y-2 text-sm">
         {plan.features.map((feature) => (
           <li key={feature} className="flex gap-2">

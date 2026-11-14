@@ -1,0 +1,18 @@
+{
+  "name": "framedesk-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FrameDesk for Android: a Trusted Web Activity of https://desk.orbio.in built with Bubblewrap.",
+  "scripts": {
+    "setup": "node tools.cjs setup",
+    "keystore": "node tools.cjs keystore",
+    "build": "bubblewrap build",
+    "assetlinks": "node tools.cjs assetlinks",
+    "update": "bubblewrap update",
+    "install-apk": "bubblewrap install",
+    "doctor": "bubblewrap doctor"
+  },
+  "devDependencies": {
+    "@bubblewrap/cli": "1.24.1"
+  }
+}

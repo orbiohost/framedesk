@@ -1,0 +1,52 @@
+{
+  "packageId": "in.orbio.desk",
+  "host": "desk.orbio.in",
+  "name": "FrameDesk",
+  "launcherName": "FrameDesk",
+  "display": "standalone",
+  "themeColor": "#16151C",
+  "themeColorDark": "#16151C",
+  "navigationColor": "#16151C",
+  "navigationColorDark": "#16151C",
+  "navigationDividerColor": "#16151C",
+  "navigationDividerColorDark": "#16151C",
+  "backgroundColor": "#1D1C1A",
+  "enableNotifications": false,
+  "startUrl": "/app?source=twa",
+  "iconUrl": "https://desk.orbio.in/icons/icon-512.png",
+  "maskableIconUrl": "https://desk.orbio.in/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "framedesk"
+  },
+  "appVersionName": "1.0.1",
+  "appVersionCode": 2,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://desk.orbio.in/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://desk.orbio.in/",
+  "minSdkVersion": 24,
+  "orientation": "any",
+  "fingerprints": [
+    {
+      "name": "release-key",
+      "value": "30:05:8C:3D:47:EA:5F:F4:F1:58:EC:75:61:7E:AB:6B:FE:A3:7F:6B:19:3E:0B:51:B2:86:88:A5:D8:F6:43:7A"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1.0.1"
+}

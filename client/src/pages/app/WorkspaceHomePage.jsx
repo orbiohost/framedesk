@@ -34,7 +34,7 @@ function DashboardHeader({ workspace, firstName, updatedAt, onAdd, editing, onCu
   return (
     <header className="short:mb-3 mb-5">
       <div className="text-muted flex flex-wrap items-center justify-between gap-2 text-xs">
-        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
+        <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1 sm:flex">
           <span>Workspace</span>
           <ChevronRight className="h-3 w-3" aria-hidden="true" />
           <span className="truncate">{workspace.name}</span>

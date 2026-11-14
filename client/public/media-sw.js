@@ -508,8 +508,63 @@ async function serve(request, url) {
   return new Response(body, { status: range.partial ? 206 : 200, headers });
 }
 
+// --------------------------------------------------------------- offline --
+// App pages opened with no connection (most often the Android app or a home
+// screen icon) get a small "you're offline" screen instead of the browser's
+// error page. Pages still always come from the network; nothing is cached.
+
+const OFFLINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>FrameDesk · Offline</title>
+<meta name="theme-color" content="#16151C"><style>
+html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;
+background:#16151C;color:#F1EFF7;font:16px/1.5 system-ui,sans-serif;text-align:center;padding:0 24px}
+.c{max-width:320px}h1{font-size:20px;margin:20px 0 6px}p{color:#A29EB4;margin:0 0 24px}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 24px;background:#BA96FF;color:#16151C}
+</style></head><body><div class="c">
+<svg width="56" height="56" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#1D1C1A"/>
+<path d="M9 9h6M9 9v6M23 23h-6M23 23v-6" stroke="#F6F4EF" stroke-width="2.5" stroke-linecap="round"/>
+<rect x="13" y="13" width="6" height="6" rx="1" fill="#C4401F"/></svg>
+<h1>You're offline</h1><p>FrameDesk needs an internet connection. It will open as soon as you're back online.</p>
+<button onclick="location.reload()">Try again</button></div>
+<script>addEventListener('online',function(){location.reload()})</script></body></html>`;
+
+function isAppNavigation(request, url) {
+  return (
+    request.mode === 'navigate' &&
+    request.method === 'GET' &&
+    url.origin === self.location.origin &&
+    !url.pathname.startsWith('/api/') &&
+    !url.pathname.startsWith('/.well-known/')
+  );
+}
+
+async function navigate(event) {
+  try {
+    // Navigation preload starts the request while this worker boots, so
+    // routing pages through it costs nothing.
+    const preloaded = await event.preloadResponse;
+    if (preloaded) return preloaded;
+    return await fetch(event.request);
+  } catch {
+    return new Response(OFFLINE_HTML, {
+      status: 503,
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }
+}
+
+self.addEventListener('activate', (event) => {
+  if (self.registration.navigationPreload) {
+    event.waitUntil(self.registration.navigationPreload.enable().catch(() => {}));
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+  if (isAppNavigation(event.request, url)) {
+    event.respondWith(navigate(event));
+    return;
+  }
   if (url.origin !== self.location.origin || !url.pathname.startsWith(PREFIX)) return;
   event.respondWith(serve(event.request, url));
 });

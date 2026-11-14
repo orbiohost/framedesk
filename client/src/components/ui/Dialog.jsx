@@ -3,11 +3,67 @@ import { useEffect, useId, useRef } from 'react';
 import { cn } from '../../lib/cn.js';
 import { Button } from './Button.jsx';
 
+const SHEET_QUERY = '(max-width: 639px)';
+const CLOSE_DISTANCE = 110;
+const CLOSE_VELOCITY = 0.6; // px per ms: a quick flick closes even when short.
+
+// Phones: drag the sheet down by its handle or header to close it, like a
+// native bottom sheet. Larger screens show a centred dialog instead.
+function useSwipeToClose(dialogRef, onClose) {
+  const drag = useRef(null);
+
+  function setOffset(y, animate) {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    dialog.style.transition = animate ? 'transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none';
+    dialog.style.transform = y > 0 ? `translateY(${y}px)` : '';
+  }
+
+  function onPointerDown(event) {
+    if (event.pointerType === 'mouse' || !window.matchMedia(SHEET_QUERY).matches) return;
+    // Buttons in the header (Close) keep working as taps.
+    if (event.target.closest('button, a, input, select, textarea')) return;
+    drag.current = { id: event.pointerId, startY: event.clientY, y: 0, time: event.timeStamp };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onPointerMove(event) {
+    const d = drag.current;
+    if (!d || d.id !== event.pointerId) return;
+    d.y = Math.max(0, event.clientY - d.startY);
+    setOffset(d.y, false);
+  }
+
+  function onPointerEnd(event) {
+    const d = drag.current;
+    if (!d || d.id !== event.pointerId) return;
+    drag.current = null;
+    const velocity = d.y / Math.max(1, event.timeStamp - d.time);
+    if (d.y > CLOSE_DISTANCE || (d.y > 24 && velocity > CLOSE_VELOCITY)) {
+      setOffset(window.innerHeight, true);
+      window.setTimeout(() => {
+        onClose();
+        setOffset(0, false);
+      }, 180);
+    } else {
+      setOffset(0, true);
+    }
+  }
+
+  return {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp: onPointerEnd,
+    onPointerCancel: onPointerEnd,
+  };
+}
+
 // Built on the native <dialog>: focus trapping, Escape and the backdrop come
 // from the browser. Children only render while open, so forms start fresh.
 export function Dialog({ open, onClose, title, description, wide = false, children }) {
   const dialogRef = useRef(null);
   const titleId = useId();
+  const swipe = useSwipeToClose(dialogRef, onClose);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -51,7 +107,15 @@ export function Dialog({ open, onClose, title, description, wide = false, childr
     >
       {open && (
         <div className="scrollbar-thin max-h-[88dvh] overflow-y-auto">
-          <header className="bg-surface sticky top-0 z-10 flex items-start justify-between gap-4 px-6 pb-2 pt-5">
+          <header
+            {...swipe}
+            className="bg-surface sticky top-0 z-10 flex touch-none select-none items-start justify-between gap-4 px-6 pb-2 pt-5 sm:touch-auto sm:select-text"
+          >
+            {/* Grab handle: phones only, where the dialog is a bottom sheet. */}
+            <span
+              className="bg-line absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full sm:hidden"
+              aria-hidden="true"
+            />
             <div className="min-w-0">
               <h2 id={titleId} className="truncate text-[17px] font-semibold tracking-tight">
                 {title}

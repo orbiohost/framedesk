@@ -1,5 +1,5 @@
-import { Menu } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Search, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
 import { Avatar } from '../components/ui/Avatar.jsx';
 import { FullPageMessage } from '../components/ui/FullPageMessage.jsx';
@@ -16,6 +16,7 @@ import { useWorkspace } from '../features/workspaces/hooks.js';
 import { rememberWorkspace } from '../features/workspaces/lastWorkspace.js';
 import { canView } from '../features/workspaces/roles.js';
 import { cn } from '../lib/cn.js';
+import { BottomNav } from './BottomNav.jsx';
 import { GlobalSearch } from './GlobalSearch.jsx';
 import { NotificationsMenu } from './NotificationsMenu.jsx';
 import { Sidebar } from './Sidebar.jsx';
@@ -34,24 +35,25 @@ function LayoutSkeleton() {
   );
 }
 
-function TopBar({ workspace, onOpenMenu }) {
+function TopBar({ workspace }) {
   const { data: user } = useCurrentUser();
   const { pathname } = useLocation();
   const team = canView(workspace);
-  // The AI page is a full-height chat; a second search row would only crowd it.
-  const onAiPage = pathname.replace(/\/$/, '') === `/w/${workspace.id}/ai`;
+  // Phones: search hides behind an icon, like an app bar, and closes on navigation.
+  const [searchOpenOn, setSearchOpenOn] = useState(null);
+  const searchOpen = searchOpenOn === pathname;
+  const searchRowRef = useRef(null);
+
+  useEffect(() => {
+    if (searchOpen) searchRowRef.current?.querySelector('input')?.focus();
+  }, [searchOpen]);
 
   return (
-    <div className="bg-surface/95 supports-[backdrop-filter]:bg-surface/80 sticky top-0 z-20 px-3 pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur sm:static sm:bg-transparent sm:px-0 sm:pt-0 sm:backdrop-blur-none">
-      <header className="short:pb-2 short:pt-0 flex items-center gap-2 pb-2 pt-1 sm:gap-3 sm:px-2 sm:pb-3 md:gap-4">
-        <button
-          type="button"
-          onClick={onOpenMenu}
-          aria-label="Open menu"
-          className="bg-subtle grid h-10 w-10 shrink-0 place-items-center rounded-full lg:hidden"
-        >
-          <Menu className="h-4 w-4" aria-hidden="true" />
-        </button>
+    <div
+      style={{ viewTransitionName: 'top-bar' }}
+      className="bg-surface/95 supports-[backdrop-filter]:bg-surface/85 border-line/70 sticky top-0 z-20 select-none border-b px-3 pt-[max(0.25rem,env(safe-area-inset-top))] backdrop-blur-md sm:static sm:border-b-0 sm:bg-transparent sm:px-0 sm:pt-0 sm:backdrop-blur-none"
+    >
+      <header className="short:pb-2 short:pt-0 flex h-14 items-center gap-2 sm:h-auto sm:gap-3 sm:px-2 sm:pb-3 sm:pt-1 md:gap-4">
         <Link
           to={`/w/${workspace.id}`}
           aria-label="FrameDesk home"
@@ -66,11 +68,26 @@ function TopBar({ workspace, onOpenMenu }) {
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {team && (
+            <button
+              type="button"
+              onClick={() => setSearchOpenOn(searchOpen ? null : pathname)}
+              aria-label={searchOpen ? 'Close search' : 'Search'}
+              aria-expanded={searchOpen}
+              className="bg-subtle grid h-10 w-10 place-items-center rounded-full active:scale-95 md:hidden"
+            >
+              {searchOpen ? (
+                <X className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Search className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          )}
           <span className="hidden md:block">
             <ThemeToggle />
           </span>
-          <span className="md:hidden">
+          <span className="hidden sm:block md:hidden">
             <ThemeToggle compact />
           </span>
           {team && <QuickNoteButton workspaceId={workspace.id} />}
@@ -88,8 +105,8 @@ function TopBar({ workspace, onOpenMenu }) {
           )}
         </div>
       </header>
-      {team && !onAiPage && (
-        <div className="pb-2 md:hidden">
+      {team && searchOpen && (
+        <div ref={searchRowRef} className="animate-[fade-in_150ms_ease-out] pb-2.5 md:hidden">
           <GlobalSearch workspaceId={workspace.id} className="w-full" />
         </div>
       )}
@@ -107,6 +124,8 @@ export function AppLayout() {
   const isNavOpen = navOpenedOn === pathname;
   // The dashboard (workspace home) fits the window instead of scrolling.
   const fitsScreen = pathname.replace(/\/$/, '') === `/w/${workspaceId}`;
+  // The AI page is a full-height chat with no floating AI button.
+  const onAiPage = pathname.replace(/\/$/, '') === `/w/${workspaceId}/ai`;
 
   useEffect(() => {
     if (workspace) rememberWorkspace(workspace.id);
@@ -136,9 +155,10 @@ export function AppLayout() {
     <div>
       {/* The app frame fills the whole window, edge to edge. */}
       <div className="bg-surface flex min-h-[100dvh] flex-col sm:min-h-screen sm:p-3 lg:h-screen lg:min-h-0">
-        <TopBar workspace={workspace} onOpenMenu={() => setNavOpenedOn(pathname)} />
+        <TopBar workspace={workspace} />
 
-        <div className="bg-bg short:gap-3 short:p-3 flex min-h-0 flex-1 gap-4 rounded-t-[22px] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:rounded-[22px] lg:rounded-[28px] lg:p-4">
+        {/* Phones: edge to edge like a native app. Larger: a rounded panel. */}
+        <div className="bg-bg short:gap-3 short:p-3 flex min-h-0 flex-1 gap-4 p-3 sm:rounded-[22px] lg:rounded-[28px] lg:p-4">
           <Sidebar workspace={workspace} isOpen={isNavOpen} onClose={() => setNavOpenedOn(null)} />
 
           {/* Other pages scroll here. On large screens the dashboard is pinned to
@@ -160,7 +180,11 @@ export function AppLayout() {
               <VerifyEmailBanner />
               <main
                 className={cn(
-                  'pb-24 pt-2 sm:pb-20 lg:pb-2',
+                  // Room for the bottom tab bar (and the floating AI button) below lg.
+                  onAiPage
+                    ? 'pb-[calc(4.25rem+env(safe-area-inset-bottom))]'
+                    : 'pb-[calc(8rem+env(safe-area-inset-bottom))]',
+                  'pt-2 lg:pb-2',
                   fitsScreen && 'fit:flex fit:min-h-0 fit:flex-1 fit:flex-col',
                 )}
               >
@@ -170,6 +194,11 @@ export function AppLayout() {
           </div>
         </div>
       </div>
+      <BottomNav
+        workspace={workspace}
+        menuOpen={isNavOpen}
+        onOpenMenu={() => setNavOpenedOn(isNavOpen ? null : pathname)}
+      />
       <AiAssistant key={workspace.id} workspace={workspace} />
       <UploadTray raised={aiEnabled} />
     </div>

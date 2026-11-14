@@ -120,7 +120,10 @@ export function UploadTray({ raised = false }) {
       aria-label="Uploads"
       className={cn(
         'border-line bg-surface fixed right-4 z-30 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-lg border shadow-2xl',
-        raised ? 'bottom-20' : 'bottom-4',
+        // Below lg it also clears the bottom tab bar.
+        raised
+          ? 'bottom-[calc(8.5rem+env(safe-area-inset-bottom))] lg:bottom-20'
+          : 'bottom-[calc(4.75rem+env(safe-area-inset-bottom))] lg:bottom-4',
       )}
     >
       <header className="pill-active flex items-center gap-2 px-4 py-2.5">

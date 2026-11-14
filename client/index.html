@@ -2,13 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta
       name="description"
       content="One workspace for creative studios: projects, raw footage, versions and client review, with an AI assistant that transcribes and understands your videos and documents, and connectors for Claude, ChatGPT and Gemini."
     />
     <title>FrameDesk</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Installable app (Android home screen / Play Store build via a Trusted Web Activity). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="theme-color" content="#F5F4F8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16151C" media="(prefers-color-scheme: dark)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="FrameDesk" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Loaded without blocking the first paint (slow on phones); text shows
@@ -38,6 +48,11 @@
           var dark =
             saved === 'dark' || (!saved && matchMedia('(prefers-color-scheme: dark)').matches);
           document.documentElement.classList.toggle('dark', dark);
+          if (saved) {
+            document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+              m.setAttribute('content', dark ? '#16151C' : '#F5F4F8');
+            });
+          }
         } catch (e) {}
       })();
     </script>

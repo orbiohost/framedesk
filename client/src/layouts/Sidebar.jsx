@@ -42,6 +42,7 @@ import { canAdminister, canManage, canView } from '../features/workspaces/roles.
 import { StorageDetailsDialog } from '../features/workspaces/StorageDetailsDialog.jsx';
 import { StorageMeter } from '../features/workspaces/StorageMeter.jsx';
 import { WorkspaceSwitcher } from '../features/workspaces/WorkspaceSwitcher.jsx';
+import { ThemeToggle } from '../components/ui/ThemeToggle.jsx';
 import { cn } from '../lib/cn.js';
 import { readLocal, writeLocal } from '../lib/storage.js';
 import { useDismiss } from '../lib/useDismiss.js';
@@ -49,7 +50,7 @@ import { useDismiss } from '../lib/useDismiss.js';
 const OPEN_PROJECT_STATUSES = ['draft', 'active', 'pending', 'review'];
 const PROJECT_LINKS_SHOWN = 6;
 
-function useCounts(workspace) {
+export function useCounts(workspace) {
   const enabled = canView(workspace);
   const { data: projects = [] } = useProjects(workspace.id, {}, { enabled });
   const { data: myTasks = [] } = useTasks(workspace.id, { assignee: 'me' }, { enabled });
@@ -552,18 +553,21 @@ export function Sidebar({ workspace, isOpen, onClose }) {
       )}
       <aside
         className={cn(
-          'bg-bg scrollbar-thin fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col overflow-y-auto overflow-x-hidden px-3 py-4',
+          'bg-bg scrollbar-thin fixed inset-y-0 left-0 z-40 flex w-[min(18rem,85vw)] shrink-0 flex-col overflow-y-auto overflow-x-hidden px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] shadow-2xl lg:shadow-none',
           'transition-[transform,width] duration-200 lg:static lg:z-auto lg:translate-x-0 lg:bg-transparent lg:p-0',
           compact ? 'lg:w-11' : 'lg:w-52',
           isOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="mb-3 flex justify-end lg:hidden">
+        <div className="mb-3 flex items-center justify-between lg:hidden">
+          <span className="sm:hidden">
+            <ThemeToggle compact />
+          </span>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close menu"
-            className="text-muted hover:bg-surface grid h-9 w-9 place-items-center rounded-full"
+            className="text-muted hover:bg-surface ml-auto grid h-9 w-9 place-items-center rounded-full"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

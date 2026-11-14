@@ -677,7 +677,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
       className={cn(
         'bg-surface text-ink flex overflow-hidden',
         isPage
-          ? 'border-line/70 shadow-soft relative h-[calc(100dvh-6.5rem)] min-h-[26rem] rounded-3xl border sm:h-[calc(100dvh-7.5rem)]'
+          ? 'border-line/70 shadow-soft relative h-[calc(100dvh-9.75rem-env(safe-area-inset-bottom))] min-h-[22rem] rounded-3xl border sm:h-[calc(100dvh-11.25rem-env(safe-area-inset-bottom))] lg:h-[calc(100dvh-7.5rem)] lg:min-h-[26rem]'
           : // Phones: full screen. Larger screens: a window above the corner button.
             'sm:border-line/70 fixed inset-0 z-40 h-[100dvh] animate-[rise-in_200ms_ease-out] sm:inset-auto sm:bottom-20 sm:right-4 sm:z-30 sm:h-[min(40rem,calc(100dvh-7rem))] sm:w-[min(26rem,calc(100vw-2rem))] sm:origin-bottom-right sm:rounded-3xl sm:border sm:shadow-2xl',
       )}
@@ -932,7 +932,7 @@ export function AiAssistant({ workspace }) {
         title={open ? 'Close' : 'Ask AI'}
         className={cn(
           AI_GRADIENT,
-          'group fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-20 h-12 w-12 place-items-center rounded-full text-white shadow-lg shadow-fuchsia-500/30 transition-all duration-200 hover:scale-105 hover:shadow-fuchsia-500/50 active:scale-95 sm:right-5 sm:z-30',
+          'group fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-20 h-12 w-12 place-items-center rounded-full text-white shadow-lg shadow-fuchsia-500/30 transition-all duration-200 hover:scale-105 hover:shadow-fuchsia-500/50 active:scale-95 sm:right-5 sm:z-30 lg:bottom-[max(1.25rem,env(safe-area-inset-bottom))]',
           // On phones the open chat has its own close button.
           open ? 'hidden sm:grid' : 'grid',
         )}

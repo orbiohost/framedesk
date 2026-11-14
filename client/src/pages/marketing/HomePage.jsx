@@ -1,4 +1,5 @@
 import { AiSection } from './home/AiSection.jsx';
+import { AndroidAppSection } from './home/AndroidAppSection.jsx';
 import { ConnectorsShowcase } from './home/ConnectorsShowcase.jsx';
 import { FaqSection } from './home/FaqSection.jsx';
 import { FeatureGrid } from './home/FeatureGrid.jsx';
@@ -18,6 +19,7 @@ export function HomePage() {
       <WorkflowsSection />
       <FeatureGrid />
       <PricingPreview />
+      <AndroidAppSection />
       <FaqSection />
       <FinalCta />
     </main>

@@ -10,7 +10,10 @@ export function AiPage() {
   const { workspace } = useOutletContext();
   const status = useAiStatus(workspace.id);
 
-  if (status.isPending) return <Skeleton className="h-[calc(100dvh-7.5rem)] w-full rounded-3xl" />;
+  if (status.isPending)
+    return (
+      <Skeleton className="h-[calc(100dvh-9.75rem)] w-full rounded-3xl lg:h-[calc(100dvh-7.5rem)]" />
+    );
   if (!status.data?.enabled) {
     return (
       <EmptyState icon={Sparkles} title="The AI assistant isn’t available right now">

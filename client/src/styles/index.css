@@ -65,6 +65,37 @@
     background-attachment: fixed;
   }
 
+  /* App feel on touch screens: no grey flash on tap, no double-tap zoom delay,
+     and no long-press callout on links and buttons. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  @media (pointer: coarse) {
+    a,
+    button,
+    [role='button'] {
+      -webkit-touch-callout: none;
+    }
+  }
+
+  /* Phones and tablets show the app edge to edge on a flat background; the
+     fixed gradient also costs a repaint on every scroll. */
+  @media (max-width: 1023px) {
+    body {
+      background-attachment: scroll;
+    }
+  }
+
+  /* Page changes from the bottom tab bar cross-fade quickly, like a native app;
+     the top bar and tab bar stay put. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 160ms;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
   /* Display type: Plus Jakarta Sans, semibold and slightly tightened. */
   .font-display {
     font-weight: 600;

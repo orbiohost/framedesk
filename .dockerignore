@@ -7,3 +7,4 @@ server/data
 *.png
 *.log
 .git
+!client/public/**/*.png

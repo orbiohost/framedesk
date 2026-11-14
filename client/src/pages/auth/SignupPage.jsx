@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { z } from 'zod';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
+import { GoogleSignIn } from '../../features/auth/GoogleSignIn.jsx';
 import { useSignup } from '../../features/auth/hooks.js';
 import { AuthLayout } from '../../layouts/AuthLayout.jsx';
 import { applyServerFieldErrors } from '../../lib/forms.js';
@@ -18,6 +19,7 @@ const schema = z.object({
 
 export function SignupPage() {
   const signup = useSignup();
+  const location = useLocation();
   const {
     register,
     handleSubmit,
@@ -38,12 +40,17 @@ export function SignupPage() {
       footer={
         <>
           Already have an account?{' '}
-          <Link to="/login" className="text-ink font-medium underline underline-offset-4">
+          <Link
+            to="/login"
+            state={location.state}
+            className="text-ink font-medium underline underline-offset-4"
+          >
             Sign in
           </Link>
         </>
       }
     >
+      <GoogleSignIn label="Sign up with Google" className="mb-5" />
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
         {showFormError && <Alert tone="error">{signup.error.message}</Alert>}
         <TextField

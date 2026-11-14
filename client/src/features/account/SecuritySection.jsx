@@ -7,16 +7,19 @@ import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { applyServerFieldErrors } from '../../lib/forms.js';
-import { useLogoutEverywhere } from '../auth/hooks.js';
+import { useCurrentUser, useLogoutEverywhere } from '../auth/hooks.js';
 import { useChangePassword } from '../users/hooks.js';
 import { SettingsRow, SettingsSection } from './SettingsSection.jsx';
 
+const newPassword = z.string().min(10, 'Use at least 10 characters').max(128);
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, 'Enter your current password'),
-  newPassword: z.string().min(10, 'Use at least 10 characters').max(128),
+  newPassword,
 });
+// Accounts made with Google have no password until they set one.
+const firstPasswordSchema = z.object({ newPassword });
 
-function PasswordForm() {
+function PasswordForm({ hasPassword }) {
   const change = useChangePassword();
   const {
     register,
@@ -24,7 +27,7 @@ function PasswordForm() {
     reset,
     setError,
     formState: { errors },
-  } = useForm({ resolver: zodResolver(passwordSchema) });
+  } = useForm({ resolver: zodResolver(hasPassword ? passwordSchema : firstPasswordSchema) });
 
   function onSubmit(values) {
     change.mutate(values, {
@@ -36,18 +39,20 @@ function PasswordForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-3">
       {change.isSuccess && (
-        <Alert tone="success">Password changed. Your other devices have been signed out.</Alert>
+        <Alert tone="success">Password saved. Your other devices have been signed out.</Alert>
       )}
       {change.error && !change.error.details && <Alert tone="error">{change.error.message}</Alert>}
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextField
-          id="currentPassword"
-          label="Current password"
-          type="password"
-          autoComplete="current-password"
-          error={errors.currentPassword?.message}
-          {...register('currentPassword')}
-        />
+        {hasPassword && (
+          <TextField
+            id="currentPassword"
+            label="Current password"
+            type="password"
+            autoComplete="current-password"
+            error={errors.currentPassword?.message}
+            {...register('currentPassword')}
+          />
+        )}
         <TextField
           id="newPassword"
           label="New password"
@@ -59,7 +64,7 @@ function PasswordForm() {
         />
       </div>
       <Button type="submit" size="sm" loading={change.isPending}>
-        Update password
+        {hasPassword ? 'Update password' : 'Set password'}
       </Button>
     </form>
   );
@@ -90,13 +95,35 @@ function SignOutEverywhere() {
 }
 
 export function SecuritySection() {
+  const { data: user } = useCurrentUser();
+  const hasPassword = user?.hasPassword !== false;
   return (
     <SettingsSection title="Security" description="Keep your account and your clients' work safe.">
       <SettingsRow
         label="Password"
-        description="Changing it signs you out everywhere except this device."
+        description={
+          hasPassword
+            ? 'Changing it signs you out everywhere except this device.'
+            : 'You sign in with Google. Set a password to also sign in with your email.'
+        }
       >
-        <PasswordForm />
+        <PasswordForm hasPassword={hasPassword} />
+      </SettingsRow>
+      <SettingsRow
+        label="Google"
+        description="Sign in with your Google account instead of a password."
+        align="center"
+      >
+        <p className="text-sm">
+          {user?.googleLinked ? (
+            <span className="text-success font-medium">Connected</span>
+          ) : (
+            <span className="text-muted">
+              Not connected. Use &ldquo;Continue with Google&rdquo; on the sign-in page with{' '}
+              {user?.email} to connect it.
+            </span>
+          )}
+        </p>
       </SettingsRow>
       <SettingsRow
         label="Active sessions"

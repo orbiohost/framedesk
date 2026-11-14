@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
+import { GoogleSignIn, googleErrorMessage } from '../../features/auth/GoogleSignIn.jsx';
 import { useLogin } from '../../features/auth/hooks.js';
 import { AuthLayout } from '../../layouts/AuthLayout.jsx';
 
@@ -15,6 +16,10 @@ const schema = z.object({
 
 export function LoginPage() {
   const login = useLogin();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  // Set when Google sign-in sends the person back here with a problem.
+  const googleError = googleErrorMessage(searchParams.get('error'));
   const {
     register,
     handleSubmit,
@@ -28,12 +33,22 @@ export function LoginPage() {
       footer={
         <>
           New to FrameDesk?{' '}
-          <Link to="/signup" className="text-ink font-medium underline underline-offset-4">
+          <Link
+            to="/signup"
+            state={location.state}
+            className="text-ink font-medium underline underline-offset-4"
+          >
             Create an account
           </Link>
         </>
       }
     >
+      {googleError && !login.error && (
+        <Alert tone="error" className="mb-5">
+          {googleError}
+        </Alert>
+      )}
+      <GoogleSignIn className="mb-5" />
       <form
         onSubmit={handleSubmit((values) => login.mutate(values))}
         noValidate

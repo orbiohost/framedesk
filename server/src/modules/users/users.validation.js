@@ -10,7 +10,8 @@ export const setAvatarSchema = z.object({
 
 export const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, 'Enter your current password').max(128),
+    // Empty only when setting a first password on a Google account (checked in the service).
+    currentPassword: z.string().max(128).optional().default(''),
     newPassword: password,
   })
   .refine((data) => data.currentPassword !== data.newPassword, {

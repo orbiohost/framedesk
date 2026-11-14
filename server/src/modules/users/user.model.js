@@ -31,6 +31,9 @@ const userSchema = new Schema(
     // Optional so accounts created through Google login (planned) can exist without one.
     passwordHash: { type: String, select: false },
     googleId: { type: String, unique: true, sparse: true },
+    // false for accounts made with Google that never set a password; older
+    // accounts lack the field and all have one.
+    hasPassword: { type: Boolean, default: true },
     avatarUrl: { type: String, default: null },
     billingProfile: { type: billingProfileSchema, default: () => ({}) },
 

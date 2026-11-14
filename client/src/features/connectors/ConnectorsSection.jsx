@@ -8,6 +8,7 @@ import { chipClassName } from '../../components/ui/ChoiceChips.jsx';
 import { Dialog } from '../../components/ui/Dialog.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
+import { cn } from '../../lib/cn.js';
 import { SettingsRow, SettingsSection } from '../account/SettingsSection.jsx';
 import { WorkspaceAccessPicker } from './WorkspaceAccessPicker.jsx';
 import {
@@ -33,19 +34,30 @@ function useCopy() {
   return { copied, copy };
 }
 
+// The copy button sits beside the text, not over it, so nothing hides under it.
+// One-liners (a URL, a key, a command) wrap on narrow screens; multi-line
+// config keeps its indentation and scrolls sideways instead.
 function CodeBlock({ children, label }) {
   const { copied, copy } = useCopy();
+  const multiline = children.includes('\n');
   return (
-    <div className="border-line/70 bg-subtle/50 relative rounded-2xl border">
-      <pre className="scrollbar-thin overflow-x-auto px-3.5 py-3 pr-12 font-mono text-[12.5px] leading-5">
+    <div className="border-line/70 bg-subtle/50 flex min-w-0 items-start gap-1 rounded-2xl border">
+      <pre
+        className={cn(
+          'min-w-0 flex-1 py-2.5 pl-3.5 font-mono text-[12.5px] leading-5',
+          multiline
+            ? 'scrollbar-thin overflow-x-auto'
+            : 'whitespace-pre-wrap break-all [overflow-wrap:anywhere]',
+        )}
+      >
         {children}
       </pre>
       <Button
         size="icon"
         variant="ghost"
-        className="absolute right-1.5 top-1.5"
-        aria-label={`Copy ${label}`}
-        title="Copy"
+        className={cn('m-1', copied && 'text-success')}
+        aria-label={copied ? 'Copied' : `Copy ${label}`}
+        title={copied ? 'Copied' : 'Copy'}
         onClick={() => copy(children)}
       >
         {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -132,8 +144,13 @@ function SetupGuide({ mcpUrl }) {
   const [active, setActive] = useState(GUIDES[0].id);
   const guide = GUIDES.find((item) => item.id === active);
   return (
-    <div className="space-y-3.5">
-      <div role="tablist" aria-label="AI app" className="flex flex-wrap gap-1.5">
+    <div className="min-w-0 space-y-4">
+      {/* Phones: one swipeable row of chips. Wider screens: they wrap. */}
+      <div
+        role="tablist"
+        aria-label="AI app"
+        className="scrollbar-none -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
+      >
         {GUIDES.map((item) => (
           <button
             key={item.id}
@@ -147,7 +164,10 @@ function SetupGuide({ mcpUrl }) {
           </button>
         ))}
       </div>
-      <ol className="list-decimal space-y-1.5 pl-5 text-sm leading-6" role="tabpanel">
+      <ol
+        className="marker:text-muted list-decimal space-y-2 pl-5 text-sm leading-6"
+        role="tabpanel"
+      >
         {guide.steps().map((step) => (
           <li key={step}>{step}</li>
         ))}
@@ -179,8 +199,8 @@ function ConnectionRow({ connection, workspaces, onEdit }) {
   const isKey = connection.kind === 'api_key';
 
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-      <span className="bg-subtle grid h-9 w-9 shrink-0 place-items-center rounded-xl">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2.5 py-3.5">
+      <span className="bg-subtle grid h-9 w-9 shrink-0 place-items-center self-start rounded-xl sm:self-center">
         {isKey ? (
           <KeyRound className="h-4 w-4" aria-hidden="true" />
         ) : (
@@ -192,12 +212,13 @@ function ConnectionRow({ connection, workspaces, onEdit }) {
           <span className="truncate">{connection.name}</span>
           {connection.clientHost && <Badge tone="muted">{connection.clientHost}</Badge>}
         </p>
-        <p className="text-muted truncate text-xs">
-          {isKey && <span className="font-mono">{connection.keyPreview} · </span>}
+        <p className="text-muted mt-0.5 text-xs leading-5">
+          {isKey && <span className="break-all font-mono">{connection.keyPreview} · </span>}
           {accessLabel(connection, workspaces)} · {lastUsed(connection.lastUsedAt)}
         </p>
       </div>
-      <div className="flex gap-1.5">
+      {/* Phones: under the text, lined up with it. Wider: at the row's end. */}
+      <div className="ml-12 flex w-full gap-1.5 sm:ml-0 sm:w-auto">
         {confirming ? (
           <>
             <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>

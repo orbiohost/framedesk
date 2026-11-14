@@ -105,6 +105,18 @@ const envSchema = z
       .optional()
       .transform((value) => value?.trim() || 'gemini-3.5-flash')
       .pipe(z.string().regex(/^[\w.-]+$/, 'must be a model name like gemini-3.5-flash')),
+    // "Continue with Google" sign-in. Leave both empty to hide the button.
+    // Create an OAuth client (type: Web application) at
+    // https://console.cloud.google.com/apis/credentials with the redirect URI
+    // <CLIENT_URL>/api/auth/google/callback
+    GOOGLE_CLIENT_ID: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    GOOGLE_CLIENT_SECRET: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
     // Optional Redis (e.g. redis://redis:6379) for the request cache and shared
     // rate limits. Leave empty to run without it.
     REDIS_URL: z
@@ -171,6 +183,13 @@ const envSchema = z
         code: 'custom',
         path: ['RAZORPAY_KEY_SECRET'],
         message: 'set both RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, or neither',
+      });
+    }
+    if (Boolean(env.GOOGLE_CLIENT_ID) !== Boolean(env.GOOGLE_CLIENT_SECRET)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['GOOGLE_CLIENT_SECRET'],
+        message: 'set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither',
       });
     }
     if (Boolean(env.S3_ACCESS_KEY_ID) !== Boolean(env.S3_SECRET_ACCESS_KEY)) {

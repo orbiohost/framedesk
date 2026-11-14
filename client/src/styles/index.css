@@ -81,8 +81,16 @@
   textarea:focus-visible,
   select:focus-visible,
   [contenteditable]:focus-visible,
-  input:not([type='checkbox'], [type='radio'], [type='range'], [type='button'], [type='submit'], [type='file'], [type='color']):focus-visible {
-    @apply ring-0 ring-offset-0 outline-none;
+  input:not(
+      [type='checkbox'],
+      [type='radio'],
+      [type='range'],
+      [type='button'],
+      [type='submit'],
+      [type='file'],
+      [type='color']
+    ):focus-visible {
+    @apply outline-none ring-0 ring-offset-0;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -145,6 +153,14 @@
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-line)) transparent;
+  }
+
+  /* Swipeable chip rows: scrollable, with no visible bar. */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }
 

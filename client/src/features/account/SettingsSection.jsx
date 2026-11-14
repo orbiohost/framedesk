@@ -6,7 +6,7 @@ export function SettingsSection({ title, description, action, children, classNam
   return (
     <section className={cn('bg-surface border-line/60 shadow-soft rounded-3xl border', className)}>
       {(title || action) && (
-        <header className="flex flex-wrap items-start justify-between gap-3 px-6 pb-1 pt-5">
+        <header className="flex flex-wrap items-start justify-between gap-3 px-4 pb-1 pt-5 sm:px-6">
           <div>
             <h2 className="text-base font-semibold">{title}</h2>
             {description && <p className="text-muted mt-0.5 text-sm">{description}</p>}
@@ -14,7 +14,7 @@ export function SettingsSection({ title, description, action, children, classNam
           {action}
         </header>
       )}
-      <div className="divide-line/70 divide-y px-6">{children}</div>
+      <div className="divide-line/70 divide-y px-4 sm:px-6">{children}</div>
     </section>
   );
 }

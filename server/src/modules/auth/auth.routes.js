@@ -14,6 +14,12 @@ import {
 const router = Router();
 
 router.get('/csrf', controller.getCsrfToken);
+router.get('/providers', controller.getProviders);
+
+// "Continue with Google": a full-page redirect out and back. Only the start
+// counts toward the limit; the callback is bound to its one-time state.
+router.get('/google', authLimiter, controller.startGoogle);
+router.get('/google/callback', controller.googleCallback);
 
 router.post('/signup', authLimiter, validate({ body: signupSchema }), controller.signup);
 router.post('/login', authLimiter, validate({ body: loginSchema }), controller.login);

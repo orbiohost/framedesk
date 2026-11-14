@@ -1,4 +1,5 @@
 import { issueCsrfToken } from '../../middleware/csrf.js';
+import { baseCookieOptions } from '../../utils/cookies.js';
 import { AppError } from '../../utils/AppError.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -7,6 +8,7 @@ import { toPublicUser } from '../users/users.service.js';
 import { clearAuthCookies, readRefreshToken, setAuthCookies } from './auth.cookies.js';
 import * as authService from './auth.service.js';
 import * as emailVerification from './emailVerification.service.js';
+import * as google from './google.service.js';
 import * as passwordReset from './passwordReset.service.js';
 import * as sessions from './session.service.js';
 
@@ -72,4 +74,52 @@ export const resetPassword = asyncHandler(async (req, res) => {
   await passwordReset.resetPassword(req.body);
   clearAuthCookies(res);
   sendSuccess(res, { reset: true });
+});
+
+// Which ways of signing in this server offers, so the sign-in page knows
+// whether to show "Continue with Google".
+export function getProviders(req, res) {
+  sendSuccess(res, { google: google.googleEnabled });
+}
+
+// Holds state, nonce and PKCE verifier while the person is over at Google.
+// Lax, so it comes back on Google's top-level redirect to the callback.
+const GOOGLE_COOKIE = 'g_oauth';
+const googleCookieOptions = () => ({
+  ...baseCookieOptions(),
+  path: '/api/auth/google',
+  httpOnly: true,
+  sameSite: 'lax',
+});
+
+export function startGoogle(req, res) {
+  const { redirectUrl, pending } = google.startGoogleSignIn({ next: req.query.next });
+  res.cookie(GOOGLE_COOKIE, Buffer.from(JSON.stringify(pending)).toString('base64url'), {
+    ...googleCookieOptions(),
+    maxAge: google.GOOGLE_STATE_TTL_MS,
+  });
+  res.redirect(302, redirectUrl);
+}
+
+function readPendingGoogle(req) {
+  try {
+    return JSON.parse(
+      Buffer.from(req.cookies?.[GOOGLE_COOKIE] ?? '', 'base64url').toString('utf8'),
+    );
+  } catch {
+    return null;
+  }
+}
+
+export const googleCallback = asyncHandler(async (req, res) => {
+  const pending = readPendingGoogle(req);
+  res.clearCookie(GOOGLE_COOKIE, googleCookieOptions());
+  const { redirect, tokens } = await google.finishGoogleSignIn({
+    query: req.query,
+    pending,
+    meta: requestMeta(req),
+  });
+  if (tokens) setAuthCookies(res, tokens);
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, redirect);
 });

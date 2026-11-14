@@ -42,6 +42,7 @@ export async function resetPassword({ token, password }) {
     {
       $set: {
         passwordHash: await hashPassword(password),
+        hasPassword: true,
         failedLoginAttempts: 0,
         lockedUntil: null,
       },

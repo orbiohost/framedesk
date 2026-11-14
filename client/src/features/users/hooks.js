@@ -31,7 +31,12 @@ export function useClearAvatar() {
 }
 
 export function useChangePassword() {
-  return useMutation({ mutationFn: usersApi.changePassword });
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: usersApi.changePassword,
+    // A Google account that just set its first password now has one.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: currentUserKey }),
+  });
 }
 
 export const accountBillingKey = ['account-billing'];

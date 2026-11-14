@@ -7,6 +7,7 @@ export const authApi = {
   logoutEverywhere: () => api.post('/auth/logout-all'),
   verifyEmail: (token) => api.post('/auth/verify-email', { token }),
   resendVerification: () => api.post('/auth/verify-email/resend'),
-  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  forgotPassword: ({ email, captchaToken }) =>
+    api.post('/auth/forgot-password', { email, captchaToken }),
   resetPassword: (input) => api.post('/auth/reset-password', input),
 };

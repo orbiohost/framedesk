@@ -105,6 +105,23 @@ const envSchema = z
       .optional()
       .transform((value) => value?.trim() || 'gemini-3.5-flash')
       .pipe(z.string().regex(/^[\w.-]+$/, 'must be a model name like gemini-3.5-flash')),
+    // Who may sign up. "standard" refuses temporary/disposable inboxes and
+    // domains that can't receive mail. "strict" also refuses free mailboxes
+    // other than Gmail (Outlook, Yahoo, iCloud...), so only Gmail and work email.
+    EMAIL_SIGNUP_MODE: z.enum(['standard', 'strict']).default('standard'),
+    // Extra domains to refuse at signup, comma separated (e.g. "spam.example,junk.test").
+    EMAIL_BLOCKED_DOMAINS: z.string().optional(),
+    // Cloudflare Turnstile (free CAPTCHA) on signup, login and forgot-password.
+    // Create a widget at https://dash.cloudflare.com/?to=/:account/turnstile
+    // for your domain. Leave both empty to turn the check off.
+    TURNSTILE_SITE_KEY: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    TURNSTILE_SECRET_KEY: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
     // "Continue with Google" sign-in. Leave both empty to hide the button.
     // Create an OAuth client (type: Web application) at
     // https://console.cloud.google.com/apis/credentials with the redirect URI
@@ -190,6 +207,13 @@ const envSchema = z
         code: 'custom',
         path: ['GOOGLE_CLIENT_SECRET'],
         message: 'set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither',
+      });
+    }
+    if (Boolean(env.TURNSTILE_SITE_KEY) !== Boolean(env.TURNSTILE_SECRET_KEY)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TURNSTILE_SECRET_KEY'],
+        message: 'set both TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY, or neither',
       });
     }
     if (Boolean(env.S3_ACCESS_KEY_ID) !== Boolean(env.S3_SECRET_ACCESS_KEY)) {

@@ -257,9 +257,21 @@ function StreamingAnswer({ text, done, files, onOpenFile, onFinished }) {
   }, []);
 
   const caughtUp = shown >= text.length;
+  // onFinished is a new function on every parent render, so keep the latest in
+  // a ref instead of an effect dependency, and call it exactly once. (Calling
+  // it again on each re-render saved the answer over and over until React
+  // stopped with "Maximum update depth exceeded".)
+  const onFinishedRef = useRef(onFinished);
   useEffect(() => {
-    if (done && caughtUp) onFinished();
-  }, [done, caughtUp, onFinished]);
+    onFinishedRef.current = onFinished;
+  });
+  const finishedRef = useRef(false);
+  useEffect(() => {
+    if (done && caughtUp && !finishedRef.current) {
+      finishedRef.current = true;
+      onFinishedRef.current();
+    }
+  }, [done, caughtUp]);
 
   // A citation that is only half written would show as raw text; hold it back.
   const visible = text.slice(0, shown).replace(/\[\[[^\]]*\]?$/, '');
@@ -355,6 +367,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   // While an answer is being written: { question, text, status, done, result, error }.
   const [stream, setStream] = useState(null);
+  const committedRef = useRef(null);
   const abortRef = useRef(null);
   const scrollRef = useRef(null);
   const stickToBottom = useRef(true);
@@ -427,6 +440,12 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
 
   const commit = useCallback(
     (result) => {
+      // Each answer is saved into the chat once, however often this is called.
+      if (committedRef.current === result) return;
+      committedRef.current = result;
+      // Clear the live answer first, so it is gone before the cache updates
+      // below re-render the chat.
+      setStream(null);
       const id = result.thread.id;
       queryClient.setQueryData(aiKey(workspace.id, 'thread', id), (current) => ({
         thread: result.thread,
@@ -440,7 +459,6 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
       queryClient.setQueryData(aiKey(workspace.id, 'status'), (current) =>
         current ? { ...current, credits: result.credits } : current,
       );
-      setStream(null);
     },
     [queryClient, workspace.id],
   );

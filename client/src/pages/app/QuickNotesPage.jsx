@@ -1,5 +1,5 @@
 import { ChevronDown, Hash, NotebookPen, X } from 'lucide-react';
-import { useDeferredValue, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
@@ -90,6 +90,25 @@ export function QuickNotesPage() {
   const { workspace } = useOutletContext();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState('');
+  // The header search links here as ?q=<note title>: fill the box, then drop it from the URL.
+  const linkedQuery = params.get('q');
+  const [handledQuery, setHandledQuery] = useState(null);
+  if (linkedQuery !== null && linkedQuery !== handledQuery) {
+    setHandledQuery(linkedQuery);
+    setSearch(linkedQuery);
+  }
+  if (linkedQuery === null && handledQuery !== null) setHandledQuery(null);
+  useEffect(() => {
+    if (linkedQuery === null) return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('q');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [linkedQuery, setParams]);
   const q = useDeferredValue(search.trim());
   const scope = params.get('scope') ?? 'all';
   const projectId = params.get('project') ?? '';

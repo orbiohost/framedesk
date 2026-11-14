@@ -14,7 +14,8 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Dialog, DialogActions } from '../../components/ui/Dialog.jsx';
@@ -345,6 +346,25 @@ export function FolderFilesPane({
   const lifecycle = useFileLifecycle(workspace.id);
   const bulk = useBulkFiles(workspace.id);
   const canTranscribe = useTranscriptionEnabled(workspace.id);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Arrived from the header search with one file picked: open its preview, or
+  // narrow the list to it when it can't be previewed. Then forget the request
+  // so a reload or Back doesn't open it again.
+  const requestedFile =
+    location.state?.openFile?.folderId === folder.id ? location.state.openFile : null;
+  const [handledKey, setHandledKey] = useState(null);
+  if (requestedFile && location.key !== handledKey) {
+    setHandledKey(location.key);
+    if (requestedFile.previewable) setDialog({ type: 'preview', file: requestedFile });
+    else setSearch(requestedFile.name);
+  }
+  useEffect(() => {
+    if (requestedFile) {
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    }
+  }, [requestedFile, navigate, location.pathname, location.search]);
 
   function upload(files) {
     addUploads({

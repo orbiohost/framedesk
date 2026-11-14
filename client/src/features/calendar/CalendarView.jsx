@@ -1,7 +1,7 @@
 import { isSameMonth, startOfMonth } from 'date-fns';
 import { CalendarRange, ChevronLeft, ChevronRight, List, Plus, Rows3 } from 'lucide-react';
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { SegmentedControl } from '../../components/ui/SegmentedControl.jsx';
@@ -63,6 +63,25 @@ export function CalendarView({ workspace, projectId, defaultView = 'month' }) {
   const [selected, setSelected] = useState(() => new Date());
   const [dialog, setDialog] = useState(null);
   const editable = canEdit(workspace);
+  const location = useLocation();
+
+  // The header search sends { focusDate } for an event: jump to its day, then
+  // clear it so Back or a reload doesn't jump again.
+  const focusDate = location.state?.focusDate;
+  const [handledKey, setHandledKey] = useState(null);
+  if (focusDate && location.key !== handledKey) {
+    setHandledKey(location.key);
+    const date = new Date(focusDate);
+    if (!Number.isNaN(date.getTime())) {
+      setCursor(date);
+      setSelected(date);
+    }
+  }
+  useEffect(() => {
+    if (focusDate) {
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    }
+  }, [focusDate, navigate, location.pathname, location.search]);
 
   const range = visibleRange(view, cursor);
   const { data: items, isError, error } = useCalendarFeed(workspace.id, { ...range, projectId });

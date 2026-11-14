@@ -9,13 +9,14 @@ const GOOGLE_ERRORS = {
   google_unverified: 'Your Google account has no verified email address, so it can’t be used here.',
   google_failed: 'We couldn’t sign you in with Google. Please try again.',
   account_suspended: 'This account has been suspended.',
+  email_not_allowed: 'That email can’t be used to sign up. Please use Gmail or your work email.',
 };
 
 export function googleErrorMessage(code) {
   return code ? (GOOGLE_ERRORS[code] ?? null) : null;
 }
 
-function useAuthProviders() {
+export function useAuthProviders() {
   return useQuery({
     queryKey: ['auth-providers'],
     queryFn: () => api.get('/auth/providers'),

@@ -1,10 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useLocation } from 'react-router-dom';
 import { z } from 'zod';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
+import { Captcha, useCaptcha } from '../../features/auth/Captcha.jsx';
 import { GoogleSignIn } from '../../features/auth/GoogleSignIn.jsx';
 import { useSignup } from '../../features/auth/hooks.js';
 import { AuthLayout } from '../../layouts/AuthLayout.jsx';
@@ -19,6 +21,8 @@ const schema = z.object({
 
 export function SignupPage() {
   const signup = useSignup();
+  const captcha = useCaptcha();
+  const [captchaMissing, setCaptchaMissing] = useState(false);
   const location = useLocation();
   const {
     register,
@@ -28,7 +32,17 @@ export function SignupPage() {
   } = useForm({ resolver: zodResolver(schema) });
 
   function onSubmit(values) {
-    signup.mutate(values, { onError: (error) => applyServerFieldErrors(error, setError) });
+    if (!captcha.ready) return setCaptchaMissing(true);
+    setCaptchaMissing(false);
+    signup.mutate(
+      { ...values, captchaToken: captcha.token },
+      {
+        onError: (error) => {
+          captcha.reset();
+          applyServerFieldErrors(error, setError);
+        },
+      },
+    );
   }
 
   const showFormError = signup.error && !signup.error.details;
@@ -53,6 +67,9 @@ export function SignupPage() {
       <GoogleSignIn label="Sign up with Google" className="mb-5" />
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
         {showFormError && <Alert tone="error">{signup.error.message}</Alert>}
+        {captchaMissing && !captcha.ready && (
+          <Alert tone="error">Please wait for the security check to finish.</Alert>
+        )}
         <TextField
           id="name"
           label="Your name"
@@ -85,6 +102,7 @@ export function SignupPage() {
           error={errors.workspaceName?.message}
           {...register('workspaceName')}
         />
+        <Captcha {...captcha.props} />
         <Button type="submit" className="w-full" loading={signup.isPending}>
           Create account
         </Button>

@@ -1,10 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
+import { Captcha, useCaptcha } from '../../features/auth/Captcha.jsx';
 import { GoogleSignIn, googleErrorMessage } from '../../features/auth/GoogleSignIn.jsx';
 import { useLogin } from '../../features/auth/hooks.js';
 import { AuthLayout } from '../../layouts/AuthLayout.jsx';
@@ -16,6 +18,8 @@ const schema = z.object({
 
 export function LoginPage() {
   const login = useLogin();
+  const captcha = useCaptcha();
+  const [captchaMissing, setCaptchaMissing] = useState(false);
   const location = useLocation();
   const [searchParams] = useSearchParams();
   // Set when Google sign-in sends the person back here with a problem.
@@ -50,11 +54,21 @@ export function LoginPage() {
       )}
       <GoogleSignIn className="mb-5" />
       <form
-        onSubmit={handleSubmit((values) => login.mutate(values))}
+        onSubmit={handleSubmit((values) => {
+          if (!captcha.ready) return setCaptchaMissing(true);
+          setCaptchaMissing(false);
+          login.mutate(
+            { ...values, captchaToken: captcha.token },
+            { onError: () => captcha.reset() },
+          );
+        })}
         noValidate
         className="space-y-5"
       >
         {login.error && <Alert tone="error">{login.error.message}</Alert>}
+        {captchaMissing && !captcha.ready && (
+          <Alert tone="error">Please wait for the security check to finish.</Alert>
+        )}
         <TextField
           id="email"
           label="Email"
@@ -79,6 +93,7 @@ export function LoginPage() {
             Forgot your password?
           </Link>
         </div>
+        <Captcha {...captcha.props} />
         <Button type="submit" className="w-full" loading={login.isPending}>
           Sign in
         </Button>

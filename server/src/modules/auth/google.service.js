@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
+import { checkSignupEmail } from '../../utils/emailPolicy.js';
 import { randomToken, safeEqual } from '../../utils/crypto.js';
 import { logger } from '../../utils/logger.js';
 import { User } from '../users/user.model.js';
@@ -161,6 +162,11 @@ async function findOrCreateUser(profile) {
     }
     await User.updateOne({ _id: existing._id }, { $set: set });
     return { user: await User.findById(existing._id), created: false };
+  }
+
+  // New account: Google proved the inbox is real, so only the domain rules apply.
+  if (await checkSignupEmail(profile.email, { skipDns: true })) {
+    throw new GoogleSignInError('email_not_allowed', 'This email domain is not allowed');
   }
 
   const user = await User.create({

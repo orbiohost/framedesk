@@ -1,5 +1,6 @@
 import { AUTH } from '../../config/constants.js';
 import { AppError } from '../../utils/AppError.js';
+import { checkSignupEmail } from '../../utils/emailPolicy.js';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '../../utils/password.js';
 import { minutesFromNow } from '../../utils/time.js';
 import { User } from '../users/user.model.js';
@@ -38,6 +39,13 @@ async function registerSuccessfulLogin(userId) {
 }
 
 export async function signup({ name, email, password, workspaceName }, meta) {
+  const refused = await checkSignupEmail(email);
+  if (refused) {
+    throw AppError.badRequest(refused.message, 'EMAIL_NOT_ALLOWED', [
+      { field: 'email', message: refused.message },
+    ]);
+  }
+
   if (await User.exists({ email })) {
     throw AppError.conflict('An account with this email already exists', 'EMAIL_TAKEN');
   }

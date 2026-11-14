@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/authenticate.js';
+import { requireCaptcha } from '../../middleware/captcha.js';
 import { authLimiter, emailLimiter } from '../../middleware/rateLimit.js';
 import { validate } from '../../middleware/validate.js';
 import * as controller from './auth.controller.js';
@@ -21,8 +22,8 @@ router.get('/providers', controller.getProviders);
 router.get('/google', authLimiter, controller.startGoogle);
 router.get('/google/callback', controller.googleCallback);
 
-router.post('/signup', authLimiter, validate({ body: signupSchema }), controller.signup);
-router.post('/login', authLimiter, validate({ body: loginSchema }), controller.login);
+router.post('/signup', authLimiter, requireCaptcha, validate({ body: signupSchema }), controller.signup);
+router.post('/login', authLimiter, requireCaptcha, validate({ body: loginSchema }), controller.login);
 router.post('/refresh', controller.refresh);
 router.post('/logout', controller.logout);
 router.post('/logout-all', authenticate, controller.logoutEverywhere);
@@ -38,6 +39,7 @@ router.post('/verify-email/resend', authenticate, emailLimiter, controller.resen
 router.post(
   '/forgot-password',
   emailLimiter,
+  requireCaptcha,
   validate({ body: forgotPasswordSchema }),
   controller.forgotPassword,
 );

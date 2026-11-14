@@ -1,4 +1,5 @@
 import { issueCsrfToken } from '../../middleware/csrf.js';
+import { captchaSiteKey } from '../../middleware/captcha.js';
 import { baseCookieOptions } from '../../utils/cookies.js';
 import { AppError } from '../../utils/AppError.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
@@ -79,7 +80,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
 // Which ways of signing in this server offers, so the sign-in page knows
 // whether to show "Continue with Google".
 export function getProviders(req, res) {
-  sendSuccess(res, { google: google.googleEnabled });
+  sendSuccess(res, { google: google.googleEnabled, captchaSiteKey });
 }
 
 // Holds state, nonce and PKCE verifier while the person is over at Google.

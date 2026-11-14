@@ -23,6 +23,7 @@ import { publicShareRouter } from './projectShare/projectShare.routes.js';
 import projectsRoutes from './projects/projects.routes.js';
 import supportRoutes from './support/support.routes.js';
 import quickNotesRoutes from './quickNotes/quickNotes.routes.js';
+import searchRoutes from './search/search.routes.js';
 import tasksRoutes from './tasks/tasks.routes.js';
 import transcriptsRoutes from './transcripts/transcripts.routes.js';
 import avatarsRoutes from './users/avatars.routes.js';
@@ -70,5 +71,6 @@ mountWorkspaceFeature('upgrade-requests', upgradeRequestsRoutes);
 mountWorkspaceFeature('checkout', checkoutRoutes);
 mountWorkspaceFeature('backups', workspaceBackupsRouter);
 mountWorkspaceFeature('ai', aiRoutes);
+mountWorkspaceFeature('search', searchRoutes);
 
 apiRouter.use('/workspaces', workspacesRoutes);

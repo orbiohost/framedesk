@@ -36,6 +36,14 @@ export function toNoteDto(note, viewerId) {
     projects: (note.projectIds ?? []).map((project) => toRef(project, 'title')).filter(Boolean),
     author,
     isMine: authorId === String(viewerId),
+    source: note.source
+      ? {
+          kind: note.source.kind,
+          threadId: String(note.source.threadId),
+          messageId: String(note.source.messageId),
+          question: note.source.question ?? null,
+        }
+      : null,
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
   };
@@ -101,10 +109,12 @@ export async function listNotes(workspaceId, userId, { q, projectId, tag, scope 
   return notes.map((note) => toNoteDto(note, userId));
 }
 
-export async function createNote(workspaceId, userId, input) {
+// source: only from server code (an AI answer being saved), never a request body.
+export async function createNote(workspaceId, userId, input, { source = null } = {}) {
   await assertProjectsExist(workspaceId, input.projectIds);
   const note = await QuickNote.create({
     ...withoutUndefined(input),
+    source,
     tags: hashtagsIn(input.body),
     workspaceId,
     createdBy: userId,
@@ -123,6 +133,40 @@ export async function updateNote(workspaceId, userId, noteId, input) {
     { runValidators: true },
   );
   return getNote(workspaceId, userId, noteId);
+}
+
+// Notes picked with "#" in the AI chat: each must exist and be readable by the asker.
+export async function loadNotesForAi(workspaceId, userId, noteIds) {
+  const unique = [...new Set((noteIds ?? []).map(String))];
+  if (unique.length === 0) return [];
+  const notes = await QuickNote.find({
+    workspaceId,
+    _id: { $in: unique },
+    ...visibleTo(userId),
+  })
+    .select('title body updatedAt projectIds')
+    .populate({ path: 'projectIds', select: 'title', match: { workspaceId } })
+    .lean();
+  if (notes.length !== unique.length) {
+    throw AppError.notFound(
+      'A note you picked was deleted or you can’t open it. Remove it and try again.',
+      'NOTE_NOT_FOUND',
+    );
+  }
+  const order = new Map(unique.map((id, index) => [id, index]));
+  return notes.sort((a, b) => order.get(String(a._id)) - order.get(String(b._id)));
+}
+
+// Which answers in a chat this person already saved: { messageId: noteId }.
+export async function savedAnswersIn(workspaceId, userId, threadId) {
+  const rows = await QuickNote.find({
+    workspaceId,
+    createdBy: userId,
+    'source.threadId': threadId,
+  })
+    .select('source.messageId')
+    .lean();
+  return Object.fromEntries(rows.map((row) => [String(row.source.messageId), String(row._id)]));
 }
 
 export async function deleteNote(workspaceId, userId, noteId) {

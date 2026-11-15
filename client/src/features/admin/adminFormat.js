@@ -5,7 +5,8 @@ export const PLAN_NAMES = { starter: 'Starter', studio: 'Studio', agency: 'Agenc
 export const PLAN_OPTIONS = Object.entries(PLAN_NAMES).map(([value, label]) => ({ value, label }));
 
 export const BILLING_STATUS = {
-  trialing: { label: 'Trial', tone: 'neutral' },
+  free: { label: 'Free plan', tone: 'neutral' },
+  trialing: { label: 'Trial (old)', tone: 'neutral' },
   active: { label: 'Active', tone: 'success' },
   past_due: { label: 'Ended, in grace', tone: 'accent' },
   read_only: { label: 'Read-only', tone: 'danger' },

@@ -1,11 +1,13 @@
 import { addDays, differenceInCalendarDays, format, startOfDay } from 'date-fns';
-import { ArrowRight, Flag, Pencil } from 'lucide-react';
+import { ArrowRight, Flag, Loader2, Pencil, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { Card } from '../../../components/ui/Card.jsx';
 import { Skeleton } from '../../../components/ui/Skeleton.jsx';
 import { itemLabel } from '../../../features/calendar/calendarMeta.js';
+import { BUSY_STATUSES, useProjectBrief } from '../../../features/briefs/hooks.js';
 import { useCalendarFeed } from '../../../features/calendar/hooks.js';
+import { useMoodboards } from '../../../features/moodboards/hooks.js';
 import { FileMarks } from '../../../features/files/FileRow.jsx';
 import { fileTint } from '../../../features/files/FileThumbnail.jsx';
 import { FileTypeIcon } from '../../../features/files/FileTypeIcon.jsx';
@@ -337,6 +339,103 @@ function SummaryCard({ project }) {
   );
 }
 
+// What the AI made of the project's "Notes & Briefs" folder, in short.
+function AiBriefCard({ workspace, project }) {
+  const { data: brief, isPending, isError } = useProjectBrief(workspace.id, project.id);
+  if (isError) return null;
+  const to = brief
+    ? `/w/${workspace.id}/projects/${project.id}/files?folder=${brief.folder.id}`
+    : undefined;
+  const busy = brief && brief.aiEnabled && BUSY_STATUSES.includes(brief.status);
+  const openActions = brief?.actionItems.filter((item) => !item.taskCreated).length ?? 0;
+  return (
+    <Section
+      title="AI brief"
+      to={to}
+      linkLabel="Open"
+      action={
+        busy && (
+          <span className="text-muted inline-flex items-center gap-1 text-xs">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Updating
+          </span>
+        )
+      }
+    >
+      {isPending ? (
+        <div className="space-y-2 px-5 py-4">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+      ) : brief.generatedAt && brief.overview ? (
+        <div className="space-y-2 px-5 py-4">
+          {brief.title && <p className="font-display text-lg leading-snug">{brief.title}</p>}
+          <p className="text-sm leading-6">{brief.overview}</p>
+          <p className="text-muted text-xs">
+            {brief.decisions.length} decisions · {brief.actionItems.length} action items
+            {openActions > 0 && ` (${openActions} not yet tasks)`} · {brief.openQuestions.length}{' '}
+            open questions
+          </p>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3 px-5 py-4">
+          <Sparkles className="text-accent mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p className="text-muted text-sm leading-6">
+            {brief.progress.total > 0
+              ? 'The AI is reading the notes in Notes & Briefs. The brief shows up here shortly.'
+              : `Drop handwritten notes, voice notes or meeting recordings into ${brief.folder.name} and the AI writes a clear brief of decisions, action items and meeting notes.`}
+          </p>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// Moodboards linked to this project.
+function MoodboardsCard({ workspace, project }) {
+  const { data: boards = [], isPending } = useMoodboards(workspace.id, { projectId: project.id });
+  const base = `/w/${workspace.id}/moodboards`;
+  return (
+    <Section
+      title="Moodboards"
+      count={boards.length}
+      to={`${base}?project=${project.id}`}
+      linkLabel="All"
+      action={
+        <Link
+          to={`${base}?new=1&project=${project.id}`}
+          className="text-muted hover:text-ink text-sm font-medium"
+        >
+          New
+        </Link>
+      }
+    >
+      {isPending ? (
+        <div className="px-5 py-4">
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      ) : boards.length === 0 ? (
+        <Quiet>No moodboards yet. Collect the look and feel, then get an AI brief from it.</Quiet>
+      ) : (
+        <ul className="divide-line/60 divide-y">
+          {boards.slice(0, LIST_LENGTH).map((board) => (
+            <li key={board.id}>
+              <Link
+                to={`${base}/${board.id}`}
+                className="hover:bg-subtle/60 flex items-center gap-3 px-5 py-3 text-sm"
+              >
+                <span className="min-w-0 flex-1 truncate font-medium">{board.title}</span>
+                <span className="text-muted shrink-0 text-xs">
+                  {board.counts.items} items{board.analysed ? ' · AI brief' : ''}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
 export function ProjectOverviewPage() {
   const { workspace, project, editProject } = useOutletContext();
   const filesQuery = useFiles(workspace.id, { projectId: project.id });
@@ -346,6 +445,8 @@ export function ProjectOverviewPage() {
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div className="space-y-6">
         <BriefCard project={project} canEdit={canManage(workspace)} onEdit={editProject} />
+        <AiBriefCard workspace={workspace} project={project} />
+        <MoodboardsCard workspace={workspace} project={project} />
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <OpenTasksCard workspace={workspace} project={project} />
           <RecentFilesCard

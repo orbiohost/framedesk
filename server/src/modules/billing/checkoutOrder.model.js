@@ -1,6 +1,10 @@
 import mongoose, { Schema } from 'mongoose';
 import { workspaceScopePlugin } from '../../utils/workspaceScope.plugin.js';
-import { billedToSnapshotSchema, taxSnapshotSchema } from './payment.model.js';
+import {
+  billedToSnapshotSchema,
+  discountSnapshotSchema,
+  taxSnapshotSchema,
+} from './payment.model.js';
 
 export const CHECKOUT_STATUSES = ['created', 'paid', 'failed'];
 
@@ -21,6 +25,8 @@ const checkoutOrderSchema = new Schema(
     packCode: { type: String, default: null },
     credits: { type: Number, min: 0, default: null },
     offerCode: { type: String, default: null },
+    listAmount: { type: Number, min: 0, default: null },
+    discount: { type: discountSnapshotSchema, default: null },
     taxableAmount: { type: Number, required: true, min: 0 },
     tax: { type: taxSnapshotSchema, default: null },
     // Rupees, GST included; amountPaise is the same figure as Razorpay sees it.

@@ -1,4 +1,5 @@
 import { AUTH } from '../../config/constants.js';
+import { rewardReferrer } from '../referrals/referrals.service.js';
 import { AppError } from '../../utils/AppError.js';
 import { randomToken, sha256 } from '../../utils/crypto.js';
 import { deliverEmailInBackground } from '../../utils/mailer.js';
@@ -34,6 +35,8 @@ export async function verifyEmail(token) {
   if (!user) {
     throw AppError.badRequest('This verification link is invalid or has expired', 'TOKEN_INVALID');
   }
+  // A friend who joined through a referral link now counts for whoever invited them.
+  await rewardReferrer(user._id);
   return user;
 }
 

@@ -26,6 +26,7 @@ const aiSettingsSchema = new Schema(
     // Usage limits per plan, like Claude's: credits per rolling 5-hour session
     // and per 7-day week. { starter: { session: 30, weekly: 200 }, ... }
     planLimits: { type: Schema.Types.Mixed, default: () => ({}) },
+    freeLimits: { type: Schema.Types.Mixed, default: null },
     trialLimits: { type: Schema.Types.Mixed, default: null },
     // Price (rupees, before GST) to reset the limits now, per plan and for the trial.
     resetPrices: { type: Schema.Types.Mixed, default: () => ({}) },

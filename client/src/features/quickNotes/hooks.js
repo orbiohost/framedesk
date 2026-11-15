@@ -11,11 +11,12 @@ function basePath(workspaceId) {
 }
 
 // params: { q, projectId, tag, scope: 'all' | 'mine' | 'shared' }
-export function useQuickNotes(workspaceId, params = {}) {
+export function useQuickNotes(workspaceId, params = {}, { enabled = true } = {}) {
   return useQuery({
     queryKey: featureKey(workspaceId, FEATURE, 'list', params),
     queryFn: async () => (await api.get(`${basePath(workspaceId)}${toQueryString(params)}`)).notes,
     placeholderData: (previous) => previous,
+    enabled: enabled && Boolean(workspaceId),
   });
 }
 

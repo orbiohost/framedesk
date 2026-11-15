@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { objectId, optionalObjectId, optionalText } from '../../utils/zodHelpers.js';
+import {
+  objectId,
+  optionalObjectId,
+  optionalText,
+  reminderOffsets,
+} from '../../utils/zodHelpers.js';
 import { EVENT_TYPES } from './event.model.js';
 
 const MAX_RANGE_DAYS = 100;
@@ -16,6 +21,7 @@ const eventFields = {
   assigneeIds: z.array(objectId).max(50).optional(),
   location: optionalText(200),
   notes: optionalText(5000),
+  reminders: reminderOffsets,
 };
 
 function endsAfterStart(event) {

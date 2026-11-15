@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
@@ -14,6 +14,7 @@ import { parseTagList } from '../../lib/format.js';
 import { applyServerFieldErrors } from '../../lib/forms.js';
 import { PRIORITY_OPTIONS } from '../../lib/priorities.js';
 import { clientOptions, useClients } from '../clients/hooks.js';
+import { ReminderField } from '../notifications/ReminderField.jsx';
 import { useSaveProject } from './hooks.js';
 import { PROJECT_STATUS_OPTIONS, PROJECT_TYPE_OPTIONS } from './projectMeta.js';
 
@@ -29,6 +30,7 @@ const schema = z
     budget: z.string().regex(/^\d*$/, 'Whole rupees only, no commas'),
     tags: z.string().max(400),
     description: z.string().max(10000),
+    reminders: z.array(z.number()).nullable(),
   })
   .refine((values) => !values.startDate || !values.dueDate || values.dueDate >= values.startDate, {
     path: ['dueDate'],
@@ -47,6 +49,7 @@ function toFormValues(project, defaults) {
     budget: typeof project?.budget === 'number' ? String(project.budget) : '',
     tags: project?.tags.join(', ') ?? '',
     description: project?.description ?? '',
+    reminders: project?.reminders ?? null,
   };
 }
 
@@ -71,6 +74,7 @@ function ProjectForm({ workspaceId, project, defaults, onDone }) {
     setError,
     formState: { errors },
   } = useForm({ resolver: zodResolver(schema), defaultValues: toFormValues(project, defaults) });
+  const dueDate = useWatch({ control, name: 'dueDate' });
 
   function onSubmit(values) {
     save.mutate(
@@ -121,6 +125,15 @@ function ProjectForm({ workspaceId, project, defaults, onDone }) {
           {...register('dueDate')}
         />
       </div>
+      {dueDate && (
+        <Controller
+          control={control}
+          name="reminders"
+          render={({ field }) => (
+            <ReminderField kind="project" value={field.value} onChange={field.onChange} />
+          )}
+        />
+      )}
       <TextAreaField
         id="project-description"
         dictationWorkspaceId={workspaceId}

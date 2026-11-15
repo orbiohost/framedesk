@@ -67,6 +67,7 @@ async function subscriptionMetrics(now) {
     totalWorkspaces: allWorkspaces.length,
     byStatus,
     paying,
+    free: byStatus.free ?? 0,
     trialing: byStatus.trialing ?? 0,
     trialsEndingSoon,
     canceled30,

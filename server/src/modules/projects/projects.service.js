@@ -1,8 +1,11 @@
 import { AppError } from '../../utils/AppError.js';
 import { containsInsensitive, withoutUndefined } from '../../utils/objects.js';
 import { assertClientExists } from '../clients/clients.service.js';
+import { deleteBriefForProject } from '../briefs/briefs.service.js';
+import { unlinkProjectFromMoodboards } from '../moodboards/moodboards.service.js';
 import { Event } from '../calendar/event.model.js';
 import { Folder } from '../files/folder.model.js';
+import { ensureProjectFolders } from '../files/folders.service.js';
 import { purgeFiles, unlinkFilesFromProject } from '../files/files.service.js';
 import { unlinkProject as unlinkNotesFromProject } from '../quickNotes/quickNotes.service.js';
 import { Task } from '../tasks/task.model.js';
@@ -27,6 +30,7 @@ export function toProjectDto(project, taskCounts) {
     budget: project.budget,
     description: project.description,
     tags: project.tags,
+    reminders: project.reminders ?? null,
     tasks: { total: taskCounts?.total ?? 0, done: taskCounts?.done ?? 0 },
     // Whether a share link is live. The link itself comes from the share settings route.
     sharing: project.share?.enabled
@@ -97,6 +101,9 @@ export async function createProject(workspaceId, userId, input) {
     workspaceId,
     createdBy: userId,
   });
+  // Its folders are ready the moment it exists (Notes & Briefs plus the
+  // workspace's default list from the project settings).
+  await ensureProjectFolders(workspaceId, project._id);
   return getProject(workspaceId, project._id);
 }
 
@@ -125,6 +132,8 @@ export async function deleteProject(workspaceId, projectId) {
     Event.deleteMany({ workspaceId, projectId: project._id }),
     unlinkNotesFromProject(workspaceId, project._id),
     unlinkFilesFromProject(workspaceId, project._id),
+    deleteBriefForProject(workspaceId, project._id),
+    unlinkProjectFromMoodboards(workspaceId, project._id),
   ]);
   await Project.deleteOne({ _id: project._id, workspaceId });
 }

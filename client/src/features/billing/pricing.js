@@ -26,7 +26,7 @@ export function storageLabel(plan) {
   return plan.storageGB >= 1024 ? `${plan.storageGB / 1024} TB` : `${plan.storageGB} GB`;
 }
 
-// Trial and plan-less workspaces see upgrade prompts; paying ones don't.
+// Free, trial and plan-less workspaces see upgrade prompts; paying ones don't.
 export function needsUpgrade(workspace) {
-  return ['trialing', 'none', 'read_only', 'canceled'].includes(workspace.billing.status);
+  return ['free', 'trialing', 'none', 'read_only', 'canceled'].includes(workspace.billing.status);
 }

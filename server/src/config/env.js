@@ -193,6 +193,23 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value || undefined),
+
+    // Web push, for reminders on phones and desktops. Generate a pair once
+    // with `npx web-push generate-vapid-keys`. Leave both empty to send
+    // reminders by email only.
+    VAPID_PUBLIC_KEY: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    VAPID_PRIVATE_KEY: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    // How push services can reach the sender (mailto: or https:). Defaults to CLIENT_URL.
+    VAPID_SUBJECT: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
   })
   .superRefine((env, ctx) => {
     if (Boolean(env.RAZORPAY_KEY_ID) !== Boolean(env.RAZORPAY_KEY_SECRET)) {
@@ -207,6 +224,13 @@ const envSchema = z
         code: 'custom',
         path: ['GOOGLE_CLIENT_SECRET'],
         message: 'set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither',
+      });
+    }
+    if (Boolean(env.VAPID_PUBLIC_KEY) !== Boolean(env.VAPID_PRIVATE_KEY)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['VAPID_PRIVATE_KEY'],
+        message: 'set both VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, or neither',
       });
     }
     if (Boolean(env.TURNSTILE_SITE_KEY) !== Boolean(env.TURNSTILE_SECRET_KEY)) {

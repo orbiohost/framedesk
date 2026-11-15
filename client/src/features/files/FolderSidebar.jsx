@@ -5,6 +5,7 @@ import {
   FolderOpen,
   FolderPlus,
   Lock,
+  NotebookPen,
   Trash2,
   X,
 } from 'lucide-react';
@@ -23,6 +24,8 @@ function TreeItem({
   label,
   count,
   tone,
+  // The Notes & Briefs folder: tinted even when not open, so it stands out.
+  featured = false,
   locked,
   menuItems,
   roomy,
@@ -62,7 +65,9 @@ function TreeItem({
             ? tone === 'danger'
               ? 'bg-danger/10 text-ink ring-danger/25 ring-1'
               : 'bg-accent/15 text-ink ring-accent/30 ring-1'
-            : 'text-muted hover:bg-surface/80 hover:text-ink',
+            : featured
+              ? 'bg-accent/[0.07] text-ink ring-accent/20 hover:bg-accent/15 ring-1'
+              : 'text-muted hover:bg-surface/80 hover:text-ink',
         )}
       >
         {/* The bar marks the open folder even where the tint is faint. */}
@@ -89,13 +94,18 @@ function TreeItem({
           <Icon
             className={cn(
               'h-4 w-4 shrink-0',
-              isActive && (tone === 'danger' ? 'text-danger' : 'text-accent'),
+              (isActive || featured) && (tone === 'danger' ? 'text-danger' : 'text-accent'),
             )}
             fill={tone !== 'danger' && isActive ? 'currentColor' : 'none'}
             fillOpacity={0.2}
             aria-hidden="true"
           />
-          <span className="min-w-0 flex-1 truncate">{label}</span>
+          <span className={cn('min-w-0 flex-1 truncate', featured && 'font-medium')}>{label}</span>
+          {featured && (
+            <span className="bg-accent text-accent-ink rounded-full px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide">
+              AI
+            </span>
+          )}
           {locked && (
             <Lock className="text-muted h-3 w-3 shrink-0" aria-label="Restricted to some people" />
           )}
@@ -164,8 +174,11 @@ export function FolderTree({
           isActive={selection === folder.id}
           depth={folder.depth}
           onClick={() => onSelect(folder.id)}
-          icon={selection === folder.id ? FolderOpen : Folder}
+          icon={
+            folder.kind === 'briefs' ? NotebookPen : selection === folder.id ? FolderOpen : Folder
+          }
           label={folder.name}
+          featured={folder.kind === 'briefs'}
           count={folder.fileCount}
           locked={folder.locked}
           roomy={roomy}
@@ -201,7 +214,7 @@ export function MobileFolderBar({ folders, selection, canEdit, onSelect, onCreat
   const dialogRef = useRef(null);
   const current = folders.find((folder) => folder.id === selection);
   const isTrash = selection === 'trash';
-  const CurrentIcon = isTrash ? Trash2 : FolderOpen;
+  const CurrentIcon = isTrash ? Trash2 : current?.kind === 'briefs' ? NotebookPen : FolderOpen;
 
   useEffect(() => {
     const dialog = dialogRef.current;

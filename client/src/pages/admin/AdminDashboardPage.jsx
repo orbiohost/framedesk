@@ -28,7 +28,7 @@ function KeyNumbers({ metrics }) {
       <StatTile
         label="Paying workspaces"
         value={subscriptions.paying}
-        detail={`${subscriptions.trialing} on trial · ${subscriptions.trialsEndingSoon} ending in 3 days`}
+        detail={`${subscriptions.free ?? 0} on the free plan${subscriptions.trialing ? ` · ${subscriptions.trialing} on an old trial` : ''}`}
         to="/admin/subscriptions"
       />
       <StatTile

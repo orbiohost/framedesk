@@ -98,8 +98,8 @@ export function Captcha({ siteKey, onToken, resetCount }) {
       <div ref={containerRef} className="min-h-[65px]" />
       {failed && (
         <p className="text-danger mt-1 text-sm">
-          The security check couldn’t load. Check your connection or turn off content blockers,
-          then reload the page.
+          The security check couldn’t load. Check your connection or turn off content blockers, then
+          reload the page.
         </p>
       )}
     </div>

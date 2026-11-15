@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { PRIORITIES } from '../../config/constants.js';
-import { objectId, optionalDate, optionalObjectId, optionalText } from '../../utils/zodHelpers.js';
+import {
+  objectId,
+  optionalDate,
+  optionalObjectId,
+  optionalText,
+  reminderOffsets,
+} from '../../utils/zodHelpers.js';
 import { TASK_STATUSES } from './task.model.js';
 
 const checklistItem = z.object({
@@ -17,6 +23,7 @@ const taskFields = {
   status: z.enum(TASK_STATUSES).optional(),
   priority: z.enum(PRIORITIES).optional(),
   checklist: z.array(checklistItem).max(100).optional(),
+  reminders: reminderOffsets,
 };
 
 export const taskParamsSchema = z.object({ taskId: objectId });

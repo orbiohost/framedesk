@@ -1,5 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 import { workspaceScopePlugin } from '../../utils/workspaceScope.plugin.js';
+import { discountSnapshotSchema } from './payment.model.js';
 
 export const UPGRADE_REQUEST_STATUSES = ['open', 'activated', 'dismissed'];
 
@@ -13,6 +14,9 @@ const upgradeRequestSchema = new Schema(
     // Rupees, quoted by the server at request time (offer included).
     quotedAmount: { type: Number, required: true, min: 0 },
     offerCode: { type: String, default: null },
+    // The price before the discount, and the discount (coupon or referral).
+    listAmount: { type: Number, min: 0, default: null },
+    discount: { type: discountSnapshotSchema, default: null },
     status: { type: String, enum: UPGRADE_REQUEST_STATUSES, default: 'open' },
     activatedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     activatedAt: { type: Date, default: null },

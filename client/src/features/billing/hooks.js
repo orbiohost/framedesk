@@ -57,19 +57,27 @@ export function useConfirmCheckout(workspaceId) {
   });
 }
 
-// selection: { planCode, interval } for a plan, or { packCode } for AI credits.
+// selection: { planCode, interval, couponCode? } for a plan, or { packCode } for AI credits.
 export function useCheckoutQuote(
   workspaceId,
-  { planCode, interval, packCode, product },
+  { planCode, interval, packCode, product, couponCode },
   { enabled = true } = {},
 ) {
   const query = product
     ? `product=${encodeURIComponent(product)}`
     : packCode
       ? `packCode=${encodeURIComponent(packCode)}`
-      : `planCode=${encodeURIComponent(planCode ?? '')}&interval=${interval}`;
+      : `planCode=${encodeURIComponent(planCode ?? '')}&interval=${interval}` +
+        (couponCode ? `&couponCode=${encodeURIComponent(couponCode)}` : '');
   return useQuery({
-    queryKey: featureKey(workspaceId, 'checkout-quote', product ?? packCode ?? planCode, interval),
+    queryKey: featureKey(
+      workspaceId,
+      'checkout-quote',
+      product ?? packCode ?? planCode,
+      interval,
+      couponCode ?? null,
+    ),
+    retry: (count, error) => error?.code !== 'COUPON_INVALID' && count < 2,
     queryFn: async () =>
       (await api.get(`/workspaces/${workspaceId}/checkout/quote?${query}`)).quote,
     enabled: enabled && Boolean(planCode || packCode || product),

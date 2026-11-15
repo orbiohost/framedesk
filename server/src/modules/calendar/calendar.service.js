@@ -33,6 +33,7 @@ export function toEventDto(event) {
     assigneeIds: event.assigneeIds.map(String),
     location: event.location,
     notes: event.notes,
+    reminders: event.reminders ?? null,
   };
 }
 

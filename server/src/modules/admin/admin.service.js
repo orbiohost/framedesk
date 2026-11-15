@@ -22,6 +22,10 @@ function toAdminRequestDto(request, rules) {
     // What to collect: the quote plus GST, when GST applies.
     amountDue: computeGst(request.quotedAmount, { rules }).total,
     offerCode: request.offerCode,
+    // A coupon or referral discount already taken off the quote.
+    discount: request.discount
+      ? { code: request.discount.code, amount: request.discount.amount }
+      : null,
     status: request.status,
     createdAt: request.createdAt,
   };
@@ -58,6 +62,8 @@ export async function activateUpgradeRequest(requestId, adminId, { method, refer
     method,
     reference,
     offerCode: request.offerCode,
+    listAmount: request.listAmount ?? null,
+    discount: request.discount ?? null,
     upgradeRequestId: request._id,
   });
 }

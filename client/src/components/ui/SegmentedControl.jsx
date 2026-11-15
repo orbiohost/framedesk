@@ -1,7 +1,15 @@
 import { cn } from '../../lib/cn.js';
 
 // options: [{ value, label, icon? }]
-export function SegmentedControl({ label, options, value, onChange, className }) {
+// activeClassName: how the chosen option looks (the dark pill by default).
+export function SegmentedControl({
+  label,
+  options,
+  value,
+  onChange,
+  className,
+  activeClassName = 'pill-active',
+}) {
   return (
     <div
       role="group"
@@ -22,7 +30,7 @@ export function SegmentedControl({ label, options, value, onChange, className })
             onClick={() => onChange(option.value)}
             className={cn(
               'flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors',
-              isActive ? 'pill-active' : 'text-muted hover:text-ink',
+              isActive ? activeClassName : 'text-muted hover:text-ink',
             )}
           >
             {Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}

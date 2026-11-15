@@ -320,7 +320,10 @@ function HistoryRow({ workspaceId, transcript, editable, enabled, onOpen, onActi
   ].filter(Boolean);
 
   return (
-    <li className="border-line/70 flex items-start gap-3 border-b px-4 py-3 last:border-b-0 sm:px-5">
+    <li
+      data-context-menu
+      className="border-line/70 flex items-start gap-3 border-b px-4 py-3 last:border-b-0 sm:px-5"
+    >
       <span
         className={cn(
           'mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl',

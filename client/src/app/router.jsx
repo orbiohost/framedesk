@@ -161,6 +161,10 @@ export const router = createBrowserRouter([
                     lazy: page(() => import('../pages/admin/AdminAiPage.jsx'), 'AdminAiPage'),
                   },
                   {
+                    path: 'plans',
+                    lazy: page(() => import('../pages/admin/AdminPlansPage.jsx'), 'AdminPlansPage'),
+                  },
+                  {
                     path: 'audit-log',
                     lazy: page(() => import('../pages/admin/AdminAuditPage.jsx'), 'AdminAuditPage'),
                   },
@@ -267,6 +271,14 @@ export const router = createBrowserRouter([
                   {
                     path: 'notes',
                     lazy: page(() => import('../pages/app/QuickNotesPage.jsx'), 'QuickNotesPage'),
+                  },
+                  {
+                    path: 'moodboards',
+                    lazy: page(() => import('../pages/app/MoodboardsPage.jsx'), 'MoodboardsPage'),
+                  },
+                  {
+                    path: 'moodboards/:boardId',
+                    lazy: page(() => import('../pages/app/MoodboardPage.jsx'), 'MoodboardPage'),
                   },
                   {
                     path: 'calendar',

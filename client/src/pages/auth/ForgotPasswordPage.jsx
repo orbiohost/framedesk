@@ -50,10 +50,7 @@ export function ForgotPasswordPage() {
         onSubmit={handleSubmit(({ email }) => {
           if (!captcha.ready) return setCaptchaMissing(true);
           setCaptchaMissing(false);
-          forgot.mutate(
-            { email, captchaToken: captcha.token },
-            { onError: () => captcha.reset() },
-          );
+          forgot.mutate({ email, captchaToken: captcha.token }, { onError: () => captcha.reset() });
         })}
         noValidate
         className="space-y-5"

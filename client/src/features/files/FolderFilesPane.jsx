@@ -24,6 +24,7 @@ import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { cn } from '../../lib/cn.js';
 import { readLocal, writeLocal } from '../../lib/storage.js';
+import { ProjectBriefPanel } from '../briefs/ProjectBriefPanel.jsx';
 import { ShareFilesDialog } from '../fileShare/ShareFilesDialog.jsx';
 import { SharedLinksDialog } from '../fileShare/SharedLinksDialog.jsx';
 import { ActionMenu } from './ActionMenu.jsx';
@@ -389,6 +390,13 @@ export function FolderFilesPane({
   }
 
   const closeDialog = () => setDialog(null);
+  const isBriefsFolder = Boolean(projectId) && folder.kind === 'briefs';
+  // A file the AI brief cites: open it here, or go to the subfolder it is in.
+  function openBriefSource(source) {
+    const file = allFiles(query).find((candidate) => candidate.id === source.id);
+    if (file) return onAction('open', file);
+    if (source.folderId !== folder.id) onOpenFolder(source.folderId);
+  }
   const fileCount = countFiles(query);
   const loaded = allFiles(query);
   // A type chip only counts while files of that kind are still here.
@@ -457,7 +465,7 @@ export function FolderFilesPane({
   }
 
   return (
-    <section {...drop.handlers} className="relative flex min-w-0 flex-1 flex-col">
+    <section {...drop.handlers} data-context-menu className="relative flex min-w-0 flex-1 flex-col">
       <header className="mb-5 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2.5">
@@ -554,6 +562,15 @@ export function FolderFilesPane({
         <TypeChips files={loaded} value={activeType} onChange={setType} />
       </header>
 
+      {isBriefsFolder && (
+        <ProjectBriefPanel
+          workspaceId={workspace.id}
+          projectId={projectId}
+          canEdit={canEdit}
+          onOpenFile={openBriefSource}
+        />
+      )}
+
       {lifecycle.error && (
         <Alert tone="error" className="mb-3">
           {lifecycle.error.message}
@@ -594,9 +611,11 @@ export function FolderFilesPane({
           }
         >
           {canEdit &&
-            (projectId
-              ? 'Camera rushes, project files, exports, references.'
-              : 'Contracts, brand kits, templates, anything not tied to one project.') +
+            (isBriefsFolder
+              ? 'Handwritten notes (photos or scans), voice notes, meeting recordings, PDFs.'
+              : projectId
+                ? 'Camera rushes, project files, exports, references.'
+                : 'Contracts, brand kits, templates, anything not tied to one project.') +
               ' Big uploads keep going in the background and pick up where they stopped if the connection drops.'}
         </EmptyState>
       )}

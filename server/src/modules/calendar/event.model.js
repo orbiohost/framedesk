@@ -15,6 +15,9 @@ const eventSchema = new Schema(
     assigneeIds: { type: [{ type: Schema.Types.ObjectId, ref: 'User' }], default: [] },
     location: { type: String, trim: true, maxlength: 200, default: null },
     notes: { type: String, maxlength: 5000, default: null },
+    // Minutes before to send a reminder (see notifications/reminderRules.js).
+    // Missing or null: the default for the kind of item; []: no reminders.
+    reminders: { type: [Number], default: undefined },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true },

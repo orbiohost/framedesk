@@ -29,7 +29,7 @@ function PriceBlock({ price }) {
 export function PlanCard({ plan, interval, offer, action, badge }) {
   const price = priceFor(plan, interval, offer);
   return (
-    <div className={cn('flex flex-col p-6 md:p-8', plan.highlighted && 'bg-surface')}>
+    <div className={cn('flex flex-col p-6 md:p-8', plan.highlighted ? 'bg-surface' : 'bg-bg')}>
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="font-display text-3xl">{plan.name}</h3>
         {badge ??
@@ -63,9 +63,43 @@ export function PlanCard({ plan, interval, offer, action, badge }) {
   );
 }
 
+// Everyone's starting point: no price, a little storage, the same tools.
+export function FreePlanCard({ free, action, badge }) {
+  return (
+    <div className="bg-bg flex flex-col p-6 md:p-8">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="font-display text-3xl">{free.name}</h3>
+        {badge}
+      </div>
+      <p className="text-muted mt-1 text-sm">{free.summary}</p>
+      <div className="mt-6">
+        <p>
+          <span className="text-4xl font-semibold tabular-nums tracking-tight">₹0</span>
+          <span className="text-muted text-sm"> / forever</span>
+        </p>
+        <p className="text-muted mt-1 text-sm">No card needed</p>
+      </div>
+      <p className="mt-2 text-sm">
+        <span className="font-medium">{storageLabel(free)}</span>{' '}
+        <span className="text-muted">of storage</span>
+      </p>
+      <ul className="mt-6 flex-1 space-y-2 text-sm">
+        {free.features.map((feature) => (
+          <li key={feature} className="flex gap-2">
+            <Check className="text-muted mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            {feature}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-8">{action}</div>
+    </div>
+  );
+}
+
+// Cards sit on a 1px grid of lines; the free plan makes four.
 export function PlanGrid({ children }) {
   return (
-    <div className="border-line divide-line grid divide-y rounded-lg border md:grid-cols-3 md:divide-x md:divide-y-0">
+    <div className="border-line bg-line grid gap-px overflow-hidden rounded-lg border md:grid-cols-2 xl:grid-cols-4">
       {children}
     </div>
   );

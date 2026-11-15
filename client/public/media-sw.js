@@ -654,3 +654,71 @@ self.addEventListener('message', (event) => {
     if (file) file.prefetch = null;
   }
 });
+
+// ------------------------------------------------------------- reminders --
+// Deadlines and calendar events pushed by the server (notifications module).
+// The same handlers serve Android, desktop browsers and iOS home-screen apps.
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : '' };
+  }
+  const title = data.title || 'FrameDesk';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || '',
+      icon: '/icons/icon-192.png',
+      // Same item again (e.g. "1 day before", then "today") replaces, not stacks.
+      tag: data.tag || undefined,
+      renotify: Boolean(data.tag),
+      data: { url: data.url || '/app' },
+      timestamp: Date.now(),
+    }),
+  );
+});
+
+// A tap opens the item: in a FrameDesk window that is already open if
+// there is one (installed app or tab), otherwise in a new one.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || '/app', self.location.origin);
+  // Links always point at this site, whatever the server's CLIENT_URL said.
+  const url =
+    target.origin === self.location.origin ? target.href : self.location.origin + target.pathname;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      if (open) {
+        await open.focus();
+        if ('navigate' in open) {
+          try {
+            await open.navigate(url);
+            return;
+          } catch {
+            // Not controlled yet: open a new window below.
+          }
+        } else {
+          return;
+        }
+      }
+      await self.clients.openWindow(url);
+    })(),
+  );
+});
+
+// The browser rotated this device's push address: subscribe again with the
+// same key. The app sends the new address to the server the next time it
+// opens (the worker can't read the CSRF cookie the API needs).
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const key = event.oldSubscription?.options?.applicationServerKey;
+  if (!key) return;
+  event.waitUntil(
+    self.registration.pushManager
+      .subscribe({ userVisibleOnly: true, applicationServerKey: key })
+      .catch(() => {}),
+  );
+});

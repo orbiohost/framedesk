@@ -190,3 +190,42 @@ export function useResetAiLimits() {
     api.post(`/admin/ai/accounts/${workspaceId}/reset-limits`),
   );
 }
+
+// Plans & coupons: the price list (paid plans, free plan, offer, referrals).
+export function useAdminPlans() {
+  return useQuery({
+    queryKey: adminKey('plans'),
+    queryFn: async () => (await api.get('/admin/plans')).catalog,
+  });
+}
+
+export function useUpdateAdminPlans() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input) => (await api.put('/admin/plans', input)).catalog,
+    onSuccess: (catalog) => {
+      queryClient.setQueryData(adminKey('plans'), catalog);
+      queryClient.invalidateQueries({ queryKey: ['pricing'] });
+    },
+  });
+}
+
+export function useAdminCoupons() {
+  return useQuery({
+    queryKey: adminKey('coupons'),
+    queryFn: async () => (await api.get('/admin/coupons')).coupons,
+  });
+}
+
+// Creates when no id is given, updates otherwise.
+export function useSaveCoupon() {
+  return useAdminMutation(async ({ id, ...input }) =>
+    id
+      ? (await api.put(`/admin/coupons/${id}`, input)).coupon
+      : (await api.post('/admin/coupons', input)).coupon,
+  );
+}
+
+export function useDeleteCoupon() {
+  return useAdminMutation((id) => api.delete(`/admin/coupons/${id}`));
+}

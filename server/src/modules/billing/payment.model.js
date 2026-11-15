@@ -57,6 +57,18 @@ export const sellerSnapshotSchema = new Schema(
 
 // Money received. Recorded by an admin today; Razorpay webhooks (Phase 5) add
 // rows with source "razorpay" to the same collection, so sales reports don't change.
+// Money off the plan price at checkout (a coupon or the referral discount).
+export const discountSnapshotSchema = new Schema(
+  {
+    kind: { type: String, enum: ['coupon', 'referral'], required: true },
+    code: { type: String, required: true },
+    // Rupees off, before GST.
+    amount: { type: Number, min: 0, required: true },
+    label: { type: String, default: null },
+  },
+  { _id: false },
+);
+
 const paymentSchema = new Schema(
   {
     // Total received, GST included.
@@ -79,6 +91,9 @@ const paymentSchema = new Schema(
     method: { type: String, enum: PAYMENT_METHODS, required: true },
     reference: { type: String, trim: true, maxlength: 120, default: null },
     offerCode: { type: String, default: null },
+    // The plan price before any discount, and the discount (null without one).
+    listAmount: { type: Number, min: 0, default: null },
+    discount: { type: discountSnapshotSchema, default: null },
     source: { type: String, enum: ['manual', 'razorpay'], default: 'manual' },
     paidAt: { type: Date, required: true },
     // Where the time this payment bought begins (after any time already paid

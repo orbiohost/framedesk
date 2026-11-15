@@ -3,6 +3,7 @@ import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { connectRedis, disconnectRedis } from './config/redis.js';
 import { createApp } from './app.js';
 import { startAnalysisWorker, stopAnalysisWorker } from './modules/ai/analysisWorker.js';
+import { startBriefWorker, stopBriefWorker } from './modules/briefs/briefWorker.js';
 import { startPlanLifecycle, stopPlanLifecycle } from './modules/billing/planLifecycle.service.js';
 import { startUploadSweeper, stopUploadSweeper } from './modules/files/directUploads.service.js';
 import {
@@ -13,6 +14,7 @@ import {
   startTranscriptWorker,
   stopTranscriptWorker,
 } from './modules/transcripts/transcriptWorker.js';
+import { startReminderWorker, stopReminderWorker } from './modules/notifications/reminderWorker.js';
 import { logger } from './utils/logger.js';
 import { verifyMailer } from './utils/mailer.js';
 
@@ -23,9 +25,11 @@ function registerGracefulShutdown(server) {
     logger.info({ signal }, 'Shutting down');
     stopTranscriptWorker();
     stopAnalysisWorker();
+    stopBriefWorker();
     stopUploadSweeper();
     stopStorageReconciler();
     stopPlanLifecycle();
+    stopReminderWorker();
     server.close(async () => {
       await Promise.all([disconnectDatabase(), disconnectRedis()]);
       process.exit(0);
@@ -49,9 +53,11 @@ async function start() {
   registerGracefulShutdown(server);
   startTranscriptWorker();
   startAnalysisWorker();
+  startBriefWorker();
   startUploadSweeper();
   startStorageReconciler();
   startPlanLifecycle();
+  startReminderWorker();
   verifyMailer();
 }
 

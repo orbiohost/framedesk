@@ -22,8 +22,20 @@ router.get('/providers', controller.getProviders);
 router.get('/google', authLimiter, controller.startGoogle);
 router.get('/google/callback', controller.googleCallback);
 
-router.post('/signup', authLimiter, requireCaptcha, validate({ body: signupSchema }), controller.signup);
-router.post('/login', authLimiter, requireCaptcha, validate({ body: loginSchema }), controller.login);
+router.post(
+  '/signup',
+  authLimiter,
+  requireCaptcha,
+  validate({ body: signupSchema }),
+  controller.signup,
+);
+router.post(
+  '/login',
+  authLimiter,
+  requireCaptcha,
+  validate({ body: loginSchema }),
+  controller.login,
+);
 router.post('/refresh', controller.refresh);
 router.post('/logout', controller.logout);
 router.post('/logout-all', authenticate, controller.logoutEverywhere);

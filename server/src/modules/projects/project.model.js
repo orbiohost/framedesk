@@ -36,8 +36,14 @@ const projectSchema = new Schema(
     budget: { type: Number, min: 0, default: null },
     description: { type: String, maxlength: 10000, default: null },
     tags: { type: [String], default: [] },
+    // Minutes before to send a reminder (see notifications/reminderRules.js).
+    // Missing or null: the default for the kind of item; []: no reminders.
+    reminders: { type: [Number], default: undefined },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     share: { type: shareSchema, default: () => ({}) },
+    // Set once the project's starting folders were made, so they are made
+    // exactly once (deleting them all later doesn't bring them back).
+    foldersSeeded: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

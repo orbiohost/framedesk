@@ -176,7 +176,7 @@ export function ProjectLayout() {
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Projects
       </Link>
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
+      <header data-context-menu className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="font-display text-2xl leading-tight tracking-tight md:text-3xl">
             {project.title}

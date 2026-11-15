@@ -22,6 +22,7 @@ const MAX_SPEND_RETRIES = 6;
 
 export function planLimits(pool, settings) {
   const status = effectiveStatus(pool.billing ?? {});
+  if (status === 'free') return settings.freeLimits;
   if (status === 'trialing') return settings.trialLimits;
   if (status === 'active' || status === 'past_due') {
     return settings.planLimits[pool.billing.planCode] ?? { session: 0, weekly: 0 };
@@ -164,15 +165,17 @@ export async function spendCredits(poolId, amount, entry) {
   throw AppError.conflict('Your usage is being updated elsewhere right now. Please try again.');
 }
 
-// The plan code a reset is priced by: 'trial' during the trial, else the plan.
+// The plan code a reset is priced by: 'free', 'trial' during an old trial, else the plan.
 export function resetPriceFor(pool, settings) {
   const status = effectiveStatus(pool.billing ?? {});
   const code =
-    status === 'trialing'
-      ? 'trial'
-      : ['active', 'past_due'].includes(status)
-        ? pool.billing.planCode
-        : null;
+    status === 'free'
+      ? 'free'
+      : status === 'trialing'
+        ? 'trial'
+        : ['active', 'past_due'].includes(status)
+          ? pool.billing.planCode
+          : null;
   if (!code) return null;
   const price = settings.resetPrices[code];
   return price > 0 ? price : null;

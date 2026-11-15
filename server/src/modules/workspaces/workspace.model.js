@@ -1,7 +1,16 @@
 import mongoose, { Schema } from 'mongoose';
 import { cacheInvalidationPlugin, idsIn } from '../../utils/cacheInvalidation.plugin.js';
 
-export const BILLING_STATUSES = ['none', 'trialing', 'active', 'past_due', 'read_only', 'canceled'];
+// free: the free plan (FREE_PLAN). trialing: the old 7-day trial, no longer given.
+export const BILLING_STATUSES = [
+  'none',
+  'free',
+  'trialing',
+  'active',
+  'past_due',
+  'read_only',
+  'canceled',
+];
 
 // Snapshot of the workspace's subscription state, kept here so every request can
 // check limits without a join. The billing module (Phase 5) owns writes to it.
@@ -64,6 +73,10 @@ const workspaceSchema = new Schema(
     billing: { type: billingSnapshotSchema, default: () => ({}) },
     storage: { type: storageSchema, default: () => ({}) },
     ai: { type: aiSchema, default: () => ({}) },
+    // The folders every new project starts with, in order, as set in the
+    // project settings. Missing: the built-in list (DEFAULT_FOLDERS).
+    // "Notes & Briefs" is always added on top of these.
+    projectFolders: { type: [String], default: undefined },
   },
   { timestamps: true },
 );

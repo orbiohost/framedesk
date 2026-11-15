@@ -6,6 +6,7 @@ import { findPack, getAiSettings, isAiLive } from '../ai/aiSettings.service.js';
 import { CreditLedger } from '../ai/creditLedger.model.js';
 import { addCredits, resetPriceFor, resetUsageWindows } from '../ai/credits.service.js';
 import { quote } from '../plans/plans.service.js';
+import { discountFor, recordDiscountUse } from './discounts.service.js';
 import { Workspace } from '../workspaces/workspace.model.js';
 import { planName } from './accountBilling.service.js';
 import { getBillingSettings, gstFrom, sellerFrom } from './billingSettings.service.js';
@@ -64,6 +65,8 @@ async function toCheckoutDto(order, user) {
       planName: planName(order.planCode),
       interval: order.interval,
       offerCode: order.offerCode,
+      listAmount: order.listAmount,
+      discount: order.discount,
       taxableAmount: order.taxableAmount,
       tax: order.tax,
       amount: order.amount,
@@ -73,7 +76,7 @@ async function toCheckoutDto(order, user) {
 
 // What is being bought: a plan for an interval, or a pack of AI credits.
 // The price always comes from the server's own catalogue.
-async function itemFor(pool, { planCode, interval, packCode, product }) {
+async function itemFor(pool, { planCode, interval, packCode, product, couponCode }) {
   if (product === 'ai-reset') {
     const settings = await getAiSettings();
     if (!isAiLive(settings)) {
@@ -81,7 +84,7 @@ async function itemFor(pool, { planCode, interval, packCode, product }) {
     }
     const price = resetPriceFor(pool, settings);
     if (!price) {
-      throw AppError.badRequest('Limit resets need an active plan or trial', 'RESET_UNAVAILABLE');
+      throw AppError.badRequest('Limit resets need a plan', 'RESET_UNAVAILABLE');
     }
     return {
       kind: 'reset',
@@ -110,8 +113,25 @@ async function itemFor(pool, { planCode, interval, packCode, product }) {
       offerCode: null,
     };
   }
-  const { amount, offerCode } = quote(planCode, interval);
-  return { kind: 'plan', planCode, interval, packCode: null, credits: null, amount, offerCode };
+  const { amount: listAmount, offerCode } = await quote(planCode, interval);
+  const found = await discountFor({ pool, planCode, interval, amount: listAmount, couponCode });
+  const discount = found && {
+    kind: found.kind,
+    code: found.code,
+    amount: found.amount,
+    label: found.label,
+  };
+  return {
+    kind: 'plan',
+    planCode,
+    interval,
+    packCode: null,
+    credits: null,
+    amount: listAmount - (discount?.amount ?? 0),
+    listAmount,
+    discount,
+    offerCode,
+  };
 }
 
 // Price, GST and who the invoice goes to, for something bought on this account.
@@ -138,6 +158,8 @@ function itemSummary(item) {
     packCode: item.packCode,
     credits: item.credits,
     offerCode: item.offerCode,
+    listAmount: item.listAmount ?? null,
+    discount: item.discount ?? null,
   };
 }
 
@@ -159,7 +181,7 @@ export async function createCheckout({ pool, user }, selection) {
     throw AppError.unavailable('Online payments are not set up yet', 'PAYMENTS_DISABLED');
   }
   const { item, billedTo, taxableAmount, tax, total } = await priceFor(pool, selection);
-  const { kind, planCode, interval, packCode, credits, offerCode } = item;
+  const { kind, planCode, interval, packCode, credits, offerCode, listAmount, discount } = item;
   const amountPaise = Math.round(total * 100);
 
   const id = new Types.ObjectId();
@@ -187,6 +209,8 @@ export async function createCheckout({ pool, user }, selection) {
     packCode,
     credits,
     offerCode,
+    listAmount: listAmount ?? null,
+    discount: discount ?? null,
     taxableAmount,
     tax,
     amount: total,
@@ -273,6 +297,8 @@ export async function fulfilOrder(order, paymentId, { paymentEntity } = {}) {
       source: 'razorpay',
       reference: paymentId,
       offerCode: order.offerCode,
+      listAmount: order.listAmount ?? null,
+      discount: order.discount ?? null,
       paidAt: razorpayPayment.created_at ? new Date(razorpayPayment.created_at * 1000) : new Date(),
       razorpay: { orderId: order.razorpayOrderId, paymentId, method: razorpayPayment.method },
     });
@@ -289,6 +315,8 @@ export async function fulfilOrder(order, paymentId, { paymentEntity } = {}) {
     });
   }
 
+  // Counted once per payment, however often this runs.
+  await recordDiscountUse({ pool: workspace, paymentId: payment._id, discount: order.discount });
   await CheckoutOrder.updateOne(
     { _id: order._id, workspaceId: order.workspaceId },
     {

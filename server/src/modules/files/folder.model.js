@@ -4,6 +4,10 @@ import { workspaceScopePlugin } from '../../utils/workspaceScope.plugin.js';
 // "team": everyone who can see the workspace's files. "restricted": only the
 // people in allowedUserIds (owners and admins always get in).
 export const FOLDER_ACCESS_MODES = ['team', 'restricted'];
+// Folders with a job. "briefs": the project's "Notes & Briefs" folder, whose
+// handwritten notes, voice notes and meeting material the AI turns into one
+// project brief (see briefs/briefWorker.js). The kind survives a rename.
+export const FOLDER_KINDS = ['briefs'];
 
 const folderSchema = new Schema(
   {
@@ -13,6 +17,7 @@ const folderSchema = new Schema(
     parentId: { type: Schema.Types.ObjectId, ref: 'Folder', default: null },
     name: { type: String, required: true, trim: true, maxlength: 120 },
     isDefault: { type: Boolean, default: false },
+    kind: { type: String, enum: [...FOLDER_KINDS, null], default: null },
     position: { type: Number, default: 0 },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     // Applies to everything inside too: subfolders and their files.
@@ -25,5 +30,7 @@ const folderSchema = new Schema(
 folderSchema.plugin(workspaceScopePlugin);
 // One name per level, so "Exports" can't exist twice side by side.
 folderSchema.index({ workspaceId: 1, projectId: 1, parentId: 1, name: 1 }, { unique: true });
+
+folderSchema.index({ workspaceId: 1, projectId: 1, kind: 1 });
 
 export const Folder = mongoose.model('Folder', folderSchema);

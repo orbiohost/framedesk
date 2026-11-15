@@ -26,7 +26,8 @@ export function refreshAfterFileChange(queryClient, workspaceId) {
     predicate: ({ queryKey }) =>
       queryKey[0] === 'ws' && queryKey[2] === 'files' && queryKey[3] === 'storage-usage',
   });
-  return invalidateFeatures(queryClient, workspaceId, ['files', 'folders']);
+  // The project brief follows what is in its Notes & Briefs folder.
+  return invalidateFeatures(queryClient, workspaceId, ['files', 'folders', 'briefs']);
 }
 
 export function useUploads() {
@@ -134,7 +135,7 @@ export function useUpdateFile(workspaceId) {
     onSuccess: (file, { id }) => {
       // A rename changes the download name inside the signed link.
       forgetFileUrls(workspaceId, id);
-      return invalidateFeatures(queryClient, workspaceId, ['files', 'folders']);
+      return invalidateFeatures(queryClient, workspaceId, ['files', 'folders', 'briefs']);
     },
   });
 }

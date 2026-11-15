@@ -3,7 +3,9 @@ import { AppError } from '../../utils/AppError.js';
 import { withoutUndefined } from '../../utils/objects.js';
 import { Membership } from '../members/membership.model.js';
 import { VIEW_ROLES } from '../members/roles.js';
+import { Project } from '../projects/project.model.js';
 import { assertProjectExists } from '../projects/projects.service.js';
+import { Workspace } from '../workspaces/workspace.model.js';
 import { StoredFile } from './file.model.js';
 import { Folder } from './folder.model.js';
 import {
@@ -13,7 +15,11 @@ import {
   seesEveryFolder,
 } from './folderAccess.js';
 
+// What a new project starts with until the workspace sets its own list.
 export const DEFAULT_FOLDERS = ['Raw', 'Working Files', 'Exports', 'References', 'Client Assets'];
+export const MAX_PROJECT_FOLDERS = 20;
+// Every project also gets this one, made just for meeting material (see FOLDER_KINDS).
+export const BRIEFS_FOLDER_NAME = 'Notes & Briefs';
 // The workspace Drive (projectId null) holds files that belong to no project.
 export const DEFAULT_DRIVE_FOLDERS = ['Documents', 'Media', 'Templates', 'Shared'];
 
@@ -27,6 +33,7 @@ function toFolderDto(folder, fileCount = 0, locked = folder.access === 'restrict
     parentId: folder.parentId ? String(folder.parentId) : null,
     name: folder.name,
     isDefault: folder.isDefault,
+    kind: folder.kind ?? null,
     fileCount,
     access: folder.access ?? 'team',
     allowedUserIds: (folder.allowedUserIds ?? []).map(String),
@@ -38,25 +45,123 @@ function nameTaken() {
   return AppError.conflict('A folder with this name already exists here', 'FOLDER_NAME_TAKEN');
 }
 
-// Created the first time anyone opens a project's files, which covers projects
-// made before the file manager existed. Parallel calls are safe: the unique
-// index rejects duplicates and those errors are ignored.
-async function ensureDefaultFolders(workspaceId, projectId = null) {
-  if (await Folder.exists({ workspaceId, projectId })) return;
+// The folders new projects in this workspace start with (without Notes & Briefs).
+export async function projectFolderNames(workspaceId) {
+  const workspace = await Workspace.findById(workspaceId).select('projectFolders').lean();
+  return workspace?.projectFolders ?? DEFAULT_FOLDERS;
+}
 
-  const names = projectId ? DEFAULT_FOLDERS : DEFAULT_DRIVE_FOLDERS;
-  const defaults = names.map((name, position) => ({
-    workspaceId,
-    projectId,
-    name,
-    position,
-    isDefault: true,
-  }));
+async function insertIgnoringDuplicates(folders) {
+  if (folders.length === 0) return;
   try {
-    await Folder.insertMany(defaults, { ordered: false });
+    await Folder.insertMany(folders, { ordered: false });
   } catch (err) {
     if (err.code !== DUPLICATE_KEY) throw err;
   }
+}
+
+// A project's starting folders, made once: when it is created, or the first
+// time its files are opened for projects made before this. A project that
+// already has folders of its own is left as it is. Parallel calls are safe:
+// the unique index rejects duplicates and those errors are ignored.
+export async function ensureProjectFolders(workspaceId, projectId) {
+  const project = await Project.findOne({ _id: projectId, workspaceId })
+    .select('foldersSeeded')
+    .lean();
+  if (project && !project.foldersSeeded) {
+    const hasOwn = await Folder.exists({ workspaceId, projectId, kind: null });
+    if (!hasOwn) {
+      const names = await projectFolderNames(workspaceId);
+      await insertIgnoringDuplicates(
+        names.map((name, position) => ({
+          workspaceId,
+          projectId,
+          name,
+          position,
+          isDefault: true,
+        })),
+      );
+    }
+    await Project.updateOne({ _id: projectId, workspaceId }, { $set: { foldersSeeded: true } });
+  }
+  return ensureBriefsFolder(workspaceId, projectId);
+}
+
+// Created the first time anyone opens the Drive or a project's files.
+async function ensureDefaultFolders(workspaceId, projectId = null) {
+  if (projectId) {
+    await ensureProjectFolders(workspaceId, projectId);
+    return;
+  }
+  if (await Folder.exists({ workspaceId, projectId: null })) return;
+  await insertIgnoringDuplicates(
+    DEFAULT_DRIVE_FOLDERS.map((name, position) => ({
+      workspaceId,
+      projectId: null,
+      name,
+      position,
+      isDefault: true,
+    })),
+  );
+}
+
+// Projects made before the briefs folder existed get it here. A folder the team
+// already named "Notes & Briefs" is adopted rather than duplicated.
+export async function ensureBriefsFolder(workspaceId, projectId) {
+  const existing = await Folder.findOne({ workspaceId, projectId, kind: 'briefs' }).lean();
+  if (existing) return existing;
+  const filter = { workspaceId, projectId, parentId: null, name: BRIEFS_FOLDER_NAME };
+  try {
+    return (
+      await Folder.create({ ...filter, position: -1, isDefault: true, kind: 'briefs' })
+    ).toObject();
+  } catch (err) {
+    if (err.code !== DUPLICATE_KEY) throw err;
+    const adopted = await Folder.findOneAndUpdate(
+      { ...filter, kind: null },
+      { $set: { kind: 'briefs' } },
+      { new: true },
+    ).lean();
+    return adopted ?? Folder.findOne({ workspaceId, projectId, kind: 'briefs' }).lean();
+  }
+}
+
+/**
+ * The briefs folder a folder sits in (itself, or an ancestor), or null.
+ * Walks up a few levels at most; folders are shallow.
+ */
+export async function briefsRootOf(workspaceId, folderId) {
+  let currentId = folderId;
+  const seen = new Set();
+  while (currentId && !seen.has(String(currentId)) && seen.size < 20) {
+    seen.add(String(currentId));
+    const folder = await Folder.findOne({ _id: currentId, workspaceId })
+      .select('parentId kind projectId name')
+      .lean();
+    if (!folder) return null;
+    if (folder.kind === 'briefs') return folder;
+    currentId = folder.parentId;
+  }
+  return null;
+}
+
+// The briefs folder and every folder inside it.
+export async function briefsFolderTree(workspaceId, root) {
+  const folders = await Folder.find({ workspaceId, projectId: root.projectId })
+    .select('parentId')
+    .lean();
+  const ids = new Set([String(root._id)]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const folder of folders) {
+      if (folder.parentId && ids.has(String(folder.parentId)) && !ids.has(String(folder._id))) {
+        ids.add(String(folder._id));
+        grew = true;
+      }
+    }
+  }
+  return [...ids];
 }
 
 async function countLiveFilesByFolder(workspaceId, projectId) {
@@ -184,7 +289,13 @@ export async function updateFolder(workspaceId, folderId, { name, parentId }, vi
 
 // Only empty folders can go; files must be moved or trashed first.
 export async function deleteFolder(workspaceId, folderId, viewer = null) {
-  await findFolderOrThrow(workspaceId, folderId);
+  const doomed = await findFolderOrThrow(workspaceId, folderId);
+  if (doomed.kind === 'briefs') {
+    throw AppError.badRequest(
+      "This folder feeds the project's AI brief, so it can be renamed but not deleted",
+      'BRIEFS_FOLDER',
+    );
+  }
   await assertFolderAccess(workspaceId, folderId, viewer);
   const [hasChildren, hasFiles] = await Promise.all([
     Folder.exists({ workspaceId, parentId: folderId }),
@@ -251,7 +362,8 @@ export async function setFolderAccess(workspaceId, folderId, { access, userIds }
 // Where a restored file goes if its folder has since been deleted.
 export async function fallbackFolderId(workspaceId, projectId = null) {
   await ensureDefaultFolders(workspaceId, projectId);
-  const folder = await Folder.findOne({ workspaceId, projectId })
+  // Never the briefs folder: a stray file there would end up in the AI brief.
+  const folder = await Folder.findOne({ workspaceId, projectId, kind: null })
     .sort({ position: 1 })
     .select('_id')
     .lean();

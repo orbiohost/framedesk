@@ -53,6 +53,7 @@ export function taskPercent(project) {
 }
 
 export const PROJECT_SORTS = [
+  { value: 'created', label: 'Recently added' },
   { value: 'due', label: 'Due date' },
   { value: 'updated', label: 'Recently updated' },
   { value: 'priority', label: 'Priority' },
@@ -69,6 +70,7 @@ const COMPARATORS = {
     if (!a.dueDate || !b.dueDate) return (a.dueDate ? 0 : 1) - (b.dueDate ? 0 : 1) || byName(a, b);
     return new Date(a.dueDate) - new Date(b.dueDate) || byName(a, b);
   },
+  created: (a, b) => new Date(b.createdAt) - new Date(a.createdAt) || byName(a, b),
   updated: (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
   priority: (a, b) =>
     (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9) || COMPARATORS.due(a, b),
@@ -76,7 +78,7 @@ const COMPARATORS = {
 };
 
 export function sortProjects(projects, sort) {
-  return [...projects].sort(COMPARATORS[sort] ?? COMPARATORS.due);
+  return [...projects].sort(COMPARATORS[sort] ?? COMPARATORS.created);
 }
 
 // Matches the title, the client, the tags, and the status and type as shown

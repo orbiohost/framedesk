@@ -41,6 +41,8 @@ export function createApp() {
   app.use(cors({ origin: env.CLIENT_URL, credentials: true }));
   // Ahead of express.json(): the webhook signature is checked against the raw body.
   app.use('/api/billing', razorpayWebhookRouter);
+  // Moodboard canvases (sketch strokes) and their sketch snapshots are bigger.
+  app.use('/api/workspaces/:workspaceId/moodboards', express.json({ limit: '6mb' }));
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   app.use(mongoSanitize());

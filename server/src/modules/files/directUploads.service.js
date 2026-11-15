@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { markBriefStale } from '../briefs/briefStale.js';
 import { getStorageDriver } from '../../storage/storageDriver.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
@@ -186,6 +187,7 @@ export async function completeDirectUpload(user, uploadId) {
     throw err;
   }
   await PendingUpload.deleteOne({ _id: pending._id });
+  await markBriefStale(file.workspaceId, file.folderId);
 
   const { metadata } = pending;
   if (metadata.transcribe) {

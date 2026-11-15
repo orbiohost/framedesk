@@ -28,6 +28,12 @@ function RequestRow({ request, onActivate }) {
             <span className="text-muted"> ({formatInr(request.quotedAmount)} + GST)</span>
           )}
           {request.offerCode && <span className="text-accent"> · {request.offerCode}</span>}
+          {request.discount && (
+            <span className="text-success">
+              {' '}
+              · {request.discount.code} −₹{request.discount.amount.toLocaleString('en-IN')}
+            </span>
+          )}
         </p>
       </div>
       <Button onClick={() => onActivate(request)}>Mark paid & activate</Button>

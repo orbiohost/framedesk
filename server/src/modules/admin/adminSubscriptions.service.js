@@ -1,9 +1,11 @@
 import { AppError } from '../../utils/AppError.js';
+import { recordDiscountUse } from '../billing/discounts.service.js';
+import { freeState } from '../billing/planLifecycle.service.js';
 import { containsInsensitive } from '../../utils/objects.js';
 import { getGstRules } from '../billing/billingSettings.service.js';
 import { computeGst } from '../billing/gst.js';
 import { billedToSnapshot, recordPaidPeriod } from '../billing/subscription.service.js';
-import { findPlan, planStorageBytes } from '../plans/plans.service.js';
+import { findPlan, getCatalog, planStorageBytes } from '../plans/plans.service.js';
 import { User } from '../users/user.model.js';
 import { findPoolWorkspace } from '../workspaces/storagePool.js';
 import { Workspace, storageLimitBytes } from '../workspaces/workspace.model.js';
@@ -82,10 +84,14 @@ export async function recordPayment(requestedWorkspaceId, adminId, input) {
     method: input.method,
     reference: input.reference || null,
     offerCode: input.offerCode ?? null,
+    listAmount: input.listAmount ?? null,
+    discount: input.discount ?? null,
     paidAt: input.paidAt ?? new Date(),
     recordedBy: adminId,
     upgradeRequestId: input.upgradeRequestId ?? null,
   });
+  // A coupon or referral discount from the upgrade request is now used up.
+  await recordDiscountUse({ pool: workspace, paymentId: payment._id, discount: input.discount });
   await recordAudit({
     actorId: adminId,
     action: 'payment.record',
@@ -110,7 +116,9 @@ function trialExtension(workspace, days) {
   return { 'billing.trialEndsAt': new Date(from.getTime() + days * 24 * 60 * 60 * 1000) };
 }
 
-function statusChange(status) {
+async function statusChange(status) {
+  // Back to the free plan, with its space.
+  if (status === 'free') return freeState();
   return {
     'billing.status': status,
     'billing.canceledAt': status === 'canceled' ? new Date() : null,
@@ -123,9 +131,9 @@ export async function adjustSubscription(requestedWorkspaceId, adminId, change) 
   const workspaceId = workspace._id;
   let update;
   if (change.action === 'extend_trial') update = trialExtension(workspace, change.days);
-  if (change.action === 'set_status') update = statusChange(change.status);
+  if (change.action === 'set_status') update = await statusChange(change.status);
   if (change.action === 'change_plan') {
-    const plan = findPlan(change.planCode);
+    const plan = findPlan(await getCatalog(), change.planCode);
     update = { 'billing.planCode': plan.code, 'storage.planLimitBytes': planStorageBytes(plan) };
   }
 

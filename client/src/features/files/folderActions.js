@@ -28,6 +28,8 @@ export function folderMenuItems({ folder, canEdit, canManage = false, onOpen, on
       onSelect: () => onAction('access', folder),
     });
   }
+  // The Notes & Briefs folder feeds the project's AI brief, so it stays.
+  if (folder.kind === 'briefs') return items;
   items.push({
     key: 'delete',
     label: 'Delete folder',

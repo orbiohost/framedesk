@@ -24,6 +24,21 @@ const billingProfileSchema = new Schema(
   { _id: false },
 );
 
+// How and when this person gets reminders (notifications/ module).
+const notificationPrefsSchema = new Schema(
+  {
+    // Reminders on devices that turned notifications on.
+    push: { type: Boolean, default: true },
+    // fallback: email only when no device received the reminder.
+    email: { type: String, enum: ['always', 'fallback', 'off'], default: 'fallback' },
+    // Deadlines and all-day events have no time: remind at this hour, local time.
+    dayReminderHour: { type: Number, min: 0, max: 23, default: 9 },
+    // IANA zone reported by the person's browser, e.g. "Asia/Kolkata".
+    timeZone: { type: String, maxlength: 64, default: 'Asia/Kolkata' },
+  },
+  { _id: false },
+);
+
 const userSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 80 },
@@ -36,6 +51,7 @@ const userSchema = new Schema(
     hasPassword: { type: Boolean, default: true },
     avatarUrl: { type: String, default: null },
     billingProfile: { type: billingProfileSchema, default: () => ({}) },
+    notificationPrefs: { type: notificationPrefsSchema, default: () => ({}) },
 
     emailVerifiedAt: { type: Date, default: null },
     emailVerification: { type: oneTimeTokenSchema, select: false },
@@ -47,6 +63,17 @@ const userSchema = new Schema(
     status: { type: String, enum: ['active', 'suspended'], default: 'active' },
     isSuperadmin: { type: Boolean, default: false },
     trialStartedAt: { type: Date, default: null },
+    // Refer & earn (referrals/referrals.service.js). referralCode is this
+    // person's own code; referredBy is whoever invited them.
+    referralCode: { type: String, default: undefined },
+    referredBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    referredAt: { type: Date, default: null },
+    // Set once the inviter got their storage for this person.
+    referralRewardedAt: { type: Date, default: null },
+    // How many friends earned this person storage so far.
+    referralRewards: { type: Number, default: 0, min: 0 },
+    // Set when this person's referral discount was used on a payment.
+    referralDiscountUsedAt: { type: Date, default: null },
     lastLoginAt: { type: Date, default: null },
     lastActiveAt: { type: Date, default: null },
   },
@@ -56,6 +83,8 @@ const userSchema = new Schema(
 userSchema.index({ 'emailVerification.tokenHash': 1 }, { sparse: true });
 userSchema.index({ 'passwordReset.tokenHash': 1 }, { sparse: true });
 userSchema.index({ lastActiveAt: -1 });
+userSchema.index({ referralCode: 1 }, { unique: true, sparse: true });
+userSchema.index({ referredBy: 1 });
 
 // Each request's session user is cached (session.service.js); writes clear it.
 userSchema.plugin(cacheInvalidationPlugin, {

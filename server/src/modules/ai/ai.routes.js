@@ -9,6 +9,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { logger } from '../../utils/logger.js';
 import { objectId } from '../../utils/zodHelpers.js';
 import { viewerOf } from '../files/folderAccess.js';
+import { MAX_NOTE_PROJECTS, NOTE_VISIBILITIES } from '../quickNotes/quickNote.model.js';
 import {
   deleteThread,
   getAiStatus,
@@ -16,7 +17,9 @@ import {
   getUploadFolder,
   listThreads,
   MAX_ATTACHED,
+  MAX_NOTES,
   renameThread,
+  saveAnswerAsNote,
   searchFiles,
   streamAnswer,
 } from './aiChat.service.js';
@@ -33,6 +36,18 @@ const askSchema = z.object({
   projectId: objectId.optional(),
   // Files attached with "@" or uploaded in the chat.
   fileIds: z.array(objectId).max(MAX_ATTACHED, `Attach up to ${MAX_ATTACHED} files`).optional(),
+  // Saved notes added with "#".
+  noteIds: z.array(objectId).max(MAX_NOTES, `Add up to ${MAX_NOTES} notes`).optional(),
+});
+const messageParams = z.object({ threadId: objectId, messageId: objectId });
+const saveNoteSchema = z.object({
+  title: z.string().trim().max(160).optional(),
+  projectIds: z
+    .array(objectId)
+    .max(MAX_NOTE_PROJECTS, `Link at most ${MAX_NOTE_PROJECTS} projects`)
+    .transform((ids) => [...new Set(ids)])
+    .optional(),
+  visibility: z.enum(NOTE_VISIBILITIES).optional(),
 });
 const filesQuery = z.object({
   q: z.string().trim().max(120).optional(),
@@ -88,6 +103,22 @@ router.delete(
   asyncHandler(async (req, res) => {
     await deleteThread(context(req), req.params.threadId);
     sendSuccess(res, { deleted: true });
+  }),
+);
+
+// "Save to notes" on an answer: makes a quick note that links back to the chat.
+router.post(
+  '/threads/:threadId/messages/:messageId/note',
+  canView,
+  validate({ params: messageParams, body: saveNoteSchema }),
+  asyncHandler(async (req, res) => {
+    const note = await saveAnswerAsNote(
+      context(req),
+      req.params.threadId,
+      req.params.messageId,
+      req.body,
+    );
+    sendSuccess(res, { note }, { status: 201 });
   }),
 );
 

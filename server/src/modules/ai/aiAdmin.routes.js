@@ -5,6 +5,7 @@ import { sendSuccess } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { objectId, searchQuery } from '../../utils/zodHelpers.js';
 import { PLANS } from '../plans/plans.catalog.js';
+import { RESET_PRICE_CODES } from './aiSettings.service.js';
 import {
   accountLedger,
   adjustCredits,
@@ -30,11 +31,10 @@ const settingsSchema = z
       .trim()
       .regex(/^[\w.-]{3,60}$/, 'Use a Gemini model name like gemini-3.5-flash'),
     planLimits: z.object(Object.fromEntries(PLANS.map((plan) => [plan.code, limits]))),
+    freeLimits: limits,
     trialLimits: limits,
     resetPrices: z.object(
-      Object.fromEntries(
-        ['trial', ...PLANS.map((plan) => plan.code)].map((code) => [code, credits(1_000_000)]),
-      ),
+      Object.fromEntries(RESET_PRICE_CODES.map((code) => [code, credits(1_000_000)])),
     ),
     tokensPerCredit: z.number().int().min(100).max(10_000_000),
     minChatCredits: credits(1000),

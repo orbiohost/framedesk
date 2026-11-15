@@ -34,7 +34,7 @@ export function FinalCta() {
             to="/signup"
             className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-semibold text-[#16151b] transition-transform hover:-translate-y-0.5"
           >
-            Start your 7-day trial
+            Start free
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
           <a

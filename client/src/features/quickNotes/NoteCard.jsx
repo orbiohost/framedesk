@@ -7,12 +7,14 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Sparkles,
   Trash2,
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/cn.js';
+import { openAi, useAiAvailable } from '../ai/aiBridge.js';
 import { ActionMenu } from '../files/ActionMenu.jsx';
 import { ConfirmDialog } from '../files/FileDialogs.jsx';
 import { useDeleteQuickNote, useSaveQuickNote, useToggleNoteTodo } from './hooks.js';
@@ -39,6 +41,7 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
   const remove = useDeleteQuickNote(workspaceId);
   const toggleTodo = useToggleNoteTodo(workspaceId);
   const [copied, setCopied] = useState(false);
+  const aiAvailable = useAiAvailable();
 
   if (isEditing) {
     return (
@@ -78,9 +81,23 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
     icon: Copy,
     onSelect: copyText,
   };
+  // A new AI chat with this note already added (as if picked with "#").
+  const askItem = aiAvailable && {
+    key: 'ask-ai',
+    label: 'Ask AI about this note',
+    icon: Sparkles,
+    onSelect: () =>
+      openAi({
+        note: {
+          id: note.id,
+          title: note.title || note.body.split('\n')[0].slice(0, 80) || 'Note',
+        },
+      }),
+  };
   const menuItems = note.isMine
     ? [
         { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => setIsEditing(true) },
+        askItem,
         copyItem,
         {
           key: 'pin',
@@ -103,8 +120,10 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
           divider: true,
           onSelect: () => setIsDeleting(true),
         },
-      ]
-    : [copyItem];
+      ].filter(Boolean)
+    : [askItem, copyItem].filter(Boolean);
+  // AI chats are private, so only the person who saved the answer can open its chat.
+  const fromAi = note.source?.kind === 'ai';
 
   return (
     <article
@@ -219,6 +238,26 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
           <>
             <span aria-hidden="true">·</span>
             <span className="truncate">{note.author.name}</span>
+          </>
+        )}
+        {fromAi && (
+          <>
+            <span aria-hidden="true">·</span>
+            {note.isMine ? (
+              <Link
+                to={`/w/${workspaceId}/ai?thread=${note.source.threadId}`}
+                title={note.source.question ? `Asked: ${note.source.question}` : 'Open the AI chat'}
+                className="hover:text-ink inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
+              >
+                <Sparkles className="h-3 w-3" aria-hidden="true" />
+                From AI chat
+              </Link>
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <Sparkles className="h-3 w-3" aria-hidden="true" />
+                AI answer
+              </span>
+            )}
           </>
         )}
         <span aria-hidden="true">·</span>

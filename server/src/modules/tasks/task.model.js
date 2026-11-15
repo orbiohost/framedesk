@@ -26,6 +26,9 @@ const taskSchema = new Schema(
     checklist: { type: [checklistItemSchema], default: [] },
     order: { type: Number, required: true },
     completedAt: { type: Date, default: null },
+    // Minutes before to send a reminder (see notifications/reminderRules.js).
+    // Missing or null: the default for the kind of item; []: no reminders.
+    reminders: { type: [Number], default: undefined },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true },

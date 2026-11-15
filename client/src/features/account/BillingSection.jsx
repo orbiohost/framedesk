@@ -24,14 +24,14 @@ function periodProgress(start, end) {
 
 function PlanSummary({ account, lastPayment }) {
   const status = BILLING_STATUS[account.status] ?? BILLING_STATUS.none;
-  const isTrial = account.status === 'trialing';
+  const isFree = account.status === 'free' || account.status === 'trialing';
   const isPaid = ['active', 'past_due'].includes(account.status);
   const isPastDue = account.status === 'past_due' && Boolean(account.graceEndsAt);
   const hasEnded = isPastDue || account.status === 'read_only';
-  const endsAt = isTrial ? account.trialEndsAt : account.currentPeriodEnd;
+  const endsAt = isFree ? null : account.currentPeriodEnd;
   const daysLeft = endsAt ? daysUntil(endsAt) : null;
   // Plans are paid in advance and never renew by themselves.
-  const endLabel = isTrial ? 'Trial ends' : hasEnded ? 'Ended on' : 'Paid until';
+  const endLabel = hasEnded ? 'Ended on' : 'Paid until';
   const progress = isPaid
     ? periodProgress(lastPayment?.periodStart, account.currentPeriodEnd)
     : null;
@@ -49,10 +49,7 @@ function PlanSummary({ account, lastPayment }) {
           )}
         </div>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h3 className="font-display text-3xl">
-            {account.planName ?? 'No plan'}
-            {isTrial && <span className="text-muted text-xl"> trial</span>}
-          </h3>
+          <h3 className="font-display text-3xl">{account.planName ?? 'No plan'}</h3>
           <Badge tone={status.tone}>{status.label}</Badge>
         </div>
         {isPaid && account.amount ? (
@@ -63,6 +60,12 @@ function PlanSummary({ account, lastPayment }) {
             </span>
           </p>
         ) : null}
+        {isFree && (
+          <p className="text-muted mt-1 text-sm">
+            Free for as long as you like. Upgrade any time for more storage and AI usage; your
+            projects and files carry over.
+          </p>
+        )}
 
         {endsAt && (
           <div className="mt-5 max-w-md">
@@ -73,8 +76,8 @@ function PlanSummary({ account, lastPayment }) {
               {hasEnded ? (
                 <span className="text-danger">
                   {isPastDue
-                    ? `Read-only from ${shortDate(account.graceEndsAt)}`
-                    : 'Read-only until renewed'}
+                    ? `Moves to the free plan on ${shortDate(account.graceEndsAt)}`
+                    : 'Moving to the free plan'}
                 </span>
               ) : (
                 <span className={cn('tabular-nums', daysLeft <= 7 ? 'text-danger' : 'text-muted')}>

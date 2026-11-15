@@ -1,4 +1,4 @@
-import { Check, CircleCheck, Lock } from 'lucide-react';
+import { Check, CircleCheck, Lock, TicketPercent, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert } from '../../components/ui/Alert.jsx';
@@ -118,7 +118,70 @@ function PaidState({ result, planName, workspaceId, showInvoiceLink, onClose }) 
   );
 }
 
-function Review({ summary, intervalLabel, canEditDetails, onEditDetails }) {
+// "Have a coupon?" for plans: applied codes re-price the order on the server.
+function CouponField({ applied, error, pending, onApply, onRemove }) {
+  const [open, setOpen] = useState(Boolean(applied));
+  const [value, setValue] = useState(applied ?? '');
+  if (applied && !error) {
+    return (
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="text-success inline-flex items-center gap-1.5 font-medium">
+          <TicketPercent className="h-4 w-4" aria-hidden="true" />
+          {applied} applied
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setValue('');
+            onRemove();
+          }}
+          className="text-muted hover:text-ink inline-flex items-center gap-1 text-xs"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" /> Remove
+        </button>
+      </div>
+    );
+  }
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-accent inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+      >
+        <TicketPercent className="h-4 w-4" aria-hidden="true" /> Have a coupon?
+      </button>
+    );
+  }
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (value.trim()) onApply(value.trim().toUpperCase());
+      }}
+      className="space-y-1.5"
+    >
+      <div className="flex gap-2">
+        <input
+          value={value}
+          onChange={(event) => setValue(event.target.value.toUpperCase())}
+          maxLength={30}
+          autoFocus
+          placeholder="Coupon code"
+          aria-label="Coupon code"
+          className="border-line bg-surface h-9 min-w-0 flex-1 rounded-full border px-4 text-sm uppercase"
+        />
+        <Button type="submit" size="sm" variant="secondary" className="h-9" loading={pending}>
+          Apply
+        </Button>
+      </div>
+      {error && <p className="text-danger text-xs">{error}</p>}
+    </form>
+  );
+}
+
+function Review({ summary, intervalLabel, canEditDetails, onEditDetails, coupon }) {
+  const { discount } = summary;
   return (
     <>
       <div className="flex items-baseline justify-between gap-4">
@@ -143,8 +206,20 @@ function Review({ summary, intervalLabel, canEditDetails, onEditDetails }) {
             )}
           </p>
         </div>
-        <p className="tabular-nums">{formatInrExact(summary.taxableAmount)}</p>
+        <p className="tabular-nums">
+          {formatInrExact(discount ? summary.listAmount : summary.taxableAmount)}
+        </p>
       </div>
+      {discount && (
+        <div className="text-success -mt-2 flex items-baseline justify-between gap-4 text-sm">
+          <span>
+            {discount.label}
+            {discount.kind === 'coupon' ? ` (${discount.code})` : ''}
+          </span>
+          <span className="tabular-nums">−{formatInrExact(discount.amount)}</span>
+        </div>
+      )}
+      {coupon}
       <TaxBreakdown
         taxableAmount={summary.taxableAmount}
         tax={summary.tax}
@@ -162,7 +237,11 @@ function Review({ summary, intervalLabel, canEditDetails, onEditDetails }) {
 export function CheckoutDialog({ workspaceId, selection, onClose }) {
   const open = Boolean(selection);
   const { data: user } = useCurrentUser();
-  const quote = useCheckoutQuote(workspaceId, selection ?? {}, { enabled: open });
+  // A coupon the owner applied (plans only); the quote is re-priced with it.
+  const [couponCode, setCouponCode] = useState(null);
+  const priced = selection ? { ...selection, ...(couponCode && { couponCode }) } : {};
+  const quote = useCheckoutQuote(workspaceId, priced, { enabled: open });
+  const couponError = quote.error?.code === 'COUPON_INVALID' ? quote.error.message : null;
   const createCheckout = useCreateCheckout(workspaceId);
   const confirm = useConfirmCheckout(workspaceId);
   // review -> paying (creating the order) -> razorpay (their window is open)
@@ -184,6 +263,7 @@ export function CheckoutDialog({ workspaceId, selection, onClose }) {
     setEditingDetails(false);
     setError(null);
     setResult(null);
+    setCouponCode(null);
     onClose();
   }
 
@@ -197,7 +277,7 @@ export function CheckoutDialog({ workspaceId, selection, onClose }) {
     setError(null);
     setStage('paying');
     try {
-      const checkout = await createCheckout.mutateAsync(selection);
+      const checkout = await createCheckout.mutateAsync(priced);
       // Our <dialog> sits in the browser's top layer, above Razorpay's window,
       // so it steps aside while that window is open.
       setStage('razorpay');
@@ -265,9 +345,17 @@ export function CheckoutDialog({ workspaceId, selection, onClose }) {
         <div className="space-y-4">
           {isOwnerPaying && <Steps current={showDetails ? 'details' : 'review'} />}
           {error && <Alert tone="error">{error}</Alert>}
-          {quote.error && <Alert tone="error">{quote.error.message}</Alert>}
+          {quote.error && !couponError && <Alert tone="error">{quote.error.message}</Alert>}
 
-          {quote.isPending ? (
+          {couponError && !summary ? (
+            <CouponField
+              applied={couponCode}
+              error={couponError}
+              pending={quote.isFetching}
+              onApply={setCouponCode}
+              onRemove={() => setCouponCode(null)}
+            />
+          ) : quote.isPending ? (
             <Skeleton className="h-48" />
           ) : showDetails ? (
             <>
@@ -294,6 +382,17 @@ export function CheckoutDialog({ workspaceId, selection, onClose }) {
               intervalLabel={intervalLabel}
               canEditDetails={isOwnerPaying}
               onEditDetails={() => setEditingDetails(true)}
+              coupon={
+                selection?.planCode && (
+                  <CouponField
+                    applied={couponCode}
+                    error={couponError}
+                    pending={quote.isFetching}
+                    onApply={setCouponCode}
+                    onRemove={() => setCouponCode(null)}
+                  />
+                )
+              }
             />
           ) : null}
 

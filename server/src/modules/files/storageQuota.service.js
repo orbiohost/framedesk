@@ -11,7 +11,7 @@ import { Workspace, storageLimitBytes } from '../workspaces/workspace.model.js';
 
 // Uploads are allowed while a plan is live. Past-due workspaces keep uploading
 // during the grace period; read-only, cancelled and plan-less ones do not.
-const UPLOADING_STATUSES = ['trialing', 'active', 'past_due'];
+const UPLOADING_STATUSES = ['free', 'trialing', 'active', 'past_due'];
 
 function storageFull(workspace, bytes) {
   const free = Math.max(0, storageLimitBytes(workspace) - workspace.storage.usedBytes);
@@ -29,8 +29,10 @@ export function assertUploadsAllowed(workspace) {
   // the next sweep.
   const status = effectiveStatus(workspace.billing);
   if (status === 'read_only') {
+    // Only for the moment between a grace period ending and the sweeper
+    // moving the account to the free plan.
     throw AppError.forbidden(
-      'Your plan has ended, so this workspace is read-only. Renew to keep uploading.',
+      'Your plan has ended and this account is moving to the free plan. Try again in a few minutes, or renew.',
       'PLAN_EXPIRED',
     );
   }

@@ -1,5 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  BookmarkCheck,
+  BookmarkPlus,
   Check,
   Copy,
   FileSearch,
@@ -16,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { cn } from '../../lib/cn.js';
 import { readLocal, removeLocal, writeLocal } from '../../lib/storage.js';
 import { useCurrentUser } from '../auth/hooks.js';
@@ -25,9 +27,18 @@ import { useUploads } from '../files/hooks.js';
 import { addUploads } from '../files/uploadStore.js';
 import { canAdminister, canEdit, canView } from '../workspaces/roles.js';
 import { onAiRequest, setAiAvailable, takeAiRequest } from './aiBridge.js';
-import { AiComposer, FileChip, MAX_ATTACHMENTS, ScopeChip, categoryOf } from './AiComposer.jsx';
+import {
+  AiComposer,
+  FileChip,
+  MAX_ATTACHMENTS,
+  MAX_NOTES,
+  NoteChip,
+  ScopeChip,
+  categoryOf,
+} from './AiComposer.jsx';
+import { SaveAnswerDialog } from './SaveAnswerDialog.jsx';
 import { AiHistory } from './AiHistory.jsx';
-import { AiMessageText } from './AiMessageText.jsx';
+import { AiMessageText, toPlainText } from './AiMessageText.jsx';
 import { LimitReached, UsageButton } from './AiUsage.jsx';
 import { AiResetButton } from './AiUsageDialog.jsx';
 import { AI_GRADIENT, AI_TEXT } from './aiStyle.js';
@@ -64,8 +75,6 @@ const FILE_SUGGESTIONS = [
   { icon: Wand2, text: 'Suggest a title, caption and tags' },
   { icon: FileSearch, text: 'Is anything wrong or missing?' },
 ];
-
-const CITATION = /\[\[file:[a-f\d]{24}\]\]/gi;
 
 // The chat each workspace was last on, so the corner panel and the AI page agree.
 const threadStorageKey = (workspaceId) => `ai:thread:${workspaceId}`;
@@ -133,7 +142,7 @@ function Welcome({ status, onPick, compact, scope, attachments }) {
           ) : (
             <>
               {libraryLine(status.library)} Type <Kbd>/</Kbd> for a project, <Kbd>@</Kbd> for a
-              file, or upload one.
+              file, <Kbd>#</Kbd> for a saved note, or upload one.
             </>
           )}
         </p>
@@ -169,9 +178,12 @@ function Kbd({ children }) {
 function UserMessage({ message }) {
   return (
     <div className="flex animate-[ai-rise_220ms_ease-out_both] flex-col items-end gap-1.5">
-      {(message.project || message.attachments?.length > 0) && (
+      {(message.project || message.attachments?.length > 0 || message.notes?.length > 0) && (
         <div className="flex max-w-[88%] flex-wrap justify-end gap-1.5">
           {message.project && <ScopeChip project={message.project} />}
+          {message.notes?.map((note) => (
+            <NoteChip key={note.id} note={note} />
+          ))}
           {message.attachments?.map((file) => (
             <FileChip key={file.id} file={file} />
           ))}
@@ -188,7 +200,7 @@ function CopyButton({ text }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
-      await navigator.clipboard.writeText(text.replace(CITATION, '').replace(/ {2,}/g, ' '));
+      await navigator.clipboard.writeText(toPlainText(text));
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -212,14 +224,53 @@ function CopyButton({ text }) {
   );
 }
 
-function AiMessage({ message, files, onOpenFile }) {
+// Saves the answer as a quick note; once saved, opens Quick notes instead.
+function SaveNoteButton({ workspaceId, savedNoteId, onSave }) {
+  const className =
+    'text-muted hover:bg-subtle hover:text-ink grid h-7 w-7 place-items-center rounded-lg transition-colors';
+  if (savedNoteId) {
+    return (
+      <Link
+        to={`/w/${workspaceId}/notes`}
+        aria-label="Saved to notes. Open Quick notes"
+        title="Saved to notes"
+        className={className}
+      >
+        <BookmarkCheck className="text-success h-3.5 w-3.5" aria-hidden="true" />
+      </Link>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onSave}
+      aria-label="Save answer to notes"
+      title="Save to notes"
+      className={className}
+    >
+      <BookmarkPlus className="h-3.5 w-3.5" aria-hidden="true" />
+    </button>
+  );
+}
+
+function AiMessage({ message, files, onOpenFile, workspaceId, savedNoteId, onSave }) {
+  const savable = onSave && message.text !== '_Stopped._';
   return (
     <div className="group flex animate-[ai-rise_260ms_ease-out_both] gap-3">
       <AiAvatar />
       <div className="min-w-0 flex-1 pt-0.5">
         <AiMessageText text={message.text} files={files} onOpenFile={onOpenFile} />
-        <div className="text-muted mt-1 flex h-7 items-center gap-1 text-[11px] opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+        <div
+          className={cn(
+            'text-muted mt-1 flex h-7 items-center gap-1 text-[11px] opacity-100 transition-opacity sm:group-hover:opacity-100',
+            // A saved answer keeps its tick in view.
+            !savedNoteId && 'sm:opacity-0',
+          )}
+        >
           <CopyButton text={message.text} />
+          {savable && (
+            <SaveNoteButton workspaceId={workspaceId} savedNoteId={savedNoteId} onSave={onSave} />
+          )}
           {message.stopped && <span className="px-1">Stopped</span>}
           {message.credits > 0 && (
             <span className="px-1">
@@ -359,6 +410,10 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
   // Files for the next question: { key, id?, name, category, uploadId? }.
   // Uploads get their id once stored (progress comes from the upload store).
   const [attached, setAttached] = useState([]);
+  // Saved notes for the next question, picked with "#": { id, title }.
+  const [pickedNotes, setPickedNotes] = useState([]);
+  // The answer whose "Save to notes" dialog is open: { message, question }.
+  const [saving, setSaving] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const uploads = useUploads();
   const inputRef = useRef(null);
@@ -380,6 +435,21 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
     },
     [workspace.id],
   );
+
+  // "Open chat" on a saved note links to /ai?thread=…: show that chat.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedThread = isPage ? searchParams.get('thread') : null;
+  useEffect(() => {
+    if (!linkedThread) return;
+    if (/^[a-f\d]{24}$/i.test(linkedThread)) setThreadId(linkedThread);
+    setSearchParams(
+      (params) => {
+        params.delete('thread');
+        return params;
+      },
+      { replace: true },
+    );
+  }, [linkedThread, setThreadId, setSearchParams]);
 
   // A chat deleted elsewhere (or gone) falls back to a new one.
   useEffect(() => {
@@ -414,6 +484,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
   );
 
   const messages = threadId ? (thread.data?.messages ?? []) : [];
+  const savedNotes = thread.data?.savedNotes ?? {};
   const files = useMemo(
     () => new Map((thread.data?.files ?? []).map((file) => [file.id, file])),
     [thread.data?.files],
@@ -448,6 +519,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
       setStream(null);
       const id = result.thread.id;
       queryClient.setQueryData(aiKey(workspace.id, 'thread', id), (current) => ({
+        ...current,
         thread: result.thread,
         messages: [...(current?.messages ?? []), ...result.messages],
         files: mergeFiles(current?.files, result.files),
@@ -466,18 +538,24 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
   async function send(text = draft) {
     const files = attachments.filter((file) => file.status === 'ready');
     if (attachments.some((file) => file.status !== 'ready')) return;
+    const notes = pickedNotes;
     const question =
       text.trim() ||
       (files.length === 1
         ? 'What is in this file?'
         : files.length
           ? 'What is in these files?'
-          : '');
+          : notes.length
+            ? notes.length === 1
+              ? 'Analyse this note'
+              : 'Analyse these notes'
+            : '');
     if (!question || working || limited) return;
     const project = scope;
     const sentAttachments = attached;
     setDraft('');
     setAttached([]);
+    setPickedNotes([]);
     setUploadError(null);
     stickToBottom.current = true;
     const controller = new AbortController();
@@ -487,6 +565,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
         text: question,
         project,
         attachments: files.map(({ id, name, category }) => ({ id, name, category })),
+        notes,
       },
       text: '',
       status: 'Thinking',
@@ -502,6 +581,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
           ...(threadId && { threadId }),
           ...(project && { projectId: project.id }),
           ...(files.length && { fileIds: files.map((file) => file.id) }),
+          ...(notes.length && { noteIds: notes.map((note) => note.id) }),
         },
         {
           signal: controller.signal,
@@ -531,6 +611,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
       // Nothing typed is lost.
       setDraft((current) => current || text.trim());
       setAttached((current) => (current.length ? current : sentAttachments));
+      setPickedNotes((current) => (current.length ? current : notes));
       setStream((current) => current && { ...current, error });
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
@@ -557,8 +638,17 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
     setStream(null);
     setScope(null);
     setAttached([]);
+    setPickedNotes([]);
     setUploadError(null);
     setHistoryOpen(false);
+  }
+
+  function addNote(note) {
+    setPickedNotes((current) =>
+      current.some((item) => item.id === note.id) || current.length >= MAX_NOTES
+        ? current
+        : [...current, note],
+    );
   }
 
   function attach(file) {
@@ -611,6 +701,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
       setHistoryOpen(false);
       setScope(request.project ?? null);
       setAttached(request.file ? [{ key: request.file.id, ...request.file }] : []);
+      setPickedNotes(request.note ? [request.note] : []);
       setUploadError(null);
       requestAnimationFrame(() => inputRef.current?.focus());
     };
@@ -784,7 +875,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
               />
             ) : (
               <>
-                {messages.map((message) =>
+                {messages.map((message, index) =>
                   message.role === 'user' ? (
                     <UserMessage key={message.id} message={message} />
                   ) : (
@@ -793,6 +884,19 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
                       message={message}
                       files={files}
                       onOpenFile={setOpenFile}
+                      workspaceId={workspace.id}
+                      savedNoteId={savedNotes[message.id]}
+                      onSave={
+                        threadId
+                          ? () =>
+                              setSaving({
+                                message,
+                                question: messages
+                                  .slice(0, index)
+                                  .findLast((candidate) => candidate.role === 'user'),
+                              })
+                          : undefined
+                      }
                     />
                   ),
                 )}
@@ -868,6 +972,11 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
             onRemoveAttachment={(key) =>
               setAttached((current) => current.filter((file) => file.key !== key))
             }
+            notes={pickedNotes}
+            onAddNote={addNote}
+            onRemoveNote={(id) =>
+              setPickedNotes((current) => current.filter((note) => note.id !== id))
+            }
             onUpload={uploadFiles}
             canUpload={canEdit(workspace)}
             notice={uploadError}
@@ -883,6 +992,16 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
         canEdit={canEdit(workspace)}
         onClose={() => setOpenFile(null)}
       />
+      {saving && threadId && (
+        <SaveAnswerDialog
+          workspaceId={workspace.id}
+          threadId={threadId}
+          message={saving.message}
+          question={saving.question}
+          onClose={() => setSaving(null)}
+          onSaved={() => setSaving(null)}
+        />
+      )}
     </section>
   );
 }

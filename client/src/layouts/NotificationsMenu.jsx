@@ -1,9 +1,12 @@
 import { addDays, startOfDay } from 'date-fns';
-import { Bell, CalendarClock, CircleAlert } from 'lucide-react';
+import { Bell, BellRing, CalendarClock, CircleAlert, Settings } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { itemLabel } from '../features/calendar/calendarMeta.js';
 import { useCalendarFeed } from '../features/calendar/hooks.js';
+import { useNotifications, useThisDeviceEndpoint } from '../features/notifications/hooks.js';
+import { ThisDeviceControl } from '../features/notifications/NotificationsSection.jsx';
+import { pushSupport } from '../features/notifications/pushDevice.js';
 import { useTasks } from '../features/tasks/hooks.js';
 import { cn } from '../lib/cn.js';
 import { formatDueLabel, formatTime, isOverdue } from '../lib/dates.js';
@@ -43,6 +46,39 @@ function useAlerts(workspaceId) {
       }));
     return [...overdue, ...soon];
   }, [workspaceId, myTasks, upcoming]);
+}
+
+// Offers device reminders until this device has them (or can't have them).
+function DeviceRemindersFooter({ workspaceId, onNavigate }) {
+  const { data } = useNotifications();
+  const { data: endpoint } = useThisDeviceEndpoint();
+  const support = pushSupport();
+  const subscribed = Boolean(endpoint) && data?.devices.some((d) => d.endpoint === endpoint);
+  const offer =
+    data?.pushAvailable && !subscribed && ['ready', 'granted', 'needs-install'].includes(support);
+  return (
+    <div className="border-line/70 mt-2 space-y-2 border-t px-2 pb-1 pt-3">
+      {offer && (
+        <div className="bg-subtle/70 space-y-2 rounded-xl p-3">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <BellRing className="text-accent h-4 w-4" aria-hidden="true" />
+            Get reminders on this device
+          </p>
+          <p className="text-muted text-xs">
+            Before deadlines and events, even when FrameDesk is closed.
+          </p>
+          <ThisDeviceControl overview={data} compact />
+        </div>
+      )}
+      <Link
+        to={`/w/${workspaceId}/account?tab=notifications`}
+        onClick={onNavigate}
+        className="text-muted hover:text-ink flex items-center gap-2 rounded-lg px-1 py-1 text-xs"
+      >
+        <Settings className="h-3.5 w-3.5" aria-hidden="true" /> Reminder settings
+      </Link>
+    </div>
+  );
 }
 
 export function NotificationsMenu({ workspaceId }) {
@@ -104,6 +140,7 @@ export function NotificationsMenu({ workspaceId }) {
               );
             })}
           </ul>
+          <DeviceRemindersFooter workspaceId={workspaceId} onNavigate={close} />
         </div>
       )}
     </div>

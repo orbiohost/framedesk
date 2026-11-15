@@ -15,7 +15,7 @@ import { CreditsSection } from '../../features/ai/CreditsSection.jsx';
 import { CheckoutDialog } from '../../features/billing/CheckoutDialog.jsx';
 import { IntervalToggle } from '../../features/billing/IntervalToggle.jsx';
 import { OfferCountdown } from '../../features/billing/OfferCountdown.jsx';
-import { PlanCard, PlanGrid } from '../../features/billing/PlanCard.jsx';
+import { FreePlanCard, PlanCard, PlanGrid } from '../../features/billing/PlanCard.jsx';
 import { planLabel } from '../../features/workspaces/planLabel.js';
 import { canAdminister } from '../../features/workspaces/roles.js';
 import { formatInr } from '../../lib/format.js';
@@ -26,9 +26,11 @@ function RequestNotice({ request, plans, email }) {
     <Alert tone="success" className="mb-6">
       You asked for <strong>{plan?.name}</strong>, billed {request.interval} at{' '}
       <strong>{formatInr(request.quotedAmount)}</strong>
-      {request.offerCode && ' (launch offer price, locked in)'}. We&apos;ll email {email} with a
-      payment link (UPI, cards or netbanking) and switch your workspace over once it&apos;s paid.
-      Picking another plan below replaces this request.
+      {request.offerCode && ' (offer price, locked in)'}
+      {request.discount &&
+        ` after ${request.discount.code} (−${formatInr(request.discount.amount)})`}
+      . We&apos;ll email {email} with a payment link (UPI, cards or netbanking) and switch your
+      workspace over once it&apos;s paid. Picking another plan below replaces this request.
     </Alert>
   );
 }
@@ -56,6 +58,8 @@ export function UpgradePage() {
   const requestUpgrade = useRequestUpgrade(workspace.id);
   const [billingInterval, setBillingInterval] = useState('yearly');
   const [checkout, setCheckout] = useState(null);
+  // Manual payment (no online checkout): the coupon goes with the request.
+  const [coupon, setCoupon] = useState('');
 
   if (!isAdmin) {
     return (
@@ -73,7 +77,12 @@ export function UpgradePage() {
 
   function choose(plan) {
     if (payOnline) setCheckout({ planCode: plan.code, interval: billingInterval });
-    else requestUpgrade.mutate({ planCode: plan.code, interval: billingInterval });
+    else
+      requestUpgrade.mutate({
+        planCode: plan.code,
+        interval: billingInterval,
+        ...(coupon.trim() && { couponCode: coupon.trim() }),
+      });
   }
 
   return (
@@ -99,9 +108,36 @@ export function UpgradePage() {
           offer={pricing.offer}
         />
         <OfferCountdown offer={pricing.offer} className="flex-1" />
+        {!payOnline && (
+          <input
+            value={coupon}
+            onChange={(event) => setCoupon(event.target.value.toUpperCase())}
+            maxLength={30}
+            placeholder="Coupon code"
+            aria-label="Coupon code"
+            className="border-line bg-surface h-9 w-40 rounded-full border px-4 text-sm uppercase"
+          />
+        )}
       </div>
 
       <PlanGrid>
+        {pricing.free && (
+          <FreePlanCard
+            free={pricing.free}
+            badge={
+              ['free', 'trialing', 'none'].includes(workspace.billing.status) && (
+                <span className="text-accent text-xs font-medium">Your plan</span>
+              )
+            }
+            action={
+              <Button className="w-full" variant="secondary" disabled>
+                {['free', 'trialing', 'none'].includes(workspace.billing.status)
+                  ? 'Current plan'
+                  : 'Included'}
+              </Button>
+            }
+          />
+        )}
         {pricing.plans.map((plan) => (
           <PlanCard
             key={plan.code}

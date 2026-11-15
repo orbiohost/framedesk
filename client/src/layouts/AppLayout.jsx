@@ -12,6 +12,8 @@ import { VerifyEmailBanner } from '../features/auth/VerifyEmailBanner.jsx';
 import { PlanStatusBanner } from '../features/billing/PlanStatusBanner.jsx';
 import { QuickNoteButton } from '../features/quickNotes/QuickNoteButton.jsx';
 import { UploadTray } from '../features/files/UploadTray.jsx';
+import { InstallApp } from '../features/install/InstallApp.jsx';
+import { useNotificationSync } from '../features/notifications/hooks.js';
 import { useWorkspace } from '../features/workspaces/hooks.js';
 import { rememberWorkspace } from '../features/workspaces/lastWorkspace.js';
 import { canView } from '../features/workspaces/roles.js';
@@ -20,6 +22,7 @@ import { BottomNav } from './BottomNav.jsx';
 import { GlobalSearch } from './GlobalSearch.jsx';
 import { NotificationsMenu } from './NotificationsMenu.jsx';
 import { Sidebar } from './Sidebar.jsx';
+import { useClaimPendingReferral } from '../features/referrals/referrals.js';
 
 function LayoutSkeleton() {
   return (
@@ -119,6 +122,10 @@ export function AppLayout() {
   const { pathname } = useLocation();
   const { data: workspace, isPending, isError, error, refetch } = useWorkspace(workspaceId);
   const aiEnabled = useAiEnabled(workspace);
+  // Keeps this device's reminder subscription and time zone up to date.
+  useNotificationSync();
+  // Signed up through a friend's referral link: link the two accounts.
+  useClaimPendingReferral(Boolean(workspace));
   // The mobile menu belongs to the page it was opened on, so navigating closes it.
   const [navOpenedOn, setNavOpenedOn] = useState(null);
   const isNavOpen = navOpenedOn === pathname;
@@ -201,6 +208,7 @@ export function AppLayout() {
       />
       <AiAssistant key={workspace.id} workspace={workspace} />
       <UploadTray raised={aiEnabled} />
+      <InstallApp />
     </div>
   );
 }

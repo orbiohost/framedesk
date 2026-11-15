@@ -261,8 +261,8 @@ function MediaPreview({ workspaceId, file, url }) {
       <div
         className={cn(
           'w-full',
-          // 16:9 box as large as the stage allows, both ways.
-          isVideo ? 'max-w-[min(100%,calc((100dvh-9rem)*16/9))]' : 'max-w-xl',
+          // The player sizes itself to the video's own shape within the stage.
+          !isVideo && 'max-w-xl',
         )}
       >
         <PlayableMedia file={file} url={url} refreshUrl={refreshUrl} onDownload={download} fill />

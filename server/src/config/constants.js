@@ -9,10 +9,14 @@ export const AUTH = Object.freeze({
   PASSWORD_RESET_TTL_MINUTES: 60,
 });
 
-export const TRIAL = Object.freeze({
-  PLAN_CODE: 'starter',
-  DAYS: 7,
-  STORAGE_BYTES: 5 * GB,
+// Every account starts on the free plan and stays on it until it pays for one,
+// and falls back to it when a paid plan runs out. There is no trial any more;
+// workspaces still "trialing" from before keep it until it ends, then go free.
+export const FREE_PLAN = Object.freeze({
+  PLAN_CODE: 'free',
+  NAME: 'Free',
+  STORAGE_GB: 2,
+  STORAGE_BYTES: 2 * GB,
 });
 
 export const BILLING = Object.freeze({

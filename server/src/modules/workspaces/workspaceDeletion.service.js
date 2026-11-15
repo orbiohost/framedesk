@@ -1,6 +1,8 @@
 import { recordAudit } from '../admin/auditLog.service.js';
 import { AiConversation } from '../ai/aiConversation.model.js';
 import { AiInsight } from '../ai/aiInsight.model.js';
+import { ProjectBrief } from '../briefs/projectBrief.model.js';
+import { Moodboard } from '../moodboards/moodboard.model.js';
 import { UpgradeRequest } from '../billing/upgradeRequest.model.js';
 import { Event } from '../calendar/event.model.js';
 import { Message } from '../chat/message.model.js';
@@ -34,6 +36,8 @@ const WORKSPACE_DATA = [
   FileShare,
   AiConversation,
   AiInsight,
+  ProjectBrief,
+  Moodboard,
 ];
 
 async function assertCanDelete(workspace, membership, userId, confirmName) {

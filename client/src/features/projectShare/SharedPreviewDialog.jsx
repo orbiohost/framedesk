@@ -92,7 +92,8 @@ export function SharedFilePreview({ token, file, fetchUrl = fetchSharedFileUrl }
       <div
         className={cn(
           'w-full',
-          isVideo ? 'max-w-[min(100%,calc((100dvh-9rem)*16/9))]' : 'max-w-xl',
+          // The player sizes itself to the video's own shape within the stage.
+          !isVideo && 'max-w-xl',
         )}
       >
         <PlayableMedia

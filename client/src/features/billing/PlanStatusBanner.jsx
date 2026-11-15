@@ -2,18 +2,10 @@ import { Link } from 'react-router-dom';
 import { daysUntil, formatShortDate } from '../../lib/format.js';
 import { canAdminister } from '../workspaces/roles.js';
 
-const SOON_DAYS = 2;
 // Plans don't renew by themselves, so owners get a heads-up before one ends.
 const RENEW_SOON_DAYS = 5;
 
 function bannerMessage(billing) {
-  if (billing.status === 'trialing') {
-    const days = daysUntil(billing.trialEndsAt);
-    if (days === 0)
-      return 'Your trial has ended. Uploads are paused until you choose a plan; nothing is deleted.';
-    if (days <= SOON_DAYS) return `Your trial ends in ${days} ${days === 1 ? 'day' : 'days'}.`;
-    return null;
-  }
   if (billing.status === 'active' && billing.currentPeriodEnd) {
     const days = daysUntil(billing.currentPeriodEnd);
     if (days > RENEW_SOON_DAYS) return null;
@@ -26,7 +18,7 @@ function bannerMessage(billing) {
   }
   if (billing.status === 'none') return 'This workspace has no plan yet, so uploads are paused.';
   if (billing.status === 'read_only')
-    return 'Your plan has ended, so this workspace is read-only. Your files are safe; renew to upload again.';
+    return 'Your plan has ended and this account is moving to the free plan (2 GB). Your files are safe; renew to keep your space.';
   return null;
 }
 
@@ -34,7 +26,7 @@ function linkLabel(billing) {
   return ['active', 'past_due', 'read_only'].includes(billing.status) ? 'Renew' : 'See plans';
 }
 
-// Only interrupts when it matters: a trial or plan nearly over or ended, or no plan.
+// Only interrupts when it matters: a plan nearly over or ended. The free plan gets no banner.
 export function PlanStatusBanner({ workspace }) {
   const message = bannerMessage(workspace.billing);
   if (!message) return null;

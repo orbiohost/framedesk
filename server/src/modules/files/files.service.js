@@ -1,4 +1,6 @@
 import { deleteInsightsForFiles } from '../ai/aiInsight.model.js';
+import { requeueForAnalysis } from '../ai/analysisWorker.js';
+import { isInBriefsFolder, markBriefStale } from '../briefs/briefStale.js';
 import { storageConfig } from '../../config/storage.js';
 import { getStorageDriver } from '../../storage/storageDriver.js';
 import { AppError } from '../../utils/AppError.js';
@@ -174,6 +176,18 @@ export async function updateFile(
     { $set: changes },
     { runValidators: true },
   );
+  // Read by the AI as a general file; in the briefs folder it is read again as
+  // meeting material (every handwritten or spoken word).
+  if (
+    folderId &&
+    String(folderId) !== String(file.folderId) &&
+    (await isInBriefsFolder(workspaceId, folderId)) &&
+    !(await isInBriefsFolder(workspaceId, file.folderId))
+  ) {
+    await requeueForAnalysis(workspaceId, fileId, ['done', 'skipped', 'failed', 'no_credits']);
+  }
+  // A file moved in or out of a project's briefs folder, or renamed or noted there.
+  await markBriefStale(workspaceId, file.folderId, folderId);
   return getFileDto(workspaceId, fileId);
 }
 
@@ -185,7 +199,10 @@ export async function trashFile(workspaceId, fileId, userId, viewer = null) {
     { _id: fileId, workspaceId, deletedAt: null },
     { $set: { deletedAt: new Date(), deletedBy: userId } },
   );
-  if (result.modifiedCount === 1) await releaseStorage(workspaceId, file.size);
+  if (result.modifiedCount === 1) {
+    await releaseStorage(workspaceId, file.size);
+    await markBriefStale(workspaceId, file.folderId);
+  }
   return getFileDto(workspaceId, fileId);
 }
 
@@ -205,6 +222,7 @@ export async function restoreFile(workspaceId, fileId, viewer = null) {
     { $set: { deletedAt: null, deletedBy: null, folderId } },
   );
   if (result.modifiedCount !== 1) await releaseStorage(workspaceId, file.size);
+  else await markBriefStale(workspaceId, folderId);
   return getFileDto(workspaceId, fileId);
 }
 

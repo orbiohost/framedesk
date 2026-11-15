@@ -1,12 +1,11 @@
-import { CalendarDays, Flag } from 'lucide-react';
+import { CalendarDays, Flag, Folder } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../lib/cn.js';
 import { isPressingPriority, priorityLabel } from '../../lib/priorities.js';
 import { useAiAvailable } from '../ai/aiBridge.js';
 import { ActionMenu } from '../files/ActionMenu.jsx';
 import { dueInfo, projectMenuItems, taskPercent } from './projectList.js';
-import { projectTypeLabel } from './projectMeta.js';
-import { ProjectStatusBadge } from './ProjectStatusBadge.jsx';
+import { projectStatus, projectTypeLabel } from './projectMeta.js';
 
 const DUE_TONES = {
   danger: 'text-danger font-medium',
@@ -66,6 +65,57 @@ function Progress({ project, wide = false }) {
   );
 }
 
+// Every project card gets the same soft pink-to-purple glow, and its folder a
+// soft pastel pink-to-lilac tile, kept lighter than the bright AI icon so the
+// two don't look alike.
+const CARD_TINT =
+  'from-rose-100/70 via-violet-50 to-surface border-violet-200/80 hover:border-violet-300 dark:from-fuchsia-500/[0.12] dark:via-violet-500/[0.06] dark:to-surface dark:border-violet-400/20 dark:hover:border-violet-400/45';
+
+function FolderTile({ small = false }) {
+  return (
+    <span
+      className={cn(
+        'grid shrink-0 place-items-center bg-gradient-to-br from-rose-100 to-violet-200 text-violet-600 ring-1 ring-inset ring-violet-300/50 dark:from-rose-300/20 dark:to-violet-300/20 dark:text-violet-200 dark:ring-violet-300/20',
+        small ? 'h-9 w-9 rounded-xl' : 'h-11 w-11 rounded-2xl',
+      )}
+      aria-hidden="true"
+    >
+      <Folder
+        className={small ? 'h-[18px] w-[18px]' : 'h-5 w-5'}
+        fill="currentColor"
+        fillOpacity={0.3}
+        strokeWidth={2}
+      />
+    </span>
+  );
+}
+
+// Status as a small tinted pill with a colored dot: readable on the tinted card
+// in both themes, unlike the outlined grey badge.
+const STATUS_STYLES = {
+  draft: 'bg-slate-500/10 text-slate-600 dark:text-slate-300 [--dot:theme(colors.slate.400)]',
+  active:
+    'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 [--dot:theme(colors.emerald.500)]',
+  pending: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 [--dot:theme(colors.amber.500)]',
+  review: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 [--dot:theme(colors.violet.500)]',
+  completed: 'bg-sky-500/10 text-sky-700 dark:text-sky-300 [--dot:theme(colors.sky.500)]',
+  archived: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 [--dot:theme(colors.slate.400)]',
+};
+
+function StatusPill({ status }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold',
+        STATUS_STYLES[status] ?? STATUS_STYLES.draft,
+      )}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-[var(--dot)]" aria-hidden="true" />
+      {projectStatus(status).label}
+    </span>
+  );
+}
+
 function subtitle(project) {
   return `${project.client?.name ?? 'Internal'} · ${projectTypeLabel(project.type)}`;
 }
@@ -88,13 +138,21 @@ const STRETCHED = 'after:absolute after:inset-0 after:rounded-[inherit] focus-vi
 
 function ProjectCard({ project, workspaceId, menu }) {
   return (
-    <li className="border-line/70 bg-surface shadow-soft hover:border-accent/40 hover:shadow-lift focus-within:ring-accent/40 group relative flex flex-col rounded-3xl border p-5 transition-all duration-200 focus-within:ring-2 hover:-translate-y-0.5">
-      <div className="flex items-center gap-2">
-        <ProjectStatusBadge status={project.status} />
-        <PriorityFlag priority={project.priority} />
-        <Menu project={project} menu={menu} className="relative z-10 -mr-2 ml-auto" />
+    <li
+      className={cn(
+        'shadow-soft hover:shadow-lift focus-within:ring-accent/40 group relative flex flex-col rounded-3xl border bg-gradient-to-br p-5 transition-all duration-200 focus-within:ring-2 hover:-translate-y-0.5',
+        CARD_TINT,
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <FolderTile />
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+          <PriorityFlag priority={project.priority} />
+          <StatusPill status={project.status} />
+        </div>
+        <Menu project={project} menu={menu} className="relative z-10 -mr-2" />
       </div>
-      <h3 className="mt-3 text-[17px] font-semibold leading-snug">
+      <h3 className="mt-4 text-[17px] font-semibold leading-snug">
         <Link
           to={`/w/${workspaceId}/projects/${project.id}`}
           className={cn('line-clamp-2', STRETCHED)}
@@ -102,11 +160,18 @@ function ProjectCard({ project, workspaceId, menu }) {
           {project.title}
         </Link>
       </h3>
-      <p className="text-muted mt-1 truncate text-sm">{subtitle(project)}</p>
+      <p className="text-muted mt-0.5 truncate text-sm">{subtitle(project)}</p>
       {/* Pinned to the bottom, so cards in a row line up whatever their text. */}
-      <div className="mt-auto space-y-2.5 pt-5">
-        <Progress project={project} wide />
-        <DueLabel project={project} />
+      <div className="mt-auto pt-5">
+        {project.tasks.total > 0 && (
+          <div className="mb-3">
+            <Progress project={project} wide />
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 border-t border-violet-200/70 pt-3 dark:border-white/[0.06]">
+          <DueLabel project={project} className="min-w-0 truncate text-[13px]" />
+          {project.tasks.total === 0 && <Progress project={project} />}
+        </div>
       </div>
     </li>
   );
@@ -134,17 +199,20 @@ function ProjectListRow({ project, workspaceId, menu }) {
         COLUMNS,
       )}
     >
-      <div className="min-w-0">
-        <p className="flex items-center gap-2">
-          <Link
-            to={`/w/${workspaceId}/projects/${project.id}`}
-            className={cn('truncate font-semibold', STRETCHED)}
-          >
-            {project.title}
-          </Link>
-          <PriorityFlag priority={project.priority} className="shrink-0" />
-        </p>
-        <p className="text-muted truncate text-sm">{subtitle(project)}</p>
+      <div className="flex min-w-0 items-center gap-3">
+        <FolderTile small />
+        <div className="min-w-0">
+          <p className="flex items-center gap-2">
+            <Link
+              to={`/w/${workspaceId}/projects/${project.id}`}
+              className={cn('truncate font-semibold', STRETCHED)}
+            >
+              {project.title}
+            </Link>
+            <PriorityFlag priority={project.priority} className="shrink-0" />
+          </p>
+          <p className="text-muted truncate text-sm">{subtitle(project)}</p>
+        </div>
       </div>
       <Menu
         project={project}
@@ -153,7 +221,7 @@ function ProjectListRow({ project, workspaceId, menu }) {
       />
       <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 md:contents">
         <div className="md:col-start-2 md:row-start-1">
-          <ProjectStatusBadge status={project.status} />
+          <StatusPill status={project.status} />
         </div>
         <DueLabel project={project} className="md:col-start-3 md:row-start-1" />
         <div className="md:col-start-4 md:row-start-1">

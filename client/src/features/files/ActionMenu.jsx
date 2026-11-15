@@ -1,4 +1,4 @@
-import { EllipsisVertical } from 'lucide-react';
+import { Check, EllipsisVertical } from 'lucide-react';
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../../lib/cn.js';
@@ -21,14 +21,67 @@ function useIsSheet() {
 }
 
 // Below the trigger, right-aligned; flipped above when there isn't room.
-function placeMenu(trigger, menu) {
-  const rect = trigger.getBoundingClientRect();
+// With `point` (a right-click), the menu opens at the cursor instead.
+function placeMenu(trigger, menu, point) {
   const height = menu?.offsetHeight ?? 0;
+  if (point) {
+    const left = Math.min(window.innerWidth - MENU_WIDTH - 8, Math.max(8, point.x));
+    const fitsBelow = point.y + height <= window.innerHeight - 8;
+    const top = fitsBelow ? point.y : Math.max(8, point.y - height);
+    return { left, top, origin: fitsBelow ? 'top left' : 'bottom left' };
+  }
+  const rect = trigger.getBoundingClientRect();
   const left = Math.min(window.innerWidth - MENU_WIDTH - 8, Math.max(8, rect.right - MENU_WIDTH));
   const below = rect.bottom + GAP;
   const fitsBelow = below + height <= window.innerHeight - 8;
   const top = fitsBelow ? below : Math.max(8, rect.top - GAP - height);
   return { left, top, origin: fitsBelow ? 'top right' : 'bottom right' };
+}
+
+const OPEN_EVENT = 'actionmenu:open';
+// An element whose right-click opens the one item menu inside it. Cards and
+// rows (`group`) count automatically; others opt in with data-context-menu.
+const OWNER = '.group, [data-context-menu]';
+const MENU_TRIGGER = '[data-action-menu]';
+
+function ownedTriggers(owner) {
+  return [...owner.querySelectorAll(MENU_TRIGGER)].filter(
+    (el) => el.parentElement.closest(OWNER) === owner,
+  );
+}
+
+function findMenuFor(target) {
+  for (let owner = target.closest(OWNER); owner; owner = owner.parentElement?.closest(OWNER)) {
+    const all = owner.querySelectorAll(MENU_TRIGGER);
+    if (all.length === 1) return all[0];
+    if (all.length > 1) {
+      if (!owner.hasAttribute('data-context-menu')) return null;
+      const own = ownedTriggers(owner);
+      return own.length === 1 ? own[0] : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Replaces the browser's right-click menu across the app: a right-click on a
+ * file, folder, project, etc. opens that item's own menu at the cursor.
+ * Text fields keep the browser menu so copy and paste still work.
+ */
+export function installContextMenu() {
+  document.addEventListener('contextmenu', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (
+      target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
+    ) {
+      return;
+    }
+    event.preventDefault();
+    const trigger = target && findMenuFor(target);
+    trigger?.dispatchEvent(
+      new CustomEvent(OPEN_EVENT, { detail: { x: event.clientX, y: event.clientY } }),
+    );
+  });
 }
 
 const TRIGGERS = {
@@ -48,6 +101,8 @@ const TRIGGERS = {
  * title: heading shown in the sheet (e.g. the file or folder name).
  * revealOnHover: on devices with a mouse, the button only shows while its
  *   `group` is hovered or focused (always shown on touch).
+ * trigger: content for the button in place of the "⋯" icon (e.g. a sort
+ *   picker); `className` then styles the whole button. Items may set `checked`.
  */
 export function ActionMenu({
   label,
@@ -55,10 +110,12 @@ export function ActionMenu({
   items,
   variant = 'plain',
   revealOnHover = false,
+  trigger,
   className,
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(null);
+  const [point, setPoint] = useState(null);
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
   const menuId = useId();
@@ -67,13 +124,27 @@ export function ActionMenu({
   const close = useCallback((returnFocus = true) => {
     setOpen(false);
     setPosition(null);
+    setPoint(null);
     if (returnFocus) triggerRef.current?.focus({ preventScroll: true });
   }, []);
 
   useLayoutEffect(() => {
     if (!open || isSheet) return;
-    setPosition(placeMenu(triggerRef.current, menuRef.current));
-  }, [open, isSheet]);
+    setPosition(placeMenu(triggerRef.current, menuRef.current, point));
+  }, [open, isSheet, point]);
+
+  // A right-click on the item that owns this menu (see installContextMenu).
+  useEffect(() => {
+    const node = triggerRef.current;
+    if (!node) return undefined;
+    function onOpen(event) {
+      setPosition(null);
+      setPoint(event.detail);
+      setOpen(true);
+    }
+    node.addEventListener(OPEN_EVENT, onOpen);
+    return () => node.removeEventListener(OPEN_EVENT, onOpen);
+  }, [items.length]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -163,6 +234,7 @@ export function ActionMenu({
           </span>
         )}
         <span className="flex-1 truncate font-medium">{item.label}</span>
+        {item.checked && <Check className="text-accent h-4 w-4 shrink-0" aria-hidden="true" />}
       </button>
     </div>
   ));
@@ -220,28 +292,34 @@ export function ActionMenu({
       <button
         ref={triggerRef}
         type="button"
-        aria-label={label}
+        aria-label={trigger ? undefined : label}
         title={label}
+        data-action-menu={trigger ? undefined : ''}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={(event) => {
           event.stopPropagation();
           if (open) close(false);
-          else setOpen(true);
+          else {
+            setPoint(null);
+            setOpen(true);
+          }
         }}
         onDoubleClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
         className={cn(
-          'grid shrink-0 place-items-center rounded-full transition-all active:scale-90',
-          TRIGGERS[variant],
+          trigger
+            ? 'flex shrink-0 items-center rounded-full transition-colors'
+            : 'grid shrink-0 place-items-center rounded-full transition-all active:scale-90',
+          !trigger && TRIGGERS[variant],
           revealOnHover &&
             '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100',
-          open && 'bg-subtle text-ink opacity-100 [@media(hover:hover)]:opacity-100',
+          open && !trigger && 'bg-subtle text-ink opacity-100 [@media(hover:hover)]:opacity-100',
           className,
         )}
       >
-        <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
+        {trigger ?? <EllipsisVertical className="h-4 w-4" aria-hidden="true" />}
       </button>
       {open && createPortal(menu, document.body)}
     </>

@@ -34,6 +34,16 @@ export const optionalObjectId = z
 
 export const optionalDate = z.coerce.date().nullable().optional();
 
+// Reminder offsets in minutes before (up to a week); null = the default.
+const WEEK_MINUTES = 7 * 24 * 60;
+
+export const reminderOffsets = z
+  .array(z.number().int().min(0).max(WEEK_MINUTES))
+  .max(5, 'Use at most 5 reminders')
+  .transform((list) => [...new Set(list)].sort((a, b) => b - a))
+  .nullable()
+  .optional();
+
 export const tags = z
   .array(z.string().trim().min(1).max(40))
   .max(20, 'Use at most 20 tags')

@@ -1,7 +1,16 @@
 import mongoose, { Schema } from 'mongoose';
 import { workspaceScopePlugin } from '../../utils/workspaceScope.plugin.js';
 
-export const LEDGER_KINDS = ['chat', 'analysis', 'purchase', 'grant', 'refund', 'reset'];
+export const LEDGER_KINDS = [
+  'chat',
+  'analysis',
+  'brief',
+  'moodboard',
+  'purchase',
+  'grant',
+  'refund',
+  'reset',
+];
 
 // Every change to an account's AI credits. workspaceId is the account
 // (storage pool) workspace that holds the balance.

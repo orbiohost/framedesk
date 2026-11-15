@@ -11,7 +11,7 @@
   "navigationDividerColor": "#16151C",
   "navigationDividerColorDark": "#16151C",
   "backgroundColor": "#1D1C1A",
-  "enableNotifications": false,
+  "enableNotifications": true,
   "startUrl": "/app?source=twa",
   "iconUrl": "https://desk.orbio.in/icons/icon-512.png",
   "maskableIconUrl": "https://desk.orbio.in/icons/maskable-512.png",

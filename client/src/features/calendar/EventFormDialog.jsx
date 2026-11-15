@@ -18,6 +18,7 @@ import {
   toDateTimeInputValue,
 } from '../../lib/dates.js';
 import { applyServerFieldErrors } from '../../lib/forms.js';
+import { ReminderField } from '../notifications/ReminderField.jsx';
 import { projectOptions, useProjects } from '../projects/hooks.js';
 import { EVENT_TYPE_OPTIONS } from './calendarMeta.js';
 import { useDeleteEvent, useSaveEvent } from './hooks.js';
@@ -34,6 +35,7 @@ const schema = z
     projectId: z.string(),
     location: z.string().max(200),
     notes: z.string().max(5000),
+    reminders: z.array(z.number()).nullable(),
   })
   .refine((v) => (v.allDay ? v.startDay : v.startTime), {
     path: ['startTime'],
@@ -64,6 +66,7 @@ function toFormValues(event, defaults) {
     projectId: event?.project?.id ?? defaults.projectId ?? '',
     location: event?.location ?? '',
     notes: event?.notes ?? '',
+    reminders: event?.reminders ?? null,
   };
 }
 
@@ -191,7 +194,13 @@ function EventForm({ workspaceId, event, defaults, canEdit, onDone }) {
             </>
           )}
           <label className="inline-flex w-fit cursor-pointer items-center gap-2.5 text-sm sm:col-span-2">
-            <input type="checkbox" className="peer sr-only" {...register('allDay')} />
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              // Minutes before a start time mean something else for a whole
+              // day, so a custom choice goes back to the default.
+              {...register('allDay', { onChange: () => setValue('reminders', null) })}
+            />
             <span
               aria-hidden="true"
               className="bg-line peer-checked:bg-accent peer-focus-visible:ring-accent/40 relative h-5 w-9 shrink-0 rounded-full transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4 peer-focus-visible:ring-[3px]"
@@ -199,6 +208,17 @@ function EventForm({ workspaceId, event, defaults, canEdit, onDone }) {
             All day
           </label>
         </div>
+        <Controller
+          control={control}
+          name="reminders"
+          render={({ field }) => (
+            <ReminderField
+              kind={allDay ? 'allDayEvent' : 'event'}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
         <MoreOptions
           label="Project, location and notes"
           defaultOpen={Boolean(event?.project || event?.location || event?.notes)}

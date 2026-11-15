@@ -219,6 +219,18 @@
   }
 }
 
+/* The "Install FrameDesk" card rises into place. */
+@keyframes install-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Media player: the audio "equaliser" bars and the play/pause flash. */
 @keyframes eq {
   0%,

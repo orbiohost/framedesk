@@ -28,6 +28,8 @@ const number = (value) => Number(value ?? 0).toLocaleString('en-IN');
 const LEDGER_LABELS = {
   chat: 'Question',
   analysis: 'File analysed',
+  brief: 'Project brief written',
+  moodboard: 'Moodboard AI',
   purchase: 'Bought',
   grant: 'Admin adjustment',
   refund: 'Refund',
@@ -42,6 +44,10 @@ function toForm(settings) {
         { session: String(limits.session), weekly: String(limits.weekly) },
       ]),
     ),
+    freeLimits: {
+      session: String(settings.freeLimits.session),
+      weekly: String(settings.freeLimits.weekly),
+    },
     trialLimits: {
       session: String(settings.trialLimits.session),
       weekly: String(settings.trialLimits.weekly),
@@ -74,6 +80,10 @@ function toPayload(form) {
         { session: toInt(limits.session), weekly: toInt(limits.weekly) },
       ]),
     ),
+    freeLimits: {
+      session: toInt(form.freeLimits.session),
+      weekly: toInt(form.freeLimits.weekly),
+    },
     trialLimits: {
       session: toInt(form.trialLimits.session),
       weekly: toInt(form.trialLimits.weekly),
@@ -268,20 +278,22 @@ function SettingsForm({ data }) {
         title="Usage limits"
         description="Like Claude: a 5-hour session limit that refreshes after 5 hours, inside a weekly limit that resets 7 days after it starts. Counted in credits; people see percentages."
       >
-        {[...data.plans, { code: 'trial', name: 'Free trial' }].map((plan) => {
-          const isTrial = plan.code === 'trial';
-          const limits = isTrial ? form.trialLimits : (form.planLimits[plan.code] ?? {});
+        {[{ code: 'free', name: 'Free plan' }, ...data.plans].map((plan) => {
+          const isFree = plan.code === 'free';
+          const limits = isFree ? form.freeLimits : (form.planLimits[plan.code] ?? {});
           const update = (field) => (event) => {
             const next = { ...limits, [field]: event.target.value };
-            if (isTrial) set('trialLimits')(next);
+            if (isFree) set('freeLimits')(next);
             else set('planLimits')({ ...form.planLimits, [plan.code]: next });
           };
-          const errorPath = isTrial ? 'trialLimits' : `planLimits.${plan.code}`;
+          const errorPath = isFree ? 'freeLimits' : `planLimits.${plan.code}`;
           return (
             <SettingsRow
               key={plan.code}
               label={plan.name}
-              description={isTrial ? 'During the 7-day free trial.' : undefined}
+              description={
+                isFree ? 'Every account that has not paid for a plan (2 GB).' : undefined
+              }
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextField
@@ -317,7 +329,7 @@ function SettingsForm({ data }) {
           description="Suggested: about half of what a week's limit costs in extra-usage packs."
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            {[{ code: 'trial', name: 'Free trial' }, ...data.plans].map((plan) => (
+            {[{ code: 'free', name: 'Free plan' }, ...data.plans].map((plan) => (
               <TextField
                 key={plan.code}
                 id={`ai-reset-${plan.code}`}

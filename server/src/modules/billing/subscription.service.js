@@ -1,4 +1,4 @@
-import { findPlan, planStorageBytes } from '../plans/plans.service.js';
+import { findPlan, getCatalog, planStorageBytes } from '../plans/plans.service.js';
 import { toBillingProfile } from '../users/users.service.js';
 import { User } from '../users/user.model.js';
 import { logger } from '../../utils/logger.js';
@@ -60,7 +60,7 @@ export function nextPeriod(workspace, paidAt, { planCode, interval, amount }) {
 // Puts a workspace on a paid plan until `periodEnd`, with that plan's storage.
 // `amount` is the plan price before GST (it drives MRR).
 export async function applyPlan(workspaceId, { planCode, interval, amount, periodEnd }) {
-  const plan = findPlan(planCode);
+  const plan = findPlan(await getCatalog(), planCode);
   await Workspace.updateOne(
     { _id: workspaceId },
     {

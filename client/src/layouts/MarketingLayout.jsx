@@ -41,8 +41,8 @@ function AccountLinks() {
         to="/signup"
         className="pill-active rounded-full px-4 py-2 text-sm font-medium hover:opacity-90"
       >
-        <span className="sm:hidden">Try free</span>
-        <span className="hidden sm:inline">Start free trial</span>
+        <span className="sm:hidden">Start free</span>
+        <span className="hidden sm:inline">Get started free</span>
       </Link>
     </>
   );

@@ -1,5 +1,6 @@
 import { AppError } from '../../utils/AppError.js';
 import { PLANS } from '../plans/plans.catalog.js';
+import { planNameNow } from '../plans/plans.service.js';
 import { toBillingProfile } from '../users/users.service.js';
 import { Workspace, storageLimitBytes } from '../workspaces/workspace.model.js';
 import { getSeller } from './billingSettings.service.js';
@@ -17,7 +18,7 @@ const HISTORY_LIMIT = 200;
 export function planName(code) {
   if (code === AI_CREDITS_CODE) return 'AI credits';
   if (code === AI_RESET_CODE) return 'AI usage reset';
-  return PLANS.find((plan) => plan.code === code)?.name ?? code ?? 'No plan';
+  return planNameNow(code) ?? PLANS.find((plan) => plan.code === code)?.name ?? code ?? 'No plan';
 }
 
 // Payments from before sequential numbering get a stable number from their id.

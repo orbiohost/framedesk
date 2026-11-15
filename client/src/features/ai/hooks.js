@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api, ensureCsrfToken, refreshSession } from '../../lib/apiClient.js';
 import { toQueryString } from '../../lib/queryString.js';
-import { featureKey } from '../../lib/workspaceKeys.js';
+import { featureKey, invalidateFeatures } from '../../lib/workspaceKeys.js';
 
 export const aiKey = (workspaceId, ...rest) => featureKey(workspaceId, 'ai', ...rest);
 
@@ -56,6 +56,28 @@ export function useDeleteThread(workspaceId) {
         threads?.filter((thread) => thread.id !== threadId),
       );
       queryClient.removeQueries({ queryKey: aiKey(workspaceId, 'thread', threadId) });
+    },
+  });
+}
+
+// "Save to notes" on an answer. input: { threadId, messageId, title?, projectIds?, visibility? }
+export function useSaveAnswerAsNote(workspaceId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ threadId, messageId, ...input }) =>
+      (
+        await api.post(
+          `/workspaces/${workspaceId}/ai/threads/${threadId}/messages/${messageId}/note`,
+          input,
+        )
+      ).note,
+    onSuccess: (note, { threadId, messageId }) => {
+      queryClient.setQueryData(aiKey(workspaceId, 'thread', threadId), (current) =>
+        current
+          ? { ...current, savedNotes: { ...current.savedNotes, [messageId]: note.id } }
+          : current,
+      );
+      invalidateFeatures(queryClient, workspaceId, ['quick-notes']);
     },
   });
 }

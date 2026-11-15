@@ -14,7 +14,7 @@ export function SearchInput({ value, onChange, placeholder, label, className }) 
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="border-line bg-surface placeholder:text-muted/70 h-10 w-full rounded-full border pl-10 pr-4 text-sm transition-shadow focus-visible:border-accent/60 focus-visible:ring-[3px] focus-visible:ring-accent/15"
+        className="border-line bg-surface placeholder:text-muted/70 focus-visible:border-accent/60 focus-visible:ring-accent/15 h-10 w-full rounded-full border pl-10 pr-4 text-sm transition-shadow focus-visible:ring-[3px]"
       />
     </label>
   );

@@ -238,7 +238,7 @@ function FontView({ url }) {
         onChange={(event) => setSample(event.target.value)}
         aria-label="Sample text"
         placeholder="Type to try the font"
-        className="border-line bg-subtle mb-6 w-full rounded-lg border px-3 py-2 text-sm transition-shadow focus-visible:border-accent/60 focus-visible:ring-[3px] focus-visible:ring-accent/15"
+        className="border-line bg-subtle focus-visible:border-accent/60 focus-visible:ring-accent/15 mb-6 w-full rounded-lg border px-3 py-2 text-sm transition-shadow focus-visible:ring-[3px]"
       />
       <p className="mb-6 break-words text-2xl" style={{ fontFamily: `"${family}"` }}>
         ABCDEFGHIJKLMNOPQRSTUVWXYZ

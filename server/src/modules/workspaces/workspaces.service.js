@@ -1,13 +1,12 @@
-import { TRIAL } from '../../config/constants.js';
+import { FREE_PLAN } from '../../config/constants.js';
+import { freeStorageBytes } from '../plans/plans.service.js';
 import { AppError } from '../../utils/AppError.js';
-import { daysFromNow } from '../../utils/time.js';
 import {
   addOwnerMembership,
   findActiveMembership,
   listActiveMembershipsForUser,
 } from '../members/members.service.js';
 import { effectiveBilling } from '../billing/planLifecycle.service.js';
-import { User } from '../users/user.model.js';
 import { cached } from '../../utils/cache.js';
 import {
   findOwnerAccountWorkspace,
@@ -50,25 +49,11 @@ export function toWorkspaceSummary(workspace, membership, pool = workspace) {
   };
 }
 
-// Each user gets one free trial, on the first workspace they create.
-// The conditional update makes the claim atomic.
-async function claimTrial(userId) {
-  const result = await User.updateOne(
-    { _id: userId, trialStartedAt: null },
-    { $set: { trialStartedAt: new Date() } },
-  );
-  return result.modifiedCount === 1;
-}
-
-function initialPlanState(hasTrial) {
-  if (!hasTrial) return { billing: { status: 'none' }, storage: { planLimitBytes: 0 } };
+// Every account starts on the free plan, for as long as it likes.
+async function initialPlanState() {
   return {
-    billing: {
-      planCode: TRIAL.PLAN_CODE,
-      status: 'trialing',
-      trialEndsAt: daysFromNow(TRIAL.DAYS),
-    },
-    storage: { planLimitBytes: TRIAL.STORAGE_BYTES },
+    billing: { planCode: FREE_PLAN.PLAN_CODE, status: 'free' },
+    storage: { planLimitBytes: await freeStorageBytes() },
   };
 }
 
@@ -82,8 +67,7 @@ async function newWorkspaceFields(ownerId) {
       fields: { storagePoolId: account._id, billing: { status: 'none' }, storage: {} },
     };
   }
-  const hasTrial = await claimTrial(ownerId);
-  return { account: null, fields: initialPlanState(hasTrial) };
+  return { account: null, fields: await initialPlanState() };
 }
 
 export async function createWorkspace({ ownerId, name }) {

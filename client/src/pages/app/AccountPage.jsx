@@ -1,10 +1,13 @@
 import { format } from 'date-fns';
 import {
   BadgeCheck,
+  Bell,
   Camera,
   ChevronRight,
   CreditCard,
   DatabaseBackup,
+  FolderKanban,
+  Gift,
   KeyRound,
   Plug,
   Settings,
@@ -21,6 +24,9 @@ import { ProfileSection } from '../../features/account/ProfileSection.jsx';
 import { SecuritySection } from '../../features/account/SecuritySection.jsx';
 import { SettingsSection } from '../../features/account/SettingsSection.jsx';
 import { useCurrentUser } from '../../features/auth/hooks.js';
+import { NotificationsSection } from '../../features/notifications/NotificationsSection.jsx';
+import { ProjectSettingsSection } from '../../features/projects/ProjectSettingsSection.jsx';
+import { ReferralSection } from '../../features/referrals/ReferralSection.jsx';
 import { planLabel } from '../../features/workspaces/planLabel.js';
 import { canAdminister } from '../../features/workspaces/roles.js';
 import { cn } from '../../lib/cn.js';
@@ -140,8 +146,11 @@ export function AccountPage() {
   const isAdmin = workspace && canAdminister(workspace);
   const tabs = [
     { id: 'profile', label: 'Profile', icon: UserRound },
+    ...(workspace ? [{ id: 'projects', label: 'Projects', icon: FolderKanban }] : []),
+    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: KeyRound },
     { id: 'billing', label: 'Billing & invoices', icon: CreditCard },
+    { id: 'refer', label: 'Refer & earn', icon: Gift },
     { id: 'connectors', label: 'AI connectors', icon: Plug },
     ...(isAdmin ? [{ id: 'workspace', label: 'Workspace', icon: Settings }] : []),
   ];
@@ -160,8 +169,11 @@ export function AccountPage() {
       <Tabs tabs={tabs} active={active} onChange={selectTab} />
 
       {active === 'profile' && <ProfileSection user={user} onChangePicture={openPicker} />}
+      {active === 'projects' && workspace && <ProjectSettingsSection workspace={workspace} />}
+      {active === 'notifications' && <NotificationsSection />}
       {active === 'security' && <SecuritySection />}
       {active === 'billing' && <BillingSection user={user} />}
+      {active === 'refer' && <ReferralSection />}
       {active === 'connectors' && <ConnectorsSection />}
       {active === 'workspace' && isAdmin && <WorkspaceAdminSection workspace={workspace} />}
 

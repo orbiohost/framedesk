@@ -6,6 +6,7 @@ export const createCheckoutSchema = z.union([
   z.object({
     planCode: z.string().trim().min(1).max(40),
     interval: z.enum(BILLING_INTERVALS),
+    couponCode: z.string().trim().max(40).optional(),
   }),
   z.object({ packCode: z.string().trim().min(1).max(40) }),
   // Reset the AI usage limits now.

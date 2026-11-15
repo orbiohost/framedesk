@@ -4,7 +4,7 @@ import { AI_GRADIENT, AI_TEXT } from '../../../features/ai/aiStyle.js';
 import { cn } from '../../../lib/cn.js';
 import { DashboardPreview } from './DashboardPreview.jsx';
 
-const PROOF = ['7-day free trial', 'No card needed', 'AI included on every plan'];
+const PROOF = ['Free plan with 2 GB', 'No card needed', 'AI included on every plan'];
 
 // Small cards that sit over the edges of the dashboard on wide screens.
 function FloatingCard({ icon: Icon, title, detail, className, tint }) {
@@ -70,7 +70,7 @@ export function HeroSection() {
             to="/signup"
             className="pill-active inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-sm font-semibold transition-transform hover:-translate-y-0.5"
           >
-            Start your 7-day trial
+            Start free
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
           <a

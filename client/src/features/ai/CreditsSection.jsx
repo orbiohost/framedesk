@@ -12,6 +12,8 @@ import { useAiStatus, useCreditHistory } from './hooks.js';
 const KIND_LABELS = {
   chat: 'Question',
   analysis: 'File analysed',
+  brief: 'Project brief written',
+  moodboard: 'Moodboard AI',
   purchase: 'Extra usage bought',
   grant: 'Adjusted by FrameDesk',
   refund: 'Refund',

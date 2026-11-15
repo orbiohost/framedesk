@@ -9,6 +9,8 @@ import { TextField } from '../../components/ui/TextField.jsx';
 import { Captcha, useCaptcha } from '../../features/auth/Captcha.jsx';
 import { GoogleSignIn } from '../../features/auth/GoogleSignIn.jsx';
 import { useSignup } from '../../features/auth/hooks.js';
+import { usePricing } from '../../features/billing/hooks.js';
+import { pendingReferral } from '../../features/referrals/referrals.js';
 import { AuthLayout } from '../../layouts/AuthLayout.jsx';
 import { applyServerFieldErrors } from '../../lib/forms.js';
 
@@ -46,11 +48,17 @@ export function SignupPage() {
   }
 
   const showFormError = signup.error && !signup.error.details;
+  const { data: pricing } = usePricing();
+  const invited = Boolean(pendingReferral() && pricing?.referral);
 
   return (
     <AuthLayout
       title="Start your studio"
-      subtitle="Seven days free, 5 GB of storage. No card needed."
+      subtitle={
+        invited
+          ? `You were invited: free plan with ${pricing.free?.storageGB ?? 2} GB, plus ${pricing.referral.discountPercent}% off your first paid plan.`
+          : `Free plan with ${pricing?.free?.storageGB ?? 2} GB of storage, for as long as you like. No card needed.`
+      }
       footer={
         <>
           Already have an account?{' '}

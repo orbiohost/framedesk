@@ -5,7 +5,7 @@ import { Skeleton } from '../../../components/ui/Skeleton.jsx';
 import { usePricing } from '../../../features/billing/hooks.js';
 import { IntervalToggle } from '../../../features/billing/IntervalToggle.jsx';
 import { OfferCountdown } from '../../../features/billing/OfferCountdown.jsx';
-import { PlanCard, PlanGrid } from '../../../features/billing/PlanCard.jsx';
+import { FreePlanCard, PlanCard, PlanGrid } from '../../../features/billing/PlanCard.jsx';
 import { cn } from '../../../lib/cn.js';
 import { formatInr } from '../../../lib/format.js';
 
@@ -18,7 +18,7 @@ function SignupLink({ plan }) {
         plan.highlighted ? 'pill-active hover:opacity-90' : 'border-line hover:bg-subtle border',
       )}
     >
-      Start free, then {plan.name}
+      Start free, upgrade to {plan.name}
     </Link>
   );
 }
@@ -36,7 +36,7 @@ function AiCreditsNote({ ai }) {
         <p className="text-muted text-sm">
           It watches your clips, reads your documents and transcripts, and answers questions about
           them. Usage refreshes every {ai.sessionHours} hours, within a weekly limit; bigger plans
-          get more, and the free trial includes it too.
+          get more, and the free plan includes it too.
         </p>
       </div>
       {cheapest && (
@@ -63,8 +63,8 @@ export function PricingPreview() {
             Priced by storage, because that&apos;s what video uses.
           </h2>
           <p className="text-muted md:text-right">
-            Prices in INR, plus GST. Every plan starts with a 7-day free trial, no card needed. Need
-            more space? Add 100 GB packs to any plan.
+            Prices in INR, plus GST. Start on the free plan with 2 GB, no card needed, and upgrade
+            when you need more. Need more space still? Add 100 GB packs to any plan.
           </p>
         </div>
 
@@ -80,6 +80,19 @@ export function PricingPreview() {
               <OfferCountdown offer={pricing.offer} className="flex-1" />
             </div>
             <PlanGrid>
+              {pricing.free && (
+                <FreePlanCard
+                  free={pricing.free}
+                  action={
+                    <Link
+                      to="/signup"
+                      className="border-line hover:bg-subtle block rounded-md border px-4 py-2.5 text-center text-sm font-medium"
+                    >
+                      Start free
+                    </Link>
+                  }
+                />
+              )}
               {pricing.plans.map((plan) => (
                 <PlanCard
                   key={plan.code}
@@ -91,6 +104,13 @@ export function PricingPreview() {
               ))}
             </PlanGrid>
             {pricing.ai && <AiCreditsNote ai={pricing.ai} />}
+            {pricing.referral && (
+              <p className="text-muted mt-4 text-sm">
+                <span className="text-ink font-medium">Refer a studio:</span> they get{' '}
+                {pricing.referral.discountPercent}% off their first plan and you get{' '}
+                {pricing.referral.rewardGB} GB of extra storage.
+              </p>
+            )}
           </>
         )}
       </div>

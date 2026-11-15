@@ -11,11 +11,16 @@ const DEFAULT_PLAN_LIMITS = {
   studio: { session: 150, weekly: 1000 },
   agency: { session: 450, weekly: 3000 },
 };
+// The free plan gets a taste: a few questions per session, a few dozen a week.
+const DEFAULT_FREE_LIMITS = { session: 8, weekly: 30 };
+// The old 7-day trial, for workspaces still on one.
 const DEFAULT_TRIAL_LIMITS = { session: 15, weekly: 60 };
 
 // About half of what a week's limit would cost in extra-usage packs: cheaper
 // than topping up, dearer than upgrading for a heavy user.
-const DEFAULT_RESET_PRICES = { trial: 49, starter: 99, studio: 299, agency: 699 };
+const DEFAULT_RESET_PRICES = { free: 49, trial: 49, starter: 99, studio: 299, agency: 699 };
+// Plans a limit reset is priced for: the free plan, the old trial, the paid plans.
+export const RESET_PRICE_CODES = ['free', 'trial', ...PLANS.map((plan) => plan.code)];
 
 export const SESSION_HOURS = 5;
 export const WEEK_DAYS = 7;
@@ -31,6 +36,7 @@ export const EDITABLE_FIELDS = [
   'autoAnalyze',
   'model',
   'planLimits',
+  'freeLimits',
   'trialLimits',
   'resetPrices',
   'tokensPerCredit',
@@ -63,9 +69,10 @@ function toSettings(doc) {
         ),
       ]),
     ),
+    freeLimits: limitsFrom(doc?.freeLimits, DEFAULT_FREE_LIMITS),
     trialLimits: limitsFrom(doc?.trialLimits, DEFAULT_TRIAL_LIMITS),
     resetPrices: Object.fromEntries(
-      ['trial', ...PLANS.map((plan) => plan.code)].map((code) => {
+      RESET_PRICE_CODES.map((code) => {
         const saved = Number(doc?.resetPrices?.[code]);
         return [
           code,

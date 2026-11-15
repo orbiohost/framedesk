@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
@@ -14,6 +14,7 @@ import { fromDateInputValue, toDateInputValue } from '../../lib/dates.js';
 import { applyServerFieldErrors } from '../../lib/forms.js';
 import { PRIORITY_OPTIONS } from '../../lib/priorities.js';
 import { memberOptions, useMembers } from '../members/hooks.js';
+import { ReminderField } from '../notifications/ReminderField.jsx';
 import { projectOptions, useProjects } from '../projects/hooks.js';
 import { ChecklistEditor } from './ChecklistEditor.jsx';
 import { useDeleteTask, useSaveTask } from './hooks.js';
@@ -28,6 +29,7 @@ const schema = z.object({
   status: z.string(),
   priority: z.string(),
   checklist: z.array(z.object({ text: z.string().trim().min(1).max(300), done: z.boolean() })),
+  reminders: z.array(z.number()).nullable(),
 });
 
 function toFormValues(task, defaults) {
@@ -40,6 +42,7 @@ function toFormValues(task, defaults) {
     status: task?.status ?? defaults.status ?? 'todo',
     priority: task?.priority ?? 'medium',
     checklist: task?.checklist.map(({ text, done }) => ({ text, done })) ?? [],
+    reminders: task?.reminders ?? null,
   };
 }
 
@@ -78,6 +81,7 @@ function TaskForm({ workspaceId, task, defaults, canEdit, onDone }) {
     setError,
     formState: { errors },
   } = useForm({ resolver: zodResolver(schema), defaultValues: toFormValues(task, defaults) });
+  const dueDate = useWatch({ control, name: 'dueDate' });
 
   function onSubmit(values) {
     save.mutate(
@@ -122,6 +126,15 @@ function TaskForm({ workspaceId, task, defaults, canEdit, onDone }) {
           name="dueDate"
           render={({ field }) => <DueDateField value={field.value} onChange={field.onChange} />}
         />
+        {dueDate && (
+          <Controller
+            control={control}
+            name="reminders"
+            render={({ field }) => (
+              <ReminderField kind="task" value={field.value} onChange={field.onChange} />
+            )}
+          />
+        )}
         <Controller
           control={control}
           name="priority"

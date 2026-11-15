@@ -32,6 +32,7 @@ export function toTaskDto(task) {
       done: item.done,
     })),
     order: task.order,
+    reminders: task.reminders ?? null,
     completedAt: task.completedAt,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,

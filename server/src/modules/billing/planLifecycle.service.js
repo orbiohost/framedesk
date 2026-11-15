@@ -1,4 +1,5 @@
-import { BILLING } from '../../config/constants.js';
+import { BILLING, FREE_PLAN } from '../../config/constants.js';
+import { freeStorageBytes } from '../plans/plans.service.js';
 import { logger } from '../../utils/logger.js';
 import { deliverEmailInBackground } from '../../utils/mailer.js';
 import { User } from '../users/user.model.js';
@@ -30,6 +31,9 @@ function graceEndsAt(billing, noticedAt = billing.pastDueSince) {
 
 export function effectiveStatus(billing, now = new Date()) {
   const { status, currentPeriodEnd } = billing;
+  // There are no trials any more: one from before is the free plan straight
+  // away (the sweeper writes it down, with the free plan's space).
+  if (status === 'trialing') return 'free';
   if (!currentPeriodEnd || !['active', 'past_due'].includes(status)) return status;
   if (currentPeriodEnd > now) return status;
   // Still "active" in the database: the sweeper is about to start its grace period.
@@ -42,6 +46,8 @@ export function effectiveBilling(billing, now = new Date()) {
   const status = effectiveStatus(billing, now);
   return {
     ...billing,
+    // An old trial reads as the free plan straight away.
+    ...(status === 'free' && { planCode: FREE_PLAN.PLAN_CODE, trialEndsAt: null }),
     status,
     graceEndsAt:
       status === 'past_due' && billing.currentPeriodEnd && billing.currentPeriodEnd <= now
@@ -131,23 +137,54 @@ async function endGracePeriods(now) {
     .limit(BATCH)
     .lean();
   const candidates = lapsed.filter((workspace) => graceEndsAt(workspace.billing) <= now);
+  const toFree = await freeState();
   const claimed = await claim(
     candidates,
     (ws) => ({
       'billing.status': 'past_due',
       'billing.currentPeriodEnd': ws.billing.currentPeriodEnd,
     }),
-    () => ({ $set: { 'billing.status': 'read_only' } }),
+    () => ({ $set: toFree }),
   );
   return claimed.length;
+}
+
+// What an account on the free plan looks like, with the free plan's space as
+// the admin set it. Files over the free space stay and can be opened; uploads
+// wait until there is room again.
+export async function freeState() {
+  return {
+    'billing.planCode': FREE_PLAN.PLAN_CODE,
+    'billing.status': 'free',
+    'billing.trialEndsAt': null,
+    'billing.interval': null,
+    'billing.amount': null,
+    'billing.currentPeriodEnd': null,
+    'billing.pastDueSince': null,
+    'storage.planLimitBytes': await freeStorageBytes(),
+  };
+}
+
+// Old trials, read-only and plan-less accounts (from before the free plan
+// existed) move to the free plan. Workspaces sharing an owner's account have
+// no plan of their own and are left alone.
+async function moveToFreePlan() {
+  const result = await Workspace.updateMany(
+    {
+      storagePoolId: null,
+      $or: [{ 'billing.status': { $in: ['trialing', 'none', 'read_only', 'canceled'] } }],
+    },
+    { $set: await freeState() },
+  );
+  return result.modifiedCount;
 }
 
 export async function sweepPlans(now = new Date()) {
   const reminded = await remindBeforeExpiry(now);
   const expired = await expirePlans(now);
-  const madeReadOnly = await endGracePeriods(now);
-  if (reminded || expired || madeReadOnly) {
-    logger.info({ reminded, expired, madeReadOnly }, 'Plan lifecycle sweep');
+  const movedToFree = (await endGracePeriods(now)) + (await moveToFreePlan());
+  if (reminded || expired || movedToFree) {
+    logger.info({ reminded, expired, movedToFree }, 'Plan lifecycle sweep');
   }
 }
 

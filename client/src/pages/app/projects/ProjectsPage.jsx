@@ -16,6 +16,7 @@ import { PageHeader } from '../../../components/ui/PageHeader.jsx';
 import { SearchInput } from '../../../components/ui/SearchInput.jsx';
 import { SegmentedControl } from '../../../components/ui/SegmentedControl.jsx';
 import { Skeleton } from '../../../components/ui/Skeleton.jsx';
+import { ActionMenu } from '../../../features/files/ActionMenu.jsx';
 import { ConfirmDialog } from '../../../features/files/FileDialogs.jsx';
 import { useDeleteProject, useProjects, useSaveProject } from '../../../features/projects/hooks.js';
 import { ProjectFormDialog } from '../../../features/projects/ProjectFormDialog.jsx';
@@ -42,6 +43,10 @@ const FILTERS = [
   // Archived projects load separately, so they have no count and no test.
   { value: 'archived', label: 'Archived' },
 ];
+
+// The chosen filter or view: a soft accent tint, not the bright ink pill, so the
+// toolbar stays quiet next to the project cards.
+const TOOLBAR_ACTIVE = 'bg-accent/15 text-accent ring-accent/30 font-semibold ring-1 ring-inset';
 
 const VIEW_OPTIONS = [
   { value: 'grid', label: <span className="sr-only sm:not-sr-only">Grid</span>, icon: LayoutGrid },
@@ -83,8 +88,8 @@ function FilterTabs({ value, onChange, counts }) {
             className={cn(
               'flex h-9 shrink-0 items-center gap-2 rounded-full px-3.5 text-sm transition-colors',
               isActive
-                ? 'pill-active font-medium'
-                : 'border-line/70 bg-surface text-muted hover:text-ink border',
+                ? TOOLBAR_ACTIVE
+                : 'border-line/70 bg-surface text-muted hover:text-ink hover:bg-subtle border',
             )}
           >
             {tab.alert && !isActive && (
@@ -101,30 +106,29 @@ function FilterTabs({ value, onChange, counts }) {
   );
 }
 
+// The app's own menu rather than a native <select>, whose option list the
+// browser draws in its own (often white) colors.
 function SortSelect({ value, onChange }) {
+  const current = PROJECT_SORTS.find((option) => option.value === value) ?? PROJECT_SORTS[0];
   return (
-    <label className="border-line bg-surface text-muted focus-within:ring-accent/20 relative flex h-10 shrink-0 items-center rounded-full border focus-within:ring-4">
-      <ArrowDownUp
-        className="pointer-events-none absolute left-3.5 h-3.5 w-3.5"
-        aria-hidden="true"
-      />
-      <ChevronDown
-        className="pointer-events-none absolute right-3 h-3.5 w-3.5"
-        aria-hidden="true"
-      />
-      <span className="sr-only">Sort projects</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="text-ink h-full cursor-pointer appearance-none rounded-full bg-transparent pl-9 pr-9 text-sm outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-      >
-        {PROJECT_SORTS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <ActionMenu
+      label={`Sort projects: ${current.label}`}
+      title="Sort projects"
+      items={PROJECT_SORTS.map((option) => ({
+        key: option.value,
+        label: option.label,
+        checked: option.value === value,
+        onSelect: () => onChange(option.value),
+      }))}
+      className="border-line/70 bg-surface text-ink hover:bg-subtle aria-expanded:bg-subtle h-10 gap-2 border px-3.5 text-sm"
+      trigger={
+        <>
+          <ArrowDownUp className="text-muted h-3.5 w-3.5" aria-hidden="true" />
+          <span className="hidden whitespace-nowrap sm:inline">{current.label}</span>
+          <ChevronDown className="text-muted h-3.5 w-3.5" aria-hidden="true" />
+        </>
+      }
+    />
   );
 }
 
@@ -144,9 +148,10 @@ export function ProjectsPage() {
   const [search, setSearch] = useState('');
   const [view, setView] = useStoredChoice('projects:view', ['grid', 'list'], 'grid');
   const [sort, setSort] = useStoredChoice(
-    'projects:sort',
+    // v2: the default became "Recently added"; older saved choices start over.
+    'projects:sort:v2',
     PROJECT_SORTS.map((option) => option.value),
-    'due',
+    'created',
   );
   // The sidebar's "+" links here with ?new=1. Read on every render, so it also
   // works when this page is already open.
@@ -217,7 +222,13 @@ export function ProjectsPage() {
               className="min-w-0 flex-1 lg:w-64 lg:flex-none"
             />
             <SortSelect value={sort} onChange={setSort} />
-            <SegmentedControl label="View" options={VIEW_OPTIONS} value={view} onChange={setView} />
+            <SegmentedControl
+              label="View"
+              options={VIEW_OPTIONS}
+              value={view}
+              onChange={setView}
+              activeClassName={TOOLBAR_ACTIVE}
+            />
           </div>
         </div>
       )}

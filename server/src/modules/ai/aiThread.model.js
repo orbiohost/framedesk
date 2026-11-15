@@ -27,6 +27,19 @@ const messageSchema = new Schema(
       ],
       default: [],
     },
+    // Notes added to a question with "#" (title kept for the chip if the note goes).
+    notes: {
+      type: [
+        new Schema(
+          {
+            noteId: { type: Schema.Types.ObjectId, ref: 'QuickNote', required: true },
+            title: { type: String, required: true, maxlength: 160 },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     // True when the person stopped the answer before it finished.
     stopped: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now },

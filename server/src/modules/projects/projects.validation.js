@@ -5,6 +5,7 @@ import {
   optionalDate,
   optionalObjectId,
   optionalText,
+  reminderOffsets,
   searchQuery,
   tags,
 } from '../../utils/zodHelpers.js';
@@ -21,6 +22,7 @@ const projectFields = {
   budget: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
   description: optionalText(10000),
   tags: tags.optional(),
+  reminders: reminderOffsets,
 };
 
 function dueAfterStart(project) {

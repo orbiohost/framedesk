@@ -31,7 +31,7 @@ export const adjustSubscriptionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('extend_trial'), days: z.number().int().min(1).max(90) }),
   z.object({
     action: z.literal('set_status'),
-    status: z.enum(['active', 'past_due', 'read_only', 'canceled']),
+    status: z.enum(['free', 'active', 'past_due', 'read_only', 'canceled']),
   }),
   z.object({ action: z.literal('change_plan'), planCode }),
 ]);

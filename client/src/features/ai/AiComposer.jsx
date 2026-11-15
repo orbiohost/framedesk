@@ -9,6 +9,7 @@ import {
   Loader2,
   Mic,
   Music,
+  NotebookPen,
   Paperclip,
   Square,
   X,
@@ -16,6 +17,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../lib/cn.js';
 import { useProjects } from '../projects/hooks.js';
+import { useQuickNotes } from '../quickNotes/hooks.js';
 import { AI_GRADIENT } from './aiStyle.js';
 import { useAiFileSearch } from './hooks.js';
 import { useDictation } from './useDictation.js';
@@ -23,20 +25,56 @@ import { useDictation } from './useDictation.js';
 const PICKER_LIMIT = 8;
 // Files one question can carry (the server allows the same).
 export const MAX_ATTACHMENTS = 5;
+// Saved notes one question can carry (the server allows the same).
+export const MAX_NOTES = 5;
 // What the paperclip offers: things the assistant can study.
 const UPLOAD_ACCEPT = 'video/*,audio/*,image/*,.pdf,.txt,.md,.csv,.doc,.docx,.rtf,.json';
-// "/" (a project) or "@" (a file) at the start or after a space, then
-// whatever is typed up to the caret.
-const TRIGGER = /(^|\s)([/@])([^\s/@]*)$/;
+// "/" (a project), "@" (a file) or "#" (a saved note) at the start or after a
+// space, then whatever is typed up to the caret.
+const TRIGGER = /(^|\s)([/@#])([^\s/@#]*)$/;
+const TRIGGER_KINDS = { '/': 'project', '@': 'file', '#': 'note' };
 
 function triggerAt(value, caret) {
   const match = value.slice(0, caret).match(TRIGGER);
   if (!match) return null;
   return {
-    kind: match[2] === '/' ? 'project' : 'file',
+    kind: TRIGGER_KINDS[match[2]],
     query: match[3],
     start: caret - match[3].length - 1,
   };
+}
+
+export function noteLabel(note) {
+  if (note.title) return note.title;
+  const line = (note.body ?? '').split('\n').find((text) => text.trim()) ?? 'Untitled note';
+  return line.replace(/^[#>*\-\s[\]x]+/i, '').slice(0, 80) || 'Untitled note';
+}
+
+// A saved note added to a question with "#".
+export function NoteChip({ note, onRemove, className }) {
+  return (
+    <span
+      title={note.title}
+      className={cn(
+        'inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-50 py-1 pl-2 text-xs font-medium text-amber-900 dark:bg-amber-400/10 dark:text-amber-200',
+        onRemove ? 'pr-1' : 'pr-2.5',
+        className,
+      )}
+    >
+      <NotebookPen className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span className="truncate">{note.title}</span>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${note.title}`}
+          className="grid h-5 w-5 shrink-0 place-items-center rounded-full hover:bg-amber-400/20"
+        >
+          <X className="h-3 w-3" aria-hidden="true" />
+        </button>
+      )}
+    </span>
+  );
 }
 
 const CATEGORY_ICONS = { video: Film, audio: Music, image: ImageIcon, document: FileText };
@@ -187,8 +225,8 @@ function ToolButton({ label, onClick, active, disabled, children }) {
 }
 
 // The question box. "/" picks a project (later questions only use its files),
-// "@" attaches one file, the paperclip uploads new files for the assistant to
-// study, and the microphone types what you say.
+// "@" attaches one file, "#" adds a saved note, the paperclip uploads new
+// files for the assistant to study, and the microphone types what you say.
 export function AiComposer({
   workspaceId,
   value,
@@ -199,6 +237,9 @@ export function AiComposer({
   attachments,
   onAttach,
   onRemoveAttachment,
+  notes = [],
+  onAddNote,
+  onRemoveNote,
   onUpload,
   canUpload,
   notice,
@@ -218,6 +259,7 @@ export function AiComposer({
   const trigger = disabled ? null : triggerAt(value, caret);
   const pickerOpen = Boolean(trigger) && dismissedAt !== trigger.start;
   const full = attachments.length >= MAX_ATTACHMENTS;
+  const notesFull = notes.length >= MAX_NOTES;
   const uploading = attachments.some((file) => file.status === 'uploading');
   const failedUpload = attachments.some((file) => file.status === 'error');
 
@@ -231,9 +273,18 @@ export function AiComposer({
     { q: trigger?.kind === 'file' ? trigger.query : '', projectId: scope?.id },
     { enabled: pickerOpen && trigger.kind === 'file' },
   );
+  const notesQuery = useQuickNotes(
+    workspaceId,
+    { q: trigger?.kind === 'note' && trigger.query ? trigger.query : undefined },
+    { enabled: pickerOpen && trigger.kind === 'note' },
+  );
 
   const matches = useMemo(() => {
     if (!trigger) return [];
+    if (trigger.kind === 'note') {
+      const taken = new Set(notes.map((note) => note.id));
+      return (notesQuery.data ?? []).filter((note) => !taken.has(note.id)).slice(0, PICKER_LIMIT);
+    }
     if (trigger.kind === 'file') {
       const taken = new Set(attachments.map((file) => file.id));
       return (filesQuery.data ?? []).filter((file) => !taken.has(file.id)).slice(0, PICKER_LIMIT);
@@ -242,7 +293,7 @@ export function AiComposer({
     return (projectsQuery.data ?? [])
       .filter((project) => project.title.toLowerCase().includes(needle))
       .slice(0, PICKER_LIMIT);
-  }, [projectsQuery.data, filesQuery.data, trigger, attachments]);
+  }, [projectsQuery.data, filesQuery.data, notesQuery.data, trigger, attachments, notes]);
   const active = Math.min(activeIndex, Math.max(matches.length - 1, 0));
 
   useEffect(() => {
@@ -262,7 +313,9 @@ export function AiComposer({
     const after = value.slice(caret);
     onChange(`${before}${after}`.replace(/\s{2,}/g, ' ').trimStart());
     if (trigger.kind === 'project') onScope({ id: item.id, title: item.title });
-    else if (!full) onAttach({ id: item.id, name: item.name, category: item.category });
+    else if (trigger.kind === 'note') {
+      if (!notesFull) onAddNote?.({ id: item.id, title: noteLabel(item) });
+    } else if (!full) onAttach({ id: item.id, name: item.name, category: item.category });
     setActiveIndex(0);
     requestAnimationFrame(() => {
       const field = ref.current;
@@ -319,6 +372,10 @@ export function AiComposer({
       }
     }
     if (event.key === 'Backspace' && !value) {
+      if (notes.length) {
+        onRemoveNote?.(notes.at(-1).id);
+        return;
+      }
       if (attachments.length) {
         onRemoveAttachment(attachments.at(-1).key);
         return;
@@ -339,16 +396,19 @@ export function AiComposer({
     if (files.length) onUpload(files);
   }
 
-  const canSend = !disabled && !uploading && (value.trim() || attachments.length > 0);
+  const canSend =
+    !disabled && !uploading && (value.trim() || attachments.length > 0 || notes.length > 0);
   const placeholder = disabled
     ? 'Out of credits'
     : dictation.listening
       ? 'Listening… speak now'
       : attachments.length
         ? 'Ask about the attached files…'
-        : scope
-          ? `Ask about ${scope.title}…`
-          : 'Ask anything · / project · @ file';
+        : notes.length
+          ? 'Ask about the added notes…'
+          : scope
+            ? `Ask about ${scope.title}…`
+            : 'Ask anything · / project · @ file · # note';
 
   return (
     <form
@@ -373,7 +433,28 @@ export function AiComposer({
       className="relative px-3 pb-3 pt-2"
     >
       {pickerOpen &&
-        (trigger.kind === 'project' ? (
+        (trigger.kind === 'note' ? (
+          <Picker
+            label={notesFull ? `Up to ${MAX_NOTES} notes per question` : 'Add a saved note'}
+            emptyText={trigger.query ? 'No notes match' : 'No notes yet'}
+            isPending={notesQuery.isFetching}
+            items={notesFull ? [] : matches}
+            activeIndex={active}
+            onHover={setActiveIndex}
+            onPick={pick}
+            render={(note) => (
+              <>
+                <NotebookPen className="text-muted h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{noteLabel(note)}</span>
+                {note.projects?.[0] && (
+                  <span className="text-muted max-w-[40%] truncate text-xs">
+                    {note.projects[0].title}
+                  </span>
+                )}
+              </>
+            )}
+          />
+        ) : trigger.kind === 'project' ? (
           <Picker
             label="Ask about one project"
             emptyText="No matching projects"
@@ -428,9 +509,17 @@ export function AiComposer({
           dictation.listening && 'border-danger/40',
         )}
       >
-        {(scope || attachments.length > 0) && (
+        {(scope || attachments.length > 0 || notes.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5">
             {scope && <ScopeChip project={scope} onClear={() => onScope(null)} />}
+            {notes.map((note) => (
+              <NoteChip
+                key={note.id}
+                note={note}
+                onRemove={() => onRemoveNote?.(note.id)}
+                className="animate-[pop-in_160ms_ease-out]"
+              />
+            ))}
             {attachments.map((file) => (
               <FileChip
                 key={file.key}

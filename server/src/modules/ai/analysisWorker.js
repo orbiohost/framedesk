@@ -1,8 +1,10 @@
 import { getStorageDriver } from '../../storage/storageDriver.js';
 import { logger } from '../../utils/logger.js';
+import { markBriefStale } from '../briefs/briefStale.js';
 import { StoredFile } from '../files/file.model.js';
 import { correctedMime } from '../files/fileTypes.js';
 import { Folder } from '../files/folder.model.js';
+import { briefsRootOf } from '../files/folders.service.js';
 import { Project } from '../projects/project.model.js';
 import { Transcript } from '../transcripts/transcript.model.js';
 import { findPoolWorkspace } from '../workspaces/storagePool.js';
@@ -116,6 +118,33 @@ function instructionsFor(category) {
 - language: the document's language, or null.`;
 }
 
+// Files in a project's "Notes & Briefs" folder are meeting material: what
+// matters is every word written or said, so the project brief can be built
+// from it (see briefs/briefWorker.js).
+function briefsInstructionsFor(category) {
+  const common = `This file was put in the project's "Notes & Briefs" folder, so it is meeting material: notes, a voice note, a recording or a reference. Return JSON with:
+- summary: 2-4 sentences: what this is (e.g. "Handwritten notes from the client kickoff on 12 Nov") and its main points.`;
+  if (category === 'image') {
+    return `${common}
+- details: transcribe ALL legible writing verbatim, keeping its structure (headings, bullets, numbering, arrows as "→", underlines as **bold**). Mark words you cannot read as [illegible] (or [unclear: best guess]). Then briefly describe any sketches, diagrams or layouts and what they show. If it is a photo of a whiteboard, screen or printed page, do the same. Up to ~1500 words.
+- moments: an empty list.
+- tags: 5-15 short lowercase keywords (topics, names, dates).
+- language: the language of the writing, or null.`;
+  }
+  if (category === 'audio' || category === 'video') {
+    return `${common}
+- details: a faithful, thorough write-up of what is said, in order: who speaks (by name if said, else by role), each topic, every decision, every action item with who will do it and by when, numbers, dates, names, and questions left open. Keep important statements close to word for word. Up to ~1500 words.
+- moments: up to 25 key moments (decisions, action items, topic changes) with "at" as m:ss timestamps.
+- tags: 5-15 short lowercase keywords (topics, names, dates).
+- language: the main spoken language, or null.`;
+  }
+  return `${common}
+- details: the full substance faithfully: agenda, discussion, decisions, action items with owners and dates, names, amounts, deadlines and open questions, keeping the document's structure. Up to ~1500 words.
+- moments: up to 20 key points with "at" as the page number or section (e.g. "p. 3").
+- tags: 5-15 short lowercase keywords.
+- language: the document's language, or null.`;
+}
+
 let timer = null;
 let ticking = false;
 let pausedUntil = 0;
@@ -129,7 +158,7 @@ async function setState(file, state, extra = {}) {
 }
 
 async function contextFor(file) {
-  const [folder, project, transcript] = await Promise.all([
+  const [folder, project, transcript, briefsRoot] = await Promise.all([
     Folder.findOne({ _id: file.folderId, workspaceId: file.workspaceId }).select('name').lean(),
     file.projectId
       ? Project.findOne({ _id: file.projectId, workspaceId: file.workspaceId })
@@ -139,13 +168,14 @@ async function contextFor(file) {
     Transcript.findOne({ workspaceId: file.workspaceId, fileId: file._id, status: 'done' })
       .select('segments')
       .lean(),
+    briefsRootOf(file.workspaceId, file.folderId).catch(() => null),
   ]);
   const lines = [`File name: ${file.displayName}`];
   if (project) lines.push(`Project: ${project.title}`);
   if (folder) lines.push(`Folder: ${folder.name}`);
   if (file.note) lines.push(`Team note: ${truncate(file.note, 1000)}`);
   if (file.tags?.length) lines.push(`Team tags: ${file.tags.join(', ')}`);
-  return { header: lines.join('\n'), transcript };
+  return { header: lines.join('\n'), transcript, meetingMaterial: Boolean(briefsRoot) };
 }
 
 async function readText(file) {
@@ -251,7 +281,8 @@ async function analyse(file, settings, askedBy = null) {
       { $set: { note: input.skip, summary: '', details: '' } },
       { upsert: true },
     );
-    return setState(file, 'skipped', { aiAttempts: 0 });
+    await setState(file, 'skipped', { aiAttempts: 0 });
+    return markBriefStale(file.workspaceId, file.folderId);
   }
 
   let result;
@@ -264,7 +295,13 @@ async function analyse(file, settings, askedBy = null) {
           role: 'user',
           parts: [
             ...input.parts,
-            { text: `${context.header}\n\n${instructionsFor(file.category)}` },
+            {
+              text: `${context.header}\n\n${
+                context.meetingMaterial
+                  ? briefsInstructionsFor(file.category)
+                  : instructionsFor(file.category)
+              }`,
+            },
           ],
         },
       ],
@@ -303,6 +340,7 @@ async function analyse(file, settings, askedBy = null) {
     { upsert: true },
   );
   await setState(file, 'done', { aiAttempts: 0, aiRetryAt: null });
+  await markBriefStale(file.workspaceId, file.folderId);
 }
 
 async function retryLater(file, error) {
@@ -313,7 +351,8 @@ async function retryLater(file, error) {
       { $set: { note: truncate(error.message, 300) } },
       { upsert: true },
     );
-    return setState(file, 'failed', { aiAttempts: attempts });
+    await setState(file, 'failed', { aiAttempts: attempts });
+    return markBriefStale(file.workspaceId, file.folderId);
   }
   const delayMs = 5 * 60 * 1000 * 2 ** (attempts - 1);
   await setState(file, null, { aiAttempts: attempts, aiRetryAt: new Date(Date.now() + delayMs) });

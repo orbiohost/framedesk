@@ -1,5 +1,6 @@
 import {
   Check,
+  Expand,
   Loader2,
   Maximize,
   Minimize,
@@ -76,6 +77,52 @@ function bufferedEnd(media) {
     }
   }
   return 0;
+}
+
+// Phones (not tablets or laptops with touch screens): a finger is the main
+// pointer and the screen's short side is phone-sized.
+function isPhone() {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return (
+    window.matchMedia('(pointer: coarse)').matches &&
+    Math.min(window.screen.width, window.screen.height) < 600
+  );
+}
+
+// "1080p", "4K"… from the picture's short side, so portrait clips read the same.
+export function qualityLabel(width, height) {
+  if (!width || !height) return null;
+  const short = Math.min(width, height);
+  if (short >= 4320) return '8K';
+  if (short >= 2160) return '4K';
+  if (short >= 1440) return '1440p';
+  const steps = [1080, 720, 480, 360, 240, 144];
+  const step = steps.find((value) => short >= value * 0.9);
+  return step ? `${step}p` : `${short}p`;
+}
+
+function shapeLabel(width, height) {
+  if (!width || !height) return null;
+  const ratio = width / height;
+  if (Math.abs(ratio - 1) < 0.05) return 'Square';
+  return ratio > 1 ? 'Landscape' : 'Portrait';
+}
+
+// Turns a phone to suit the video while it's full screen: sideways for wide
+// videos, upright for tall ones. Browsers without the API ignore it.
+function lockOrientationTo(media) {
+  const orientation = typeof screen !== 'undefined' ? screen.orientation : null;
+  if (!orientation?.lock || !media?.videoWidth || !media.videoHeight) return;
+  if (media.videoWidth === media.videoHeight) return;
+  orientation.lock(media.videoWidth > media.videoHeight ? 'landscape' : 'portrait').catch(() => {});
+}
+
+function unlockOrientation() {
+  try {
+    screen.orientation?.unlock?.();
+  } catch {
+    // Nothing was locked.
+  }
 }
 
 function isTypingTarget(target) {
@@ -293,7 +340,18 @@ function VolumeControl({ volume, muted, onChange, tone }) {
   );
 }
 
-function SettingsMenu({ rate, loop, onRate, onLoop, extras, onOpenChange, tone }) {
+function SettingsMenu({
+  rate,
+  loop,
+  onRate,
+  onLoop,
+  zoom,
+  onZoom,
+  info,
+  extras,
+  onOpenChange,
+  tone,
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const close = useCallback(() => setOpen(false), []);
@@ -318,6 +376,12 @@ function SettingsMenu({ rate, loop, onRate, onLoop, extras, onOpenChange, tone }
               : 'bg-[#141319]/95 text-white ring-1 ring-white/10 backdrop-blur-xl',
           )}
         >
+          {info && (
+            <p className="mb-1 flex items-center justify-between gap-2 border-b border-white/10 px-2.5 pb-2 pt-1.5 text-xs">
+              <span className="font-semibold">{info.quality}</span>
+              <span className="tabular-nums opacity-60">{info.detail}</span>
+            </p>
+          )}
           <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider opacity-60">
             Speed
           </p>
@@ -353,6 +417,19 @@ function SettingsMenu({ rate, loop, onRate, onLoop, extras, onOpenChange, tone }
             <span className="flex-1">Loop</span>
             {loop && <Check className="h-4 w-4" aria-hidden="true" />}
           </button>
+          {onZoom && (
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={zoom}
+              onClick={onZoom}
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-white/15"
+            >
+              <Expand className="h-4 w-4" aria-hidden="true" />
+              <span className="flex-1">Zoom to fill screen</span>
+              {zoom && <Check className="h-4 w-4" aria-hidden="true" />}
+            </button>
+          )}
           {extras?.map((extra) => (
             <button
               key={extra.label}
@@ -386,8 +463,9 @@ const SHORTCUTS =
  *   (video track can't be decoded), or "link-expired" (worked, then the
  *   signed link stopped answering; detail.time says where to resume).
  * menuExtras: [{ label, icon, onSelect }] added to the settings menu.
- * fill: the video takes its box's width at 16:9 with no height cap (the box
- *   sizes it, as in the full-screen file viewer).
+ * fill: the player sits in the full-screen file viewer: it may be as tall as
+ *   that stage, and on phones it opens full screen.
+ * The video box always takes the video's own shape (portrait, square, wide).
  * stream: { key, url, size, mime } when src is served by the media worker,
  *   which then keeps buffering ahead of the playhead (see mediaStream.js).
  */
@@ -434,6 +512,15 @@ export function MediaPlayer({
   const [menuOpen, setMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [flash, setFlash] = useState(null);
+  // The picture's real size, so the box takes the video's own shape
+  // (portrait phone clips, square, ultra-wide) instead of a fixed 16:9.
+  const [videoSize, setVideoSize] = useState(null);
+  // Full screen only: crop to fill the display instead of showing bars.
+  const [zoomFill, setZoomFill] = useState(false);
+  // Phones open videos full screen. If the browser refused (no recent tap),
+  // the viewer's next press on play does it instead.
+  const pendingFullscreen = useRef(false);
+  const autoEntered = useRef(false);
   const isVideo = kind === 'video';
   const canPip =
     isVideo && typeof document !== 'undefined' && document.pictureInPictureEnabled === true;
@@ -471,18 +558,12 @@ export function MediaPlayer({
       const active =
         (document.fullscreenElement ?? document.webkitFullscreenElement) === containerRef.current;
       setIsFullscreen(active);
-      // Phones: a landscape video fills the screen sideways in full screen.
-      const media = mediaRef.current;
-      const orientation = typeof screen !== 'undefined' ? screen.orientation : null;
-      if (!orientation?.lock) return;
-      if (active && media && media.videoWidth > media.videoHeight) {
-        orientation.lock('landscape').catch(() => {});
-      } else if (!active) {
-        try {
-          orientation.unlock();
-        } catch {
-          // Nothing was locked.
-        }
+      if (active) {
+        lockOrientationTo(mediaRef.current);
+      } else {
+        autoEntered.current = false;
+        setZoomFill(false);
+        unlockOrientation();
       }
     };
     document.addEventListener('fullscreenchange', onChange);
@@ -542,17 +623,43 @@ export function MediaPlayer({
     setFlash({ value, seconds, key: Date.now() });
   }, []);
 
+  // Container full screen (our own controls stay). Resolves false when the
+  // browser has no such API (iPhone) or refuses without a recent tap.
+  const enterFullscreen = useCallback(async () => {
+    const container = containerRef.current;
+    if (!container || document.fullscreenElement || document.webkitFullscreenElement) return false;
+    try {
+      if (container.requestFullscreen) {
+        await container.requestFullscreen({ navigationUI: 'hide' });
+        return true;
+      }
+      if (container.webkitRequestFullscreen) {
+        container.webkitRequestFullscreen();
+        return true;
+      }
+    } catch {
+      // Needs a user gesture; handled by the caller.
+    }
+    return false;
+  }, []);
+
   const togglePlay = useCallback(() => {
     const media = mediaRef.current;
     if (!media) return;
     if (media.paused || media.ended) {
+      if (pendingFullscreen.current) {
+        pendingFullscreen.current = false;
+        enterFullscreen().then((ok) => {
+          autoEntered.current = ok;
+        });
+      }
       media.play().catch(() => {});
       showFlash('play');
     } else {
       media.pause();
       showFlash('pause');
     }
-  }, [showFlash]);
+  }, [showFlash, enterFullscreen]);
 
   const skip = useCallback(
     (seconds) => {
@@ -569,6 +676,7 @@ export function MediaPlayer({
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
     const media = mediaRef.current;
+    pendingFullscreen.current = false;
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     } else if (document.webkitFullscreenElement) {
@@ -719,6 +827,17 @@ export function MediaPlayer({
       if (isFirstLoad && isVideo && media.videoWidth === 0 && media.videoHeight === 0) {
         onIssue?.('no-picture');
       }
+      if (isVideo && media.videoWidth && media.videoHeight) {
+        setVideoSize({ width: media.videoWidth, height: media.videoHeight });
+        if (document.fullscreenElement === containerRef.current) lockOrientationTo(media);
+        // Opened in the viewer on a phone: watch it full screen, like a video app.
+        if (isFirstLoad && fill && isPhone()) {
+          enterFullscreen().then((ok) => {
+            autoEntered.current = ok;
+            pendingFullscreen.current = !ok;
+          });
+        }
+      }
       if (Number.isFinite(media.duration) && media.duration > 0) {
         begin(media, target, shouldPlay);
         return;
@@ -776,10 +895,23 @@ export function MediaPlayer({
     onWaiting: () => setStatus((s) => ({ ...s, waiting: true })),
     onPlaying: () => setStatus((s) => ({ ...s, waiting: false })),
     onCanPlay: () => setStatus((s) => ({ ...s, waiting: false })),
+    // Some streams change size mid-way (adaptive or rotated phone recordings).
+    onResize: (event) => {
+      const media = event.currentTarget;
+      if (isVideo && media.videoWidth && media.videoHeight) {
+        setVideoSize({ width: media.videoWidth, height: media.videoHeight });
+      }
+    },
     onEnded: () => {
       wantsPlay.current = false;
       setStatus((s) => ({ ...s, playing: false, ended: true }));
       setControlsVisible(true);
+      // Full screen we opened ourselves closes when the video is over.
+      if (autoEntered.current && !loop) {
+        autoEntered.current = false;
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        else if (document.webkitFullscreenElement) document.webkitExitFullscreen?.();
+      }
     },
     onError: (event) => {
       const media = event.currentTarget;
@@ -875,6 +1007,16 @@ export function MediaPlayer({
           loop={loop}
           onRate={(rate) => setPrefs({ rate })}
           onLoop={() => setLoop(!loop)}
+          zoom={zoomFill}
+          onZoom={isVideo && isFullscreen ? () => setZoomFill(!zoomFill) : null}
+          info={
+            isVideo && videoSize
+              ? {
+                  quality: qualityLabel(videoSize.width, videoSize.height),
+                  detail: `${shapeLabel(videoSize.width, videoSize.height)} · ${videoSize.width}×${videoSize.height}`,
+                }
+              : null
+          }
           extras={menuExtras}
           onOpenChange={setMenuOpen}
           tone={tone}
@@ -962,6 +1104,16 @@ export function MediaPlayer({
   }
 
   const hideChrome = status.playing && !controlsVisible && !menuOpen;
+  // Width/height of the picture, kept to a sane range so a broken header
+  // can't make a hair-thin player. 16:9 until the file says otherwise.
+  const ratio = videoSize
+    ? Math.min(4, Math.max(0.35, videoSize.width / videoSize.height))
+    : 16 / 9;
+  // The tallest the box may be: the viewer's stage, or most of the window inline.
+  const maxHeight = fill ? '(100dvh - 9rem)' : '70dvh';
+  const boxStyle = isFullscreen
+    ? undefined
+    : { aspectRatio: String(ratio), width: `min(100%, calc(${maxHeight} * ${ratio}))` };
   return (
     <div
       ref={containerRef}
@@ -977,12 +1129,12 @@ export function MediaPlayer({
       onPointerLeave={(event) =>
         event.pointerType === 'mouse' && status.playing && !menuOpen && setControlsVisible(false)
       }
+      style={boxStyle}
       className={cn(
-        'group/player relative overflow-hidden bg-black text-white',
+        'group/player relative mx-auto overflow-hidden bg-black text-white',
         isFullscreen
           ? 'h-full w-full'
-          : 'aspect-video w-full rounded-2xl shadow-2xl ring-1 ring-white/10',
-        !isFullscreen && !fill && 'max-h-[70vh]',
+          : 'rounded-2xl shadow-2xl ring-1 ring-white/10 transition-[width] duration-200',
         hideChrome && 'cursor-none',
       )}
     >
@@ -996,7 +1148,10 @@ export function MediaPlayer({
         onClick={onVideoClick}
         onDoubleClick={() => pointerType.current !== 'touch' && toggleFullscreen()}
         // No double-tap zoom or 300 ms tap delay on phones.
-        className="h-full w-full touch-manipulation object-contain"
+        className={cn(
+          'h-full w-full touch-manipulation',
+          isFullscreen && zoomFill ? 'object-cover' : 'object-contain',
+        )}
         {...mediaEvents}
       />
 
@@ -1055,7 +1210,7 @@ export function MediaPlayer({
 
       <div
         className={cn(
-          'absolute inset-x-0 top-0 bg-gradient-to-b from-black/75 to-transparent px-5 pb-10 pt-4 transition-opacity duration-300',
+          'absolute inset-x-0 top-0 bg-gradient-to-b from-black/75 to-transparent px-[max(1.25rem,env(safe-area-inset-left))] pb-10 pt-[max(1rem,env(safe-area-inset-top))] transition-opacity duration-300',
           hideChrome ? 'opacity-0' : 'opacity-100',
           !isFullscreen && 'hidden',
         )}
@@ -1066,6 +1221,9 @@ export function MediaPlayer({
       <div
         className={cn(
           'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3 pb-2 pt-14 transition-opacity duration-300 sm:px-4 sm:pb-3',
+          // Clear of the notch, rounded corners and gesture bar in full screen.
+          isFullscreen &&
+            'px-[max(0.75rem,env(safe-area-inset-left),env(safe-area-inset-right))] pb-[max(0.5rem,env(safe-area-inset-bottom))]',
           hideChrome ? 'pointer-events-none opacity-0' : 'opacity-100',
         )}
       >

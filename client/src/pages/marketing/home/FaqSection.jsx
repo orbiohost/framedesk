@@ -7,7 +7,7 @@ const QUESTIONS = [
   },
   {
     q: 'Is the AI included, or does it cost extra?',
-    a: 'It is included on every plan and in the free trial. Usage refreshes every few hours within a weekly limit, and bigger plans get more. If you need more than that, you can buy extra credits.',
+    a: 'It is included on every plan, the free one too. Usage refreshes every few hours within a weekly limit, and bigger plans get more. If you need more than that, you can buy extra credits.',
   },
   {
     q: 'Which AI apps can I connect to FrameDesk?',
@@ -35,11 +35,15 @@ const QUESTIONS = [
   },
   {
     q: 'What if a payment fails?',
-    a: 'You get 7 days to sort it out with full access. After that the workspace becomes read-only until payment goes through. Your files stay put.',
+    a: 'Plans don’t renew by themselves. When one ends you get 7 days with full access to renew; after that the account moves to the free plan. Your files stay put, and uploads continue once you are under the free 2 GB or renew.',
   },
   {
-    q: 'How does the trial work?',
-    a: 'Seven days on Starter with 5 GB of storage, no card needed. Pick a plan whenever you are ready; your projects carry over.',
+    q: 'Can I earn more free storage?',
+    a: 'Yes. Share your referral link from your account page. When a studio signs up with it and verifies their email, you get extra storage on any plan, free included, and they get a discount on their first paid plan.',
+  },
+  {
+    q: 'Is there a free plan?',
+    a: 'Yes. Every account starts free with 2 GB of storage and a smaller AI limit, for as long as you like, no card needed. Upgrade whenever you need more; your projects carry over.',
   },
 ];
 

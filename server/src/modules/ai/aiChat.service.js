@@ -1,10 +1,12 @@
 import { AppError } from '../../utils/AppError.js';
+import { ProjectBrief } from '../briefs/projectBrief.model.js';
 import { StoredFile } from '../files/file.model.js';
 import { hiddenFolderIds } from '../files/folderAccess.js';
 import { toFileDto } from '../files/files.service.js';
 import { Folder } from '../files/folder.model.js';
 import { ensureDriveFolder } from '../files/folders.service.js';
 import { Project } from '../projects/project.model.js';
+import { createNote, loadNotesForAi, savedAnswersIn } from '../quickNotes/quickNotes.service.js';
 import { Transcript } from '../transcripts/transcript.model.js';
 import { AiConversation } from './aiConversation.model.js';
 import { AiThread, MAX_THREAD_MESSAGES } from './aiThread.model.js';
@@ -32,6 +34,12 @@ const OTHER_FILES_LISTED = 150;
 const THREADS_LISTED = 60;
 // Files one question can carry ("@" or uploaded in the chat), and "@" results.
 export const MAX_ATTACHED = 5;
+// Notes one question can carry ("#"), and how much of them the prompt holds.
+export const MAX_NOTES = 5;
+const NOTE_PER_NOTE = 8_000;
+const NOTE_BUDGET = 24_000;
+// A saved answer must fit in a note.
+const NOTE_BODY_MAX = 10_000;
 const ATTACH_SEARCH_LIMIT = 20;
 const AI_UPLOADS_FOLDER = 'AI uploads';
 const LIBRARY_FIELDS =
@@ -318,7 +326,39 @@ They just greeted you or made small talk. Reply warmly in one or two short sente
 Reply in the language the user writes in. Don't list or describe any files.`;
 }
 
-function systemPrompt({ workspaceName, user, project, library, focus, transcripts, attached }) {
+// Notes picked with "#", as a prompt block. They are the team's own writing
+// (often an earlier AI answer), so the model builds on them.
+function notesBlock(notes) {
+  if (notes.length === 0) return '';
+  let budget = NOTE_BUDGET;
+  const blocks = [];
+  for (const note of notes) {
+    if (budget <= 0) break;
+    const body = truncate(note.body, Math.min(NOTE_PER_NOTE, budget));
+    budget -= body.length;
+    const projects = (note.projectIds ?? []).map((project) => project.title).filter(Boolean);
+    const meta = [
+      `updated ${note.updatedAt.toISOString().slice(0, 10)}`,
+      projects.length && `projects: ${projects.join(', ')}`,
+    ]
+      .filter(Boolean)
+      .join('; ');
+    blocks.push(`NOTE "${note.title || 'Untitled'}" (${meta}):\n${body}`);
+  }
+  return blocks.join('\n\n');
+}
+
+function systemPrompt({
+  workspaceName,
+  user,
+  project,
+  library,
+  focus,
+  transcripts,
+  attached,
+  notes,
+  brief = null,
+}) {
   const focusIds = new Set(focus.map((entry) => entry.id));
   const rest = library.entries.filter((entry) => !focusIds.has(entry.id));
   const omitted = library.total - library.entries.length;
@@ -332,17 +372,25 @@ function systemPrompt({ workspaceName, user, project, library, focus, transcript
         ', ',
       )}. Words like "this", "it" or "the file" mean ${attached.length === 1 ? 'it' : 'them'}. Answer about ${attached.length === 1 ? 'it' : 'them'} first.\n`;
   }
+  if (notes.length > 0) {
+    scope += `\nThe user added ${notes.length === 1 ? 'a saved note' : `${notes.length} saved notes`} to the question (see NOTES below). They are the team's own notes, often an earlier answer of yours that was saved. Treat them as trusted context: analyse, build on, compare or update them as asked. Words like "this note" or "the note" mean ${notes.length === 1 ? 'it' : 'them'}.\n`;
+  }
+  if (brief) {
+    scope += `\nThe project has an AI brief written from its "Notes & Briefs" folder (meeting notes, voice notes, recordings). See PROJECT BRIEF below; use it for questions about meetings, decisions, action items and what was agreed, and cite the files it cites.\n`;
+  }
+  const notesText = notesBlock(notes);
+  const briefText = brief ? briefBlock(brief) : '';
   return `You are the FrameDesk AI assistant inside the workspace "${workspaceName}". You help the team find and understand the files they uploaded: videos, audio, images and documents, plus their transcripts.
 You are talking to ${user.name}; call them ${firstName(user)} when greeting them.
 ${scope}
 Rules:
-- Answer only from the LIBRARY below and this conversation. If the answer isn't there, say so plainly and suggest what to look at. Never invent file contents.
+- Answer only from the LIBRARY${notesText ? ', the NOTES' : ''} below and this conversation. If the answer isn't there, say so plainly and suggest what to look at. Never invent file contents.
 - Every time you mention a file, put its citation right after its name, exactly as written in the library, e.g. "Interview_01.mp4 [[file:0123456789abcdef01234567]]".
 - Point into clips with m:ss timestamps when you can.
 - Be concise. Use short bullet lists for several files. Use **bold** sparingly.
 - Reply in the language the user writes in.
 - Today is ${new Date().toISOString().slice(0, 10)}.
-
+${briefText ? `\nPROJECT BRIEF (written ${brief.generatedAt.toISOString().slice(0, 10)})\n\n${briefText}\n` : ''}${notesText ? `\nNOTES (added by the user)\n\n${notesText}\n` : ''}
 LIBRARY (${library.total} files the user can open${omitted > 0 ? `; the oldest ${omitted} are not listed` : ''})
 
 Most relevant files, in full:
@@ -372,6 +420,7 @@ function toMessageDto(message) {
       name: file.name,
       category: file.category,
     })),
+    notes: (message.notes ?? []).map((note) => ({ id: String(note.noteId), title: note.title })),
     stopped: Boolean(message.stopped),
     createdAt: message.createdAt,
   };
@@ -440,15 +489,69 @@ async function findThreadOrThrow(workspace, user, threadId) {
 
 export async function getThread({ workspace, user, viewer }, threadId) {
   const thread = await findThreadOrThrow(workspace, user, threadId);
-  return {
-    thread: toThreadSummary(thread),
-    messages: thread.messages.map(toMessageDto),
-    files: await citedFiles(
+  const [files, savedNotes] = await Promise.all([
+    citedFiles(
       workspace._id,
       thread.messages.flatMap((message) => message.fileIds ?? []),
       viewer,
     ),
+    savedAnswersIn(workspace._id, user._id, thread._id),
+  ]);
+  return {
+    thread: toThreadSummary(thread),
+    messages: thread.messages.map(toMessageDto),
+    files,
+    // { messageId: noteId } for answers already saved to notes.
+    savedNotes,
   };
+}
+
+// "Save to notes" on an answer: the answer becomes a quick note that links
+// back to this chat. The text comes from the stored answer, not the request.
+export async function saveAnswerAsNote(
+  { workspace, user },
+  threadId,
+  messageId,
+  { title, projectIds, visibility },
+) {
+  const thread = await findThreadOrThrow(workspace, user, threadId);
+  const index = thread.messages.findIndex((message) => String(message._id) === messageId);
+  const message = thread.messages[index];
+  if (!message || message.role !== 'model') {
+    throw AppError.notFound('That answer is no longer in this chat', 'MESSAGE_NOT_FOUND');
+  }
+  const question = thread.messages
+    .slice(0, index)
+    .findLast((candidate) => candidate.role === 'user');
+  // Citations only mean something inside the chat; the file's name sits beside each one.
+  const body = message.text
+    .replace(CITATION, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ +([,.;:)])/g, '$1')
+    .trim();
+  if (!body || message.text === '_Stopped._') {
+    throw AppError.badRequest('This answer is empty, so there is nothing to save', 'EMPTY_ANSWER');
+  }
+  const defaultTitle = titleFrom(question?.text ?? thread.title).slice(0, 160);
+  return createNote(
+    workspace._id,
+    user._id,
+    {
+      title: title?.trim() || defaultTitle,
+      body: body.length > NOTE_BODY_MAX ? `${body.slice(0, NOTE_BODY_MAX - 1).trimEnd()}…` : body,
+      projectIds: projectIds ?? (question?.projectId ? [String(question.projectId)] : []),
+      visibility,
+    },
+    {
+      source: {
+        kind: 'ai',
+        threadId: thread._id,
+        messageId: message._id,
+        question: question ? truncate(question.text, 500) : null,
+        fileIds: message.fileIds ?? [],
+      },
+    },
+  );
 }
 
 export async function renameThread({ workspace, user }, threadId, { title }) {
@@ -471,6 +574,47 @@ function titleFrom(text) {
 }
 
 // Everything the answer is based on: which files, read in full or by name.
+// The project brief, as plain text for the system prompt.
+function briefBlock(brief) {
+  const list = (heading, items) =>
+    items?.length ? `${heading}:\n${items.map((item) => `- ${item}`).join('\n')}` : '';
+  const cite = (ids) => (ids ?? []).map((id) => ` [[file:${id}]]`).join('');
+  return truncate(
+    [
+      brief.title,
+      brief.overview,
+      list(
+        'Decisions',
+        brief.decisions.map((point) => point.text + cite(point.fileIds)),
+      ),
+      list(
+        'Action items',
+        brief.actionItems.map(
+          (item) =>
+            `${item.text}${item.owner ? ` (owner: ${item.owner})` : ''}${item.due ? ` (due: ${item.due})` : ''}${cite(item.fileIds)}`,
+        ),
+      ),
+      list(
+        'Open questions',
+        brief.openQuestions.map((point) => point.text),
+      ),
+      brief.notes,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    30_000,
+  );
+}
+
+// A ready brief for the project, if the viewer may open its folder.
+async function briefFor(workspaceId, project, viewer) {
+  if (!project) return null;
+  const brief = await ProjectBrief.findOne({ workspaceId, projectId: project._id }).lean();
+  if (!brief?.generatedAt) return null;
+  const hidden = await hiddenFolderIds(workspaceId, viewer);
+  return hidden.has(String(brief.folderId)) ? null : brief;
+}
+
 async function prepareContext({
   workspace,
   user,
@@ -478,11 +622,12 @@ async function prepareContext({
   settings,
   project,
   attached,
+  notes,
   text,
   history,
   emit,
 }) {
-  const smallTalk = !project && attached.length === 0 && isSmallTalk(text);
+  const smallTalk = !project && attached.length === 0 && notes.length === 0 && isSmallTalk(text);
   if (smallTalk) {
     const fileCount = await StoredFile.countDocuments({
       workspaceId: workspace._id,
@@ -561,7 +706,10 @@ async function prepareContext({
       if (!finished.has(entry.id) && !entry.insight?.summary) entry.file.aiState = 'processing';
     }
   }
-  const transcripts = await transcriptsFor(workspace._id, focus);
+  const [transcripts, brief] = await Promise.all([
+    transcriptsFor(workspace._id, focus),
+    briefFor(workspace._id, project, viewer),
+  ]);
   return {
     library,
     system: systemPrompt({
@@ -572,6 +720,8 @@ async function prepareContext({
       focus,
       transcripts,
       attached,
+      notes,
+      brief,
     }),
   };
 }
@@ -589,7 +739,7 @@ export async function getUploadFolder({ workspace, user }) {
  */
 export async function streamAnswer(
   { workspace, pool, user, viewer },
-  { threadId, text, projectId, fileIds: attachIds = [] },
+  { threadId, text, projectId, fileIds: attachIds = [], noteIds = [] },
   { emit, signal },
 ) {
   const settings = await getAiSettings();
@@ -598,12 +748,13 @@ export async function streamAnswer(
   const balance = creditBalance(pool, settings);
   if (balance.total < minimum) throw noCreditsError(balance);
 
-  const [existing, project, attached] = await Promise.all([
+  const [existing, project, attached, notes] = await Promise.all([
     threadId ? findThreadOrThrow(workspace, user, threadId) : null,
     projectId
       ? Project.findOne({ _id: projectId, workspaceId: workspace._id }).select('title').lean()
       : null,
     loadAttached(workspace._id, viewer, attachIds.slice(0, MAX_ATTACHED)),
+    loadNotesForAi(workspace._id, user._id, noteIds.slice(0, MAX_NOTES)),
   ]);
   if (projectId && !project) throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');
 
@@ -628,6 +779,7 @@ export async function streamAnswer(
     settings,
     project,
     attached,
+    notes,
     text,
     history,
     emit,
@@ -697,6 +849,10 @@ export async function streamAnswer(
       fileId: entry.file._id,
       name: truncate(entry.file.displayName, 200),
       category: entry.file.category,
+    })),
+    notes: notes.map((note) => ({
+      noteId: note._id,
+      title: truncate(note.title || titleFrom(note.body), 160),
     })),
     createdAt: now,
   };

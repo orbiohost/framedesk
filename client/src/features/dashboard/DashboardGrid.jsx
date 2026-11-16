@@ -33,6 +33,7 @@ import { ProjectsWidget } from './ProjectsWidget.jsx';
 import { QuickNote } from './QuickNote.jsx';
 import { StatsWidget } from './StatsWidget.jsx';
 import { StorageWidget } from './StorageWidget.jsx';
+import { SocialWidget } from './SocialWidget.jsx';
 import { TaskBoardWidget } from './TaskBoardWidget.jsx';
 import { TeamChat } from './TeamChat.jsx';
 import { TeamWidget } from './TeamWidget.jsx';
@@ -78,6 +79,7 @@ const RENDERERS = {
   projects: (ctx) => <ProjectsWidget workspace={ctx.workspace} className={FILL} />,
   team: (ctx) => <TeamWidget workspace={ctx.workspace} tasks={ctx.tasks} className={FILL} />,
   storage: (ctx) => <StorageWidget workspace={ctx.workspace} className={FILL} />,
+  social: (ctx) => <SocialWidget workspace={ctx.workspace} className={FILL} />,
   transcribe: (ctx) => <TranscribeWidget workspace={ctx.workspace} className={FILL} />,
 };
 

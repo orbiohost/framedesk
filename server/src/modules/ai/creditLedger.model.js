@@ -6,6 +6,7 @@ export const LEDGER_KINDS = [
   'analysis',
   'brief',
   'moodboard',
+  'social',
   'purchase',
   'grant',
   'refund',

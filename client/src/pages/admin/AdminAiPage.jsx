@@ -30,6 +30,7 @@ const LEDGER_LABELS = {
   analysis: 'File analysed',
   brief: 'Project brief written',
   moodboard: 'Moodboard AI',
+  social: 'Social media AI',
   purchase: 'Bought',
   grant: 'Admin adjustment',
   refund: 'Refund',

@@ -134,6 +134,56 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value?.trim() || undefined),
+    // Social Media hub: real account linking. Each pair is optional; a platform
+    // whose keys are empty can still be added by hand. Redirect URIs to register:
+    //   Instagram: <CLIENT_URL>/api/social/oauth/instagram/callback
+    //   Facebook:  <CLIENT_URL>/api/social/oauth/facebook/callback
+    //   YouTube:   <CLIENT_URL>/api/social/oauth/youtube/callback (on the Google client above)
+    //   TikTok:    <CLIENT_URL>/api/social/oauth/tiktok/callback
+    INSTAGRAM_APP_ID: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    INSTAGRAM_APP_SECRET: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    META_APP_ID: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    META_APP_SECRET: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    // YouTube linking uses GOOGLE_CLIENT_ID/SECRET unless these are set.
+    YOUTUBE_CLIENT_ID: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    YOUTUBE_CLIENT_SECRET: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    // YouTube Data API key: adds a channel from just its link (public stats, no login).
+    YOUTUBE_API_KEY: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    TIKTOK_CLIENT_KEY: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    TIKTOK_CLIENT_SECRET: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    // Encrypts stored social access tokens. Falls back to a key derived from JWT_ACCESS_SECRET.
+    SOCIAL_TOKEN_SECRET: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined)
+      .pipe(z.string().min(32, 'must be at least 32 characters').optional()),
     // Optional Redis (e.g. redis://redis:6379) for the request cache and shared
     // rate limits. Leave empty to run without it.
     REDIS_URL: z
@@ -226,6 +276,20 @@ const envSchema = z
         message: 'set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither',
       });
     }
+    for (const [id, secret] of [
+      ['INSTAGRAM_APP_ID', 'INSTAGRAM_APP_SECRET'],
+      ['META_APP_ID', 'META_APP_SECRET'],
+      ['YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET'],
+      ['TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'],
+    ]) {
+      if (Boolean(env[id]) !== Boolean(env[secret])) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [secret],
+          message: `set both ${id} and ${secret}, or neither`,
+        });
+      }
+    }
     if (Boolean(env.VAPID_PUBLIC_KEY) !== Boolean(env.VAPID_PRIVATE_KEY)) {
       ctx.addIssue({
         code: 'custom',
@@ -295,6 +359,7 @@ function loadEnv() {
     process.exit(1);
   }
   if (result.data.RAZORPAY_KEY_ID && !result.data.RAZORPAY_WEBHOOK_SECRET) {
+    // eslint-disable-next-line no-console
     console.warn(
       'WARNING: RAZORPAY_WEBHOOK_SECRET is not set. Refunds, disputes and payments whose ' +
         'browser closed before confirming will not be picked up.',

@@ -11,6 +11,7 @@ import {
   NotebookPen,
   Timer,
   Users,
+  Share2,
 } from 'lucide-react';
 
 // Every widget the dashboard can show.
@@ -104,6 +105,14 @@ export const WIDGETS = [
     icon: HardDrive,
     spans: [3, 4, 5, 6],
     tall: false,
+  },
+  {
+    id: 'social',
+    title: 'Social media',
+    description: 'Audience reach, Instagram & WhatsApp metrics, and AI posting tips.',
+    icon: Share2,
+    spans: [4, 5, 6, 8],
+    tall: true,
   },
   {
     id: 'transcribe',

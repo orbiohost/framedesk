@@ -8,6 +8,7 @@ import {
   ReceiptText,
   LifeBuoy,
   ScrollText,
+  Share2,
   Sparkles,
   Tags,
   Users,
@@ -26,6 +27,7 @@ const NAV = [
   { to: '/admin/plans', label: 'Plans & coupons', icon: Tags },
   { to: '/admin/invoicing', label: 'Invoicing', icon: ReceiptText },
   { to: '/admin/ai', label: 'AI assistant', icon: Sparkles },
+  { to: '/admin/social', label: 'Social apps', icon: Share2 },
   {
     to: '/admin/upgrade-requests',
     label: 'Upgrade requests',

@@ -29,6 +29,7 @@ import supportRoutes from './support/support.routes.js';
 import quickNotesRoutes from './quickNotes/quickNotes.routes.js';
 import referralsRoutes from './referrals/referrals.routes.js';
 import searchRoutes from './search/search.routes.js';
+import socialRoutes, { socialOAuthRouter } from './social/social.routes.js';
 import tasksRoutes from './tasks/tasks.routes.js';
 import transcriptsRoutes from './transcripts/transcripts.routes.js';
 import avatarsRoutes from './users/avatars.routes.js';
@@ -55,6 +56,8 @@ apiRouter.use('/support', supportRoutes);
 apiRouter.use('/connectors', connectorsRoutes);
 // Refer & earn: your referral link, and claiming the one you signed up with.
 apiRouter.use('/referrals', referralsRoutes);
+// Where Instagram, Facebook, Google and TikTok send people back after linking an account.
+apiRouter.use('/social/oauth', socialOAuthRouter);
 apiRouter.use('/admin', adminRoutes);
 apiRouter.use('/backup-downloads', backupDownloadsRouter);
 // Shared project links: open to anyone holding the link (or any signed-in
@@ -84,5 +87,6 @@ mountWorkspaceFeature('backups', workspaceBackupsRouter);
 mountWorkspaceFeature('ai', aiRoutes);
 mountWorkspaceFeature('briefs', briefsRoutes);
 mountWorkspaceFeature('search', searchRoutes);
+mountWorkspaceFeature('social', socialRoutes);
 
 apiRouter.use('/workspaces', workspacesRoutes);

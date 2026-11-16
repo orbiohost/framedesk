@@ -14,6 +14,7 @@ const KIND_LABELS = {
   analysis: 'File analysed',
   brief: 'Project brief written',
   moodboard: 'Moodboard AI',
+  social: 'Social media AI',
   purchase: 'Extra usage bought',
   grant: 'Adjusted by FrameDesk',
   refund: 'Refund',

@@ -28,7 +28,7 @@ function LayoutSkeleton() {
   return (
     <div>
       <div className="bg-surface flex min-h-screen gap-4 p-4">
-        <Skeleton className="hidden w-56 lg:block" />
+        <Skeleton className="hidden w-60 rounded-3xl lg:block" />
         <div className="flex-1 space-y-4 p-6">
           <Skeleton className="h-10 w-72" />
           <Skeleton className="h-40 w-full max-w-3xl" />

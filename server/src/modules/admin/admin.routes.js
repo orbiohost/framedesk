@@ -3,6 +3,7 @@ import { authenticate } from '../../middleware/authenticate.js';
 import { validate } from '../../middleware/validate.js';
 import { AppError } from '../../utils/AppError.js';
 import aiAdminRoutes from '../ai/aiAdmin.routes.js';
+import socialAdminRoutes from '../social/socialAdmin.routes.js';
 import adminPlansRoutes from './adminPlans.routes.js';
 import * as admin from './admin.controller.js';
 import * as billing from './adminBilling.controller.js';
@@ -40,6 +41,7 @@ router.use(authenticate, requireSuperadmin);
 router.get('/dashboard', admin.dashboard);
 router.get('/system', admin.system);
 router.use('/ai', aiAdminRoutes);
+router.use('/social', socialAdminRoutes);
 router.use('/', adminPlansRoutes);
 router.get('/audit-log', validate({ query: cursorQuery }), admin.auditLog);
 

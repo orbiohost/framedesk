@@ -114,6 +114,17 @@ export function SignupPage() {
         <Button type="submit" className="w-full" loading={signup.isPending}>
           Create account
         </Button>
+        <p className="text-muted text-center text-xs">
+          By creating an account you agree to the{' '}
+          <Link to="/terms" className="hover:text-ink underline">
+            Terms of Service
+          </Link>{' '}
+          and{' '}
+          <Link to="/privacy" className="hover:text-ink underline">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </form>
     </AuthLayout>
   );

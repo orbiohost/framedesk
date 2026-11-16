@@ -229,3 +229,32 @@ export function useSaveCoupon() {
 export function useDeleteCoupon() {
   return useAdminMutation((id) => api.delete(`/admin/coupons/${id}`));
 }
+
+// Admin › Social apps: platform developer keys.
+export function useAdminSocialApps() {
+  return useQuery({ queryKey: adminKey('social'), queryFn: () => api.get('/admin/social') });
+}
+
+export function useSaveSocialApp() {
+  return useAdminMutation(({ app, ...body }) => api.put(`/admin/social/apps/${app}`, body));
+}
+
+export function useClearSocialApp() {
+  return useAdminMutation((app) => api.delete(`/admin/social/apps/${app}`));
+}
+
+export function useTestSocialApp() {
+  return useMutation({ mutationFn: (app) => api.post(`/admin/social/apps/${app}/test`) });
+}
+
+export function useSaveYoutubeKey() {
+  return useAdminMutation((apiKey) => api.put('/admin/social/youtube-key', { apiKey }));
+}
+
+export function useClearYoutubeKey() {
+  return useAdminMutation(() => api.delete('/admin/social/youtube-key'));
+}
+
+export function useTestYoutubeKey() {
+  return useMutation({ mutationFn: () => api.post('/admin/social/youtube-key/test') });
+}

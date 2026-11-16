@@ -159,9 +159,17 @@ function SiteFooter() {
             </Link>
           </nav>
         </div>
-        <p className="text-muted border-line mt-10 border-t pt-6 text-sm">
-          © {new Date().getFullYear()} FrameDesk · Prices in INR, plus GST
-        </p>
+        <div className="text-muted border-line mt-10 flex flex-wrap items-center justify-between gap-3 border-t pt-6 text-sm">
+          <p>© {new Date().getFullYear()} FrameDesk · Prices in INR, plus GST</p>
+          <nav aria-label="Legal" className="flex gap-5">
+            <Link to="/privacy" className="hover:text-ink">
+              Privacy Policy
+            </Link>
+            <Link to="/terms" className="hover:text-ink">
+              Terms of Service
+            </Link>
+          </nav>
+        </div>
       </div>
     </footer>
   );

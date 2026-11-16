@@ -190,7 +190,7 @@ async function openUpload(job) {
         filename: job.file.name,
         workspaceId: job.item.workspaceId,
         folderId: job.item.folderId,
-      }).map(([key, value]) => [key, value == null ? '' : String(value)]),
+      }).map(([key, value]) => [key, value === null || value === undefined ? '' : String(value)]),
     ),
   });
   writeLocal(job.resumeKey, upload.id);

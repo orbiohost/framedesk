@@ -47,6 +47,14 @@ export const router = createBrowserRouter([
         lazy: page(() => import('../layouts/MarketingLayout.jsx'), 'MarketingLayout'),
         children: [
           { path: '/', lazy: page(() => import('../pages/marketing/HomePage.jsx'), 'HomePage') },
+          {
+            path: '/privacy',
+            lazy: page(() => import('../pages/marketing/legal/PrivacyPage.jsx'), 'PrivacyPage'),
+          },
+          {
+            path: '/terms',
+            lazy: page(() => import('../pages/marketing/legal/TermsPage.jsx'), 'TermsPage'),
+          },
         ],
       },
 
@@ -165,6 +173,10 @@ export const router = createBrowserRouter([
                     lazy: page(() => import('../pages/admin/AdminPlansPage.jsx'), 'AdminPlansPage'),
                   },
                   {
+                    path: 'social',
+                    lazy: page(() => import('../pages/admin/AdminSocialPage.jsx'), 'AdminSocialPage'),
+                  },
+                  {
                     path: 'audit-log',
                     lazy: page(() => import('../pages/admin/AdminAuditPage.jsx'), 'AdminAuditPage'),
                   },
@@ -252,6 +264,10 @@ export const router = createBrowserRouter([
                   {
                     path: 'transcribe',
                     lazy: page(() => import('../pages/app/TranscribePage.jsx'), 'TranscribePage'),
+                  },
+                  {
+                    path: 'social',
+                    lazy: page(() => import('../pages/app/SocialMediaPage.jsx'), 'SocialMediaPage'),
                   },
                   {
                     path: 'clients',

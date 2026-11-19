@@ -13,6 +13,8 @@ import {
   MAX_CONNECTORS,
   MAX_ITEMS,
   MAX_STROKES,
+  SHAPE_KINDS,
+  STROKE_STYLES,
 } from './moodboard.model.js';
 import {
   addNoteToBoard,
@@ -53,6 +55,11 @@ const itemSchema = z.object({
     .optional(),
   title: z.string().max(300).nullable().optional(),
   fontSize: z.number().min(6).max(600).nullable().optional(),
+  shape: z.enum(SHAPE_KINDS).nullable().optional(),
+  fill: hexColor.nullable().optional(),
+  strokeWidth: z.number().min(1).max(24).nullable().optional(),
+  strokeStyle: z.enum(STROKE_STYLES).nullable().optional(),
+  rounded: z.boolean().nullable().optional(),
 });
 const endSchema = z.object({
   itemId: z.string().max(40).nullable().optional(),

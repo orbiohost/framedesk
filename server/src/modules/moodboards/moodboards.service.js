@@ -374,6 +374,10 @@ function describeItem(item) {
       return `Colour swatch: ${item.color}${item.text ? ` (${item.text})` : ''}`;
     case 'link':
       return `Link: ${item.title ? `${item.title} — ` : ''}${item.url}`;
+    case 'shape':
+      return item.text
+        ? `Box (${item.shape ?? 'rect'}) with text: "${truncate(item.text, 1500)}"`
+        : null;
     default:
       return null;
   }

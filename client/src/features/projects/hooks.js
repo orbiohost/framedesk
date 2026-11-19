@@ -35,8 +35,20 @@ export function useSaveProject(workspaceId) {
         : await api.post(basePath(workspaceId), input);
       return response.project;
     },
+    // A new project may start with its type's task list.
     onSuccess: () =>
-      invalidateFeatures(queryClient, workspaceId, ['projects', 'clients', 'calendar']),
+      invalidateFeatures(queryClient, workspaceId, ['projects', 'clients', 'calendar', 'tasks']),
+  });
+}
+
+// Adds the project type's task list (Project settings) to an existing project.
+export function useApplyTaskTemplate(workspaceId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (projectId) =>
+      (await api.post(`${basePath(workspaceId)}/${projectId}/task-template`)).created,
+    onSuccess: () =>
+      invalidateFeatures(queryClient, workspaceId, ['projects', 'tasks', 'calendar']),
   });
 }
 

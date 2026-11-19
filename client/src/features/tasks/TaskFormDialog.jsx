@@ -18,7 +18,7 @@ import { ReminderField } from '../notifications/ReminderField.jsx';
 import { projectOptions, useProjects } from '../projects/hooks.js';
 import { ChecklistEditor } from './ChecklistEditor.jsx';
 import { useDeleteTask, useSaveTask } from './hooks.js';
-import { TASK_STATUS_OPTIONS } from './taskMeta.js';
+import { TASK_REPEAT_OPTIONS, TASK_STATUS_OPTIONS } from './taskMeta.js';
 
 const schema = z.object({
   title: z.string().trim().min(1, 'Give the task a title').max(300),
@@ -30,6 +30,7 @@ const schema = z.object({
   priority: z.string(),
   checklist: z.array(z.object({ text: z.string().trim().min(1).max(300), done: z.boolean() })),
   reminders: z.array(z.number()).nullable(),
+  repeat: z.string(),
 });
 
 function toFormValues(task, defaults) {
@@ -43,6 +44,7 @@ function toFormValues(task, defaults) {
     priority: task?.priority ?? 'medium',
     checklist: task?.checklist.map(({ text, done }) => ({ text, done })) ?? [],
     reminders: task?.reminders ?? null,
+    repeat: task?.repeat ?? '',
   };
 }
 
@@ -52,6 +54,7 @@ function toPayload(values) {
     projectId: values.projectId || null,
     assigneeId: values.assigneeId || null,
     dueDate: fromDateInputValue(values.dueDate),
+    repeat: values.repeat || null,
   };
 }
 
@@ -82,6 +85,7 @@ function TaskForm({ workspaceId, task, defaults, canEdit, onDone }) {
     formState: { errors },
   } = useForm({ resolver: zodResolver(schema), defaultValues: toFormValues(task, defaults) });
   const dueDate = useWatch({ control, name: 'dueDate' });
+  const repeat = useWatch({ control, name: 'repeat' });
 
   function onSubmit(values) {
     save.mutate(
@@ -135,6 +139,17 @@ function TaskForm({ workspaceId, task, defaults, canEdit, onDone }) {
             )}
           />
         )}
+        <SelectField
+          id="task-repeat"
+          label="Repeat"
+          hint={
+            repeat
+              ? 'Ticking it done adds the next one, with a fresh checklist and the next due date.'
+              : undefined
+          }
+          options={TASK_REPEAT_OPTIONS}
+          {...register('repeat')}
+        />
         <Controller
           control={control}
           name="priority"

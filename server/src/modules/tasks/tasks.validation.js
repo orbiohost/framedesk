@@ -7,7 +7,7 @@ import {
   optionalText,
   reminderOffsets,
 } from '../../utils/zodHelpers.js';
-import { TASK_STATUSES } from './task.model.js';
+import { TASK_REPEATS, TASK_STATUSES } from './task.model.js';
 
 const checklistItem = z.object({
   text: z.string().trim().min(1).max(300),
@@ -24,6 +24,7 @@ const taskFields = {
   priority: z.enum(PRIORITIES).optional(),
   checklist: z.array(checklistItem).max(100).optional(),
   reminders: reminderOffsets,
+  repeat: z.enum(TASK_REPEATS).nullable().optional(),
 };
 
 export const taskParamsSchema = z.object({ taskId: objectId });

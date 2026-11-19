@@ -55,7 +55,7 @@ export function StatsWidget({ workspace, tasks, className }) {
   return (
     <Widget icon={ListTodo} title="Overview" className={className}>
       {/* Tiles wrap to whatever width the widget is given. */}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
         <Tile icon={ListTodo} label="Open tasks" value={stats.open} tint="bg-lavender" />
         <Tile
           icon={TriangleAlert}

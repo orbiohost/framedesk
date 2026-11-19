@@ -3,7 +3,9 @@ import {
   ArrowLeft,
   ArrowUpRight,
   BringToFront,
+  Circle,
   Copy,
+  Diamond,
   Eraser,
   FolderKanban,
   Hand,
@@ -12,6 +14,7 @@ import {
   MoveRight,
   MoveHorizontal,
   Tag,
+  Camera,
   ImagePlus,
   Link2,
   Maximize,
@@ -20,6 +23,7 @@ import {
   Pencil,
   Redo2,
   Sparkles,
+  Square,
   StickyNote,
   Trash2,
   Type,
@@ -60,6 +64,7 @@ import {
   useMoodboard,
   useUpdateMoodboard,
 } from '../../features/moodboards/hooks.js';
+import { useCamera } from '../../features/media/CameraCapture.jsx';
 import { MoodboardAiPanel } from '../../features/moodboards/MoodboardAiPanel.jsx';
 import { registerOpenBoard } from '../../features/moodboards/boardBridge.js';
 import {
@@ -68,6 +73,15 @@ import {
   connectorEnds,
   freezeEnds,
 } from '../../features/moodboards/connectors.js';
+import {
+  SHAPE_FILLS,
+  SHAPE_FONT_SIZES,
+  SHAPE_KINDS,
+  SHAPE_STROKES,
+  SHAPE_STROKE_STYLES,
+  SHAPE_WIDTHS,
+  ShapeOutline,
+} from '../../features/moodboards/shapes.jsx';
 import { fetchPreviewUrl, useUploads } from '../../features/files/hooks.js';
 import { cancelUpload, resumeUpload } from '../../features/files/uploadStore.js';
 import { useProjects } from '../../features/projects/hooks.js';
@@ -97,7 +111,14 @@ const SAVED_FIELDS = [
   'color',
   'url',
   'title',
+  'shape',
+  'fill',
+  'strokeWidth',
+  'strokeStyle',
+  'rounded',
 ];
+// The style fields of a shape, set from the shape panel.
+const SHAPE_STYLE_FIELDS = ['color', 'fill', 'strokeWidth', 'strokeStyle', 'rounded', 'fontSize'];
 
 function forSaving(items, pending) {
   return items
@@ -221,6 +242,7 @@ const SHORTCUTS = [
       ['P', 'Sketch (hold Shift for a straight line)'],
       ['E', 'Eraser'],
       ['A', 'Arrow (start or end on an item to connect it)'],
+      ['R / O / D', 'Rectangle, ellipse, diamond (drag to draw, Shift for even sides)'],
       ['Esc', 'Back to Select, clear selection'],
     ],
   ],
@@ -228,7 +250,7 @@ const SHORTCUTS = [
     'Add',
     [
       ['N', 'Sticky note'],
-      ['T', 'Heading'],
+      ['T or double-click the board', 'Heading'],
       ['C', 'Colour swatch'],
       ['L', 'Link'],
       ['I', 'Images or videos'],
@@ -238,6 +260,8 @@ const SHORTCUTS = [
   [
     'Edit',
     [
+      ['Drag on the board', 'Select everything in the box'],
+      ['Enter or double-click', 'Write inside a shape or note'],
       ['Alt + drag', 'Drag out a copy'],
       ['Shift + click', 'Select several'],
       ['Ctrl+A', 'Select all'],
@@ -363,6 +387,191 @@ function ArrowStyleControls({ style, onChange }) {
   );
 }
 
+const SHAPE_LABELS = { rect: 'Rectangle', ellipse: 'Ellipse', diamond: 'Diamond' };
+const SHAPE_KEYS = { rect: 'R', ellipse: 'O', diamond: 'D' };
+const SHAPE_ICONS = { rect: Square, ellipse: Circle, diamond: Diamond };
+
+function PanelRow({ label, children }) {
+  return (
+    <div className="mt-2.5 first:mt-0">
+      <p className="text-muted mb-1 text-[10px] font-semibold uppercase tracking-[0.14em]">
+        {label}
+      </p>
+      <div className="flex flex-wrap items-center gap-1">{children}</div>
+    </div>
+  );
+}
+
+function Swatch({ color, active, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
+      className={cn(
+        'border-line relative h-6 w-6 shrink-0 overflow-hidden rounded-md border',
+        active && 'ring-accent ring-2 ring-offset-1',
+      )}
+      style={{ background: color ?? 'transparent' }}
+    >
+      {!color && (
+        // No background: a red line through an empty square.
+        <span className="bg-danger absolute left-1/2 top-[-20%] h-[140%] w-[1.5px] rotate-45" />
+      )}
+    </button>
+  );
+}
+
+function ChoiceButton({ active, label, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
+      className={cn(
+        'grid h-7 min-w-7 shrink-0 place-items-center rounded-lg px-1 text-xs font-semibold',
+        active ? 'pill-active' : 'bg-subtle/60 hover:bg-subtle',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CornerPreview({ rounded }) {
+  return (
+    <span className="relative block h-4 w-[22px]">
+      <ShapeOutline
+        shape="rect"
+        w={22}
+        h={16}
+        color="currentColor"
+        strokeWidth={1.5}
+        rounded={rounded}
+      />
+    </span>
+  );
+}
+
+// Excalidraw-style properties for shapes: what new shapes look like, and the
+// look of the selected ones.
+function ShapePanel({ style, kind, onChange, onKind }) {
+  return (
+    <div
+      className="bg-surface border-line shadow-lift absolute left-3 top-3 z-20 max-h-[calc(100%-6.5rem)] w-[12.5rem] overflow-y-auto rounded-2xl border p-3"
+      onPointerDown={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      <PanelRow label="Shape">
+        {SHAPE_KINDS.map((shape) => {
+          const Icon = SHAPE_ICONS[shape];
+          return (
+            <ChoiceButton
+              key={shape}
+              label={SHAPE_LABELS[shape]}
+              active={kind === shape}
+              onClick={() => onKind(shape)}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+            </ChoiceButton>
+          );
+        })}
+      </PanelRow>
+      <PanelRow label="Stroke">
+        {SHAPE_STROKES.map((color) => (
+          <Swatch
+            key={color}
+            color={color}
+            label={`Stroke ${color}`}
+            active={style.color === color}
+            onClick={() => onChange({ color })}
+          />
+        ))}
+      </PanelRow>
+      <PanelRow label="Background">
+        {SHAPE_FILLS.map((fill) => (
+          <Swatch
+            key={fill ?? 'none'}
+            color={fill}
+            label={fill ? `Background ${fill}` : 'No background'}
+            active={(style.fill ?? null) === fill}
+            onClick={() => onChange({ fill })}
+          />
+        ))}
+      </PanelRow>
+      <PanelRow label="Stroke width">
+        {SHAPE_WIDTHS.map((width) => (
+          <ChoiceButton
+            key={width}
+            label={`Stroke width ${width}`}
+            active={style.strokeWidth === width}
+            onClick={() => onChange({ strokeWidth: width })}
+          >
+            <span className="bg-ink w-4 rounded-full" style={{ height: width + 0.5 }} />
+          </ChoiceButton>
+        ))}
+      </PanelRow>
+      <PanelRow label="Stroke style">
+        {SHAPE_STROKE_STYLES.map((strokeStyle) => (
+          <ChoiceButton
+            key={strokeStyle}
+            label={`${strokeStyle} outline`}
+            active={(style.strokeStyle ?? 'solid') === strokeStyle}
+            onClick={() => onChange({ strokeStyle })}
+          >
+            <svg width="22" height="6" aria-hidden="true">
+              <line
+                x1="2"
+                y1="3"
+                x2="20"
+                y2="3"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeDasharray={
+                  strokeStyle === 'dashed' ? '6 4' : strokeStyle === 'dotted' ? '0 4' : undefined
+                }
+              />
+            </svg>
+          </ChoiceButton>
+        ))}
+      </PanelRow>
+      <PanelRow label="Edges">
+        <ChoiceButton
+          label="Sharp corners"
+          active={style.rounded === false}
+          onClick={() => onChange({ rounded: false })}
+        >
+          <CornerPreview rounded={false} />
+        </ChoiceButton>
+        <ChoiceButton
+          label="Round corners"
+          active={style.rounded !== false}
+          onClick={() => onChange({ rounded: true })}
+        >
+          <CornerPreview rounded />
+        </ChoiceButton>
+      </PanelRow>
+      <PanelRow label="Text size">
+        {SHAPE_FONT_SIZES.map(([label, size]) => (
+          <ChoiceButton
+            key={label}
+            label={`Text size ${label}`}
+            active={(style.fontSize ?? 20) === size}
+            onClick={() => onChange({ fontSize: size })}
+          >
+            {label}
+          </ChoiceButton>
+        ))}
+      </PanelRow>
+    </div>
+  );
+}
+
 function Editor({ workspace, board }) {
   const queryClient = useQueryClient();
   const editable = canEditWorkspace(workspace);
@@ -370,6 +579,8 @@ function Editor({ workspace, board }) {
   const update = useUpdateMoodboard(workspace.id, board.id);
   const containerRef = useRef(null);
   const fileInput = useRef(null);
+  // Photos from the camera land in the middle of the view, like a dropped image.
+  const camera = useCamera((files) => addFiles(files));
   // Ink that shows on the board: black on light, white on dark.
   const ink = isDarkTheme() ? '#ffffff' : PEN_COLORS[0];
   const [items, setItems] = useState(() => board.items);
@@ -387,6 +598,15 @@ function Editor({ workspace, board }) {
   const [viewport, setViewport] = useState(() => board.viewport ?? { x: 80, y: 80, zoom: 1 });
   const [tool, setTool] = useState('select');
   const [pen, setPen] = useState({ color: ink, width: PEN_WIDTHS[1] });
+  // How new shapes look (the last style picked in the shape panel).
+  const [shapeStyle, setShapeStyle] = useState({
+    color: ink,
+    fill: null,
+    strokeWidth: 2,
+    strokeStyle: 'solid',
+    rounded: true,
+    fontSize: 20,
+  });
   const [selection, setSelection] = useState(() => new Set());
   const [editingId, setEditingId] = useState(null);
   const [pending, setPending] = useState(() => new Map());
@@ -592,8 +812,21 @@ function Editor({ workspace, board }) {
     return registerOpenBoard(board.id, (text) => addNoteRef.current(text));
   }, [editable, board.id]);
 
-  function addText() {
-    const at = viewCenter();
+  function addShape(shape, box) {
+    addItems([
+      {
+        id: newId(),
+        type: 'shape',
+        shape,
+        ...box,
+        z: topZ(live.current.items),
+        text: '',
+        ...shapeStyle,
+      },
+    ]);
+  }
+
+  function addText(at = viewCenter()) {
     const box = headingBox('Heading', HEADING_SIZE);
     const item = {
       id: newId(),
@@ -741,6 +974,7 @@ function Editor({ workspace, board }) {
   // --- Editing selection -------------------------------------------------
   const selectedItems = items.filter((item) => selection.has(item.id));
   const single = selectedItems.length === 1 ? selectedItems[0] : null;
+  const selectedShapes = selectedItems.filter((item) => item.type === 'shape');
 
   // Copy / cut: the selection as text, pasted back with new ids.
   useEffect(() => {
@@ -877,6 +1111,21 @@ function Editor({ workspace, board }) {
         current.map((item) => (selection.has(item.id) ? { ...item, z: z++ } : item)),
       ),
     );
+  }
+
+  function patchItems(ids, patch) {
+    change(() =>
+      setItems((current) =>
+        current.map((item) => (ids.has(item.id) ? { ...item, ...patch } : item)),
+      ),
+    );
+  }
+
+  // The shape panel: restyle the selected shapes, and new ones after them.
+  function changeShapeStyle(patch) {
+    setShapeStyle((current) => ({ ...current, ...patch }));
+    const ids = new Set(selectedShapes.map((item) => item.id));
+    if (ids.size) patchItems(ids, patch);
   }
 
   function patchItem(id, patch) {
@@ -1024,7 +1273,23 @@ function Editor({ workspace, board }) {
         removeSelected();
         return;
       }
-      const tools = { v: 'select', h: 'hand', p: 'pen', e: 'eraser', a: 'arrow' };
+      if (event.key === 'Enter' && editable && single && !editingId) {
+        if (['note', 'text', 'shape'].includes(single.type)) {
+          event.preventDefault();
+          setEditingId(single.id);
+          return;
+        }
+      }
+      const tools = {
+        v: 'select',
+        h: 'hand',
+        p: 'pen',
+        e: 'eraser',
+        a: 'arrow',
+        r: 'rect',
+        o: 'ellipse',
+        d: 'diamond',
+      };
       const key = event.key.toLowerCase();
       if (tools[key]) setTool(editable || key === 'v' || key === 'h' ? tools[key] : 'hand');
       else if (key === 'n' && editable) addNote();
@@ -1124,7 +1389,7 @@ function Editor({ workspace, board }) {
             <Palette className="h-4 w-4" aria-hidden="true" />
           </ToolButton>
         )}
-        {(single.type === 'note' || single.type === 'text') && (
+        {['note', 'text', 'shape'].includes(single.type) && (
           <ToolButton label="Edit text" onClick={() => setEditingId(single.id)}>
             <Type className="h-4 w-4" aria-hidden="true" />
           </ToolButton>
@@ -1192,6 +1457,20 @@ function Editor({ workspace, board }) {
             {tool === 'arrow' && (
               <ArrowStyleControls style={arrowStyle} onChange={changeArrowStyle} />
             )}
+            {SHAPE_KINDS.map((shape) => {
+              const Icon = SHAPE_ICONS[shape];
+              return (
+                <ToolButton
+                  key={shape}
+                  label={SHAPE_LABELS[shape]}
+                  shortcut={SHAPE_KEYS[shape]}
+                  active={tool === shape}
+                  onClick={() => setTool(shape)}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </ToolButton>
+              );
+            })}
             {tool === 'pen' && (
               <span className="flex items-center gap-1 px-1">
                 {PEN_COLORS.map((color) => (
@@ -1249,6 +1528,9 @@ function Editor({ workspace, board }) {
             >
               <ImagePlus className="h-4 w-4" aria-hidden="true" />
             </ToolButton>
+            <ToolButton label="Take a photo" onClick={camera.open}>
+              <Camera className="h-4 w-4" aria-hidden="true" />
+            </ToolButton>
             <Divider />
             <ToolButton label="Undo" shortcut="Ctrl+Z" onClick={undo} disabled={!history.undo}>
               <Undo2 className="h-4 w-4" aria-hidden="true" />
@@ -1289,13 +1571,37 @@ function Editor({ workspace, board }) {
     </div>
   );
 
+  // With one kind of shape selected, its kind can be switched too.
+  const selectedKinds = new Set(selectedShapes.map((item) => item.shape));
+  const shapePanel =
+    editable && !editingId && (SHAPE_KINDS.includes(tool) || selectedShapes.length > 0) ? (
+      <ShapePanel
+        style={
+          selectedShapes.length
+            ? Object.fromEntries(SHAPE_STYLE_FIELDS.map((key) => [key, selectedShapes[0][key]]))
+            : shapeStyle
+        }
+        kind={
+          selectedShapes.length ? (selectedKinds.size === 1 ? [...selectedKinds][0] : null) : tool
+        }
+        onChange={changeShapeStyle}
+        onKind={(shape) => {
+          if (selectedShapes.length) {
+            patchItems(new Set(selectedShapes.map((item) => item.id)), { shape });
+          } else {
+            setTool(shape);
+          }
+        }}
+      />
+    ) : null;
+
   const empty = items.length === 0 && strokes.length === 0 && (
     <div className="pointer-events-none absolute inset-0 grid place-items-center p-6">
       <div className="max-w-sm text-center">
         <p className="font-display text-2xl">Start your moodboard</p>
         <p className="text-muted mt-2 text-sm leading-6">
           {editable
-            ? 'Paste or drop images and videos (several at once), add notes, colours and links, or sketch with the pen. Then ask the AI to turn it into a brief.'
+            ? 'Paste or drop images and videos (several at once), add notes, colours and links, draw boxes with text (R), or sketch with the pen. Then ask the AI to turn it into a brief.'
             : 'Nothing on this board yet.'}
         </p>
       </div>
@@ -1387,6 +1693,9 @@ function Editor({ workspace, board }) {
             onToolDone={() => setTool('select')}
             pen={pen}
             arrowStyle={arrowStyle}
+            shapeStyle={shapeStyle}
+            onCreateShape={addShape}
+            onCanvasDoubleClick={(at) => addText(at)}
             selectedConnector={selectedConnector}
             onSelectConnector={setSelectedConnector}
             editingConnector={editingConnector}
@@ -1433,6 +1742,7 @@ function Editor({ workspace, board }) {
             overlay={
               <>
                 {empty}
+                {shapePanel}
                 {selectionBar}
                 {connectorBar}
                 {toolbar}
@@ -1454,6 +1764,7 @@ function Editor({ workspace, board }) {
           </div>
         )}
       </div>
+      {editable && camera.element}
       <input
         ref={fileInput}
         type="file"

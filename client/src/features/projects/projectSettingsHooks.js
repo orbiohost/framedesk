@@ -25,3 +25,25 @@ export function useSaveProjectSettings(workspaceId) {
     onSuccess: (settings) => queryClient.setQueryData(featureKey(workspaceId, FEATURE), settings),
   });
 }
+
+const TEMPLATES = 'task-templates';
+
+// { templates: { [type]: { steps, custom } }, maxSteps }
+export function useTaskTemplates(workspaceId) {
+  return useQuery({
+    queryKey: featureKey(workspaceId, FEATURE, TEMPLATES),
+    queryFn: () => api.get(`${path(workspaceId)}/${TEMPLATES}`),
+    enabled: Boolean(workspaceId),
+  });
+}
+
+// steps: the type's new list, or null for the built-in one.
+export function useSaveTaskTemplate(workspaceId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ type, steps }) =>
+      api.put(`${path(workspaceId)}/${TEMPLATES}/${type}`, { steps }),
+    onSuccess: (data) =>
+      queryClient.setQueryData(featureKey(workspaceId, FEATURE, TEMPLATES), data),
+  });
+}

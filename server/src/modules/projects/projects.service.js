@@ -10,6 +10,7 @@ import { purgeFiles, unlinkFilesFromProject } from '../files/files.service.js';
 import { unlinkProject as unlinkNotesFromProject } from '../quickNotes/quickNotes.service.js';
 import { Task } from '../tasks/task.model.js';
 import { Project } from './project.model.js';
+import { applyTaskTemplate } from './taskTemplates.js';
 
 // The match keeps populate inside the tenant (and satisfies the scope guard).
 function clientPopulate(workspaceId) {
@@ -94,7 +95,11 @@ export async function getProject(workspaceId, projectId) {
   return toProjectDto(project, counts.get(String(project._id)));
 }
 
-export async function createProject(workspaceId, userId, input) {
+export async function createProject(
+  workspaceId,
+  userId,
+  { applyTaskTemplate: withTasks, ...input },
+) {
   if (input.clientId) await assertClientExists(workspaceId, input.clientId);
 
   const project = await Project.create({
@@ -105,6 +110,7 @@ export async function createProject(workspaceId, userId, input) {
   // Its folders are ready the moment it exists (Notes & Briefs plus the
   // workspace's default list from the project settings).
   await ensureProjectFolders(workspaceId, project._id);
+  if (withTasks) await applyTaskTemplate(workspaceId, userId, project._id);
   return getProject(workspaceId, project._id);
 }
 

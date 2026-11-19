@@ -26,7 +26,8 @@ function StatusTabs({ groups, active, onSelect, onAdd }) {
           <div
             key={tab.value}
             className={cn(
-              'flex shrink-0 items-center gap-1 rounded-full p-1 pl-4 transition-colors',
+              'flex shrink-0 items-center gap-1 rounded-full p-1 pl-4 pr-3 transition-colors',
+              onAdd && 'sm:pr-1',
               isActive ? 'pill-active' : 'bg-surface shadow-soft text-ink/80',
             )}
           >
@@ -53,15 +54,14 @@ function StatusTabs({ groups, active, onSelect, onAdd }) {
                 onClick={() => onAdd(tab.value)}
                 aria-label={`Add a task to ${tab.label}`}
                 className={cn(
-                  'grid h-7 w-7 place-items-center rounded-full transition-colors',
+                  // Phones use the header's Add task button instead.
+                  'hidden h-7 w-7 place-items-center rounded-full transition-colors sm:grid',
                   isActive ? 'hover:bg-surface/15' : 'hover:bg-subtle',
                 )}
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
-            ) : (
-              <span className="w-2" />
-            )}
+            ) : null}
           </div>
         );
       })}

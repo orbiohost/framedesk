@@ -1,5 +1,6 @@
 import {
   ArrowDownUp,
+  Camera,
   ChevronDown,
   ChevronRight,
   FolderInput,
@@ -25,6 +26,7 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { cn } from '../../lib/cn.js';
 import { readLocal, writeLocal } from '../../lib/storage.js';
 import { ProjectBriefPanel } from '../briefs/ProjectBriefPanel.jsx';
+import { useCamera } from '../media/CameraCapture.jsx';
 import { ShareFilesDialog } from '../fileShare/ShareFilesDialog.jsx';
 import { SharedLinksDialog } from '../fileShare/SharedLinksDialog.jsx';
 import { ActionMenu } from './ActionMenu.jsx';
@@ -378,6 +380,7 @@ export function FolderFilesPane({
   }
 
   const drop = useFileDrop(canEdit, upload);
+  const camera = useCamera(upload);
 
   async function onAction(action, file) {
     if (action === 'open')
@@ -521,6 +524,17 @@ export function FolderFilesPane({
                 <span className="hidden xl:inline">Shared links</span>
                 <span className="sr-only xl:hidden">Shared file links</span>
               </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-9"
+                onClick={camera.open}
+                title="Take a photo and upload it"
+              >
+                <Camera className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Camera</span>
+                <span className="sr-only sm:hidden">Take a photo and upload it</span>
+              </Button>
               <Button size="sm" className="h-9" onClick={() => inputRef.current.click()}>
                 <UploadCloud className="h-4 w-4" aria-hidden="true" /> Upload
               </Button>
@@ -601,6 +615,9 @@ export function FolderFilesPane({
             canEdit && (
               <div className="flex flex-wrap justify-center gap-2">
                 <Button onClick={() => inputRef.current.click()}>Choose files</Button>
+                <Button variant="secondary" onClick={camera.open}>
+                  <Camera className="h-4 w-4" aria-hidden="true" /> Take a photo
+                </Button>
                 {canRecord && (
                   <Button variant="secondary" onClick={() => setRecording(true)}>
                     <Mic className="h-4 w-4" aria-hidden="true" /> Record a voice note
@@ -700,6 +717,7 @@ export function FolderFilesPane({
         file={dialog?.type === 'link' ? dialog.file : null}
         onClose={closeDialog}
       />
+      {canEdit && camera.element}
       <VoiceNoteDialog
         open={recording}
         workspaceId={workspace.id}

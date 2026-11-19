@@ -3,6 +3,7 @@ import { withoutUndefined } from '../../utils/objects.js';
 import { assertActiveMember } from '../members/members.service.js';
 import { assertProjectExists } from '../projects/projects.service.js';
 import { ORDER_STEP, Task } from './task.model.js';
+import { nextDueDate } from './taskRepeat.js';
 
 function populateRefs(query, workspaceId) {
   return query
@@ -33,6 +34,7 @@ export function toTaskDto(task) {
     })),
     order: task.order,
     reminders: task.reminders ?? null,
+    repeat: task.repeat ?? null,
     completedAt: task.completedAt,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
@@ -87,17 +89,45 @@ export async function createTask(workspaceId, userId, input) {
   return getTask(workspaceId, task._id);
 }
 
+// Ticking a repeating task done makes its next copy (fresh checklist, next due
+// date). The series moves to the copy and the finished task stops repeating, so
+// un-ticking and re-ticking it doesn't make a second copy.
+async function repeatTask(workspaceId, finished) {
+  await Task.create({
+    workspaceId,
+    projectId: finished.projectId,
+    title: finished.title,
+    description: finished.description,
+    assigneeId: finished.assigneeId,
+    priority: finished.priority,
+    checklist: finished.checklist.map(({ text }) => ({ text, done: false })),
+    reminders: finished.reminders,
+    repeat: finished.repeat,
+    dueDate: nextDueDate(finished.dueDate, finished.repeat),
+    status: 'todo',
+    order: await nextOrder(workspaceId, finished.projectId, 'todo'),
+    createdBy: finished.createdBy,
+  });
+  await Task.updateOne({ _id: finished._id, workspaceId }, { $set: { repeat: null } });
+}
+
 export async function updateTask(workspaceId, taskId, input) {
   await assertReferences(workspaceId, input);
 
   const update = { ...withoutUndefined(input), ...completionChange(input.status) };
-  const task = await Task.findOneAndUpdate(
+  // Returns the task as it was, to tell whether this update is what finished it.
+  const before = await Task.findOneAndUpdate(
     { _id: taskId, workspaceId },
     { $set: update },
-    { new: true, runValidators: true },
+    { new: false, runValidators: true },
   ).lean();
-  if (!task) throw AppError.notFound('Task not found');
-  return getTask(workspaceId, task._id);
+  if (!before) throw AppError.notFound('Task not found');
+
+  const repeat = input.repeat !== undefined ? input.repeat : before.repeat;
+  if (input.status === 'done' && before.status !== 'done' && repeat) {
+    await repeatTask(workspaceId, { ...before, ...update, repeat });
+  }
+  return getTask(workspaceId, before._id);
 }
 
 export async function deleteTask(workspaceId, taskId) {

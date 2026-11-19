@@ -98,6 +98,7 @@ export function TeamChat({ workspace, className }) {
   const send = useSendMessage(workspace.id);
   const remove = useDeleteMessage(workspace.id);
   const [draft, setDraft] = useState('');
+  const hasDraft = Boolean(draft.trim());
   const [dictationError, setDictationError] = useState(null);
   const listRef = useRef(null);
   const inputRef = useRef(null);
@@ -176,25 +177,34 @@ export function TeamChat({ workspace, className }) {
           autoComplete="off"
           className="placeholder:text-muted min-w-0 flex-1 bg-transparent py-2 text-sm outline-none"
         />
-        <EmojiPicker
-          onPick={(emoji) => {
-            setDraft((text) => text + emoji);
-            inputRef.current?.focus();
-          }}
-        />
-        <DictateButton
-          workspaceId={workspace.id}
-          variant="icon"
-          label="Speak your message"
-          onError={setDictationError}
-          onText={(text) => insertSpokenText(inputRef.current, text)}
-          className="h-10 min-w-10"
-        />
+        {/* Phones have emoji on the keyboard; the button is for computers. */}
+        <span className="hidden sm:block">
+          <EmojiPicker
+            onPick={(emoji) => {
+              setDraft((text) => text + emoji);
+              inputRef.current?.focus();
+            }}
+          />
+        </span>
+        {/* Phones: the mic until something is typed, then send (as in chat apps). */}
+        <span className={cn(hasDraft && 'hidden sm:block')}>
+          <DictateButton
+            workspaceId={workspace.id}
+            variant="icon"
+            label="Speak your message"
+            onError={setDictationError}
+            onText={(text) => insertSpokenText(inputRef.current, text)}
+            className="h-10 min-w-10"
+          />
+        </span>
         <button
           type="submit"
-          disabled={!draft.trim() || send.isPending}
+          disabled={!hasDraft || send.isPending}
           aria-label="Send message"
-          className="pill-active grid h-10 w-10 shrink-0 place-items-center rounded-full transition-opacity disabled:opacity-40"
+          className={cn(
+            'pill-active h-10 w-10 shrink-0 place-items-center rounded-full transition-opacity disabled:opacity-40',
+            hasDraft ? 'grid' : 'hidden sm:grid',
+          )}
         >
           <SendHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>

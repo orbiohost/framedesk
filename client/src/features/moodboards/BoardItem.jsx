@@ -1,8 +1,9 @@
 import { ExternalLink, Globe, GripHorizontal, ImageOff, Play, RotateCw, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/cn.js';
 import { fetchPreviewUrl } from '../files/hooks.js';
 import { headingBox, headingSize, hostOf, youtubeId } from './boardUtils.js';
+import { ShapeOutline, shapeFontSize, shapeTextColor, shapeTextInset } from './shapes.jsx';
 import { SpellcheckLayer } from '../spellcheck/SpellcheckLayer.jsx';
 
 // A signed link to a board file (cached and batched by the files feature).
@@ -194,6 +195,71 @@ function HeadingEditor({ item, onDone }) {
   );
 }
 
+// Text inside a shape: centred both ways, the box grows with the lines.
+function ShapeTextEditor({ item, onDone, style }) {
+  const ref = useRef(null);
+  const [value, setValue] = useState(item.text ?? '');
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    element.style.height = '0px';
+    element.style.height = `${element.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={() => onDone(value)}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === 'Escape') ref.current.blur();
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      maxLength={4000}
+      spellCheck
+      className="max-h-full w-full resize-none overflow-hidden bg-transparent text-center outline-none"
+      style={style}
+    />
+  );
+}
+
+function ShapeContent({ item, editing, onTextDone }) {
+  const inset = shapeTextInset(item);
+  const textStyleForShape = {
+    fontSize: shapeFontSize(item),
+    lineHeight: 1.25,
+    color: shapeTextColor(item),
+  };
+  return (
+    <div className="relative h-full w-full">
+      <ShapeOutline {...item} />
+      <div
+        className="absolute flex items-center justify-center overflow-hidden"
+        style={{ left: inset.x, right: inset.x, top: inset.y, bottom: inset.y }}
+      >
+        {editing ? (
+          <ShapeTextEditor item={item} onDone={onTextDone} style={textStyleForShape} />
+        ) : (
+          item.text && (
+            <p
+              className="max-h-full w-full whitespace-pre-wrap break-words text-center font-medium"
+              style={textStyleForShape}
+            >
+              {item.text}
+            </p>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * One item on the board, in board coordinates. The canvas handles moving and
  * resizing; onGrab starts a move from a handle (videos and links, whose body
@@ -263,6 +329,8 @@ export function BoardItem({
         {item.text || <span className="opacity-40">Heading</span>}
       </p>
     );
+  } else if (item.type === 'shape') {
+    content = <ShapeContent item={item} editing={editing} onTextDone={onTextDone} />;
   } else if (item.type === 'color') {
     content = (
       <div className="bg-surface flex h-full w-full flex-col overflow-hidden rounded-[inherit] shadow-md">
@@ -293,7 +361,7 @@ export function BoardItem({
       onDoubleClick={() => onDoubleClick(item)}
       className={cn(
         'absolute left-0 top-0',
-        item.type === 'text' ? 'rounded-md' : 'rounded-xl',
+        item.type === 'text' || item.type === 'shape' ? 'rounded-md' : 'rounded-xl',
         !readOnly && 'cursor-move',
         // A thin outline hugging the item; an arrow about to stick to it glows.
         selected && 'outline-accent outline outline-[1.5px] outline-offset-2',

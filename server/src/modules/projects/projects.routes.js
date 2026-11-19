@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { canAdminister, canManage, canView } from '../../middleware/requireWorkspaceRole.js';
+import {
+  canAdminister,
+  canEdit,
+  canManage,
+  canView,
+} from '../../middleware/requireWorkspaceRole.js';
 import { validate } from '../../middleware/validate.js';
 import { projectShareSettingsRouter } from '../projectShare/projectShare.routes.js';
 import * as controller from './projects.controller.js';
@@ -27,6 +32,14 @@ router.delete(
   canAdminister,
   validate({ params: projectParamsSchema }),
   controller.remove,
+);
+
+// Adds the project type's task list (from Project settings) to its tasks.
+router.post(
+  '/:projectId/task-template',
+  canEdit,
+  validate({ params: projectParamsSchema }),
+  controller.addTaskTemplate,
 );
 
 // The project's public share link: who can open it and what they may do.

@@ -77,6 +77,10 @@ const workspaceSchema = new Schema(
     // project settings. Missing: the built-in list (DEFAULT_FOLDERS).
     // "Notes & Briefs" is always added on top of these.
     projectFolders: { type: [String], default: undefined },
+    // { [projectType]: [{ title, daysBeforeDue, priority }] }: the task list a
+    // new project of that type starts with. A missing type uses the built-in
+    // list (projects/taskTemplates.js); [] means no tasks.
+    projectTaskTemplates: { type: Schema.Types.Mixed, default: undefined },
   },
   { timestamps: true },
 );

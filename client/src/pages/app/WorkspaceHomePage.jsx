@@ -33,8 +33,8 @@ function DashboardHeader({ workspace, firstName, updatedAt, onAdd, editing, onCu
 
   return (
     <header className="short:mb-3 mb-5">
-      <div className="text-muted flex flex-wrap items-center justify-between gap-2 text-xs">
-        <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1 sm:flex">
+      <div className="text-muted hidden flex-wrap items-center justify-between gap-2 text-xs sm:flex">
+        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
           <span>Workspace</span>
           <ChevronRight className="h-3 w-3" aria-hidden="true" />
           <span className="truncate">{workspace.name}</span>
@@ -49,47 +49,62 @@ function DashboardHeader({ workspace, firstName, updatedAt, onAdd, editing, onCu
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
+      {/* Phones: the greeting and two round buttons share one line; the
+          workspace name, plan and team move to wider screens. */}
+      <div className="flex items-center justify-between gap-3 sm:mt-3 sm:flex-wrap sm:gap-4">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display short:text-[28px] text-2xl leading-tight sm:text-3xl md:text-[34px]">
-              {workspace.name} dashboard
+          <div className="flex items-center gap-3">
+            <h1 className="font-display short:text-[28px] truncate text-[26px] leading-tight sm:text-3xl md:text-[34px]">
+              <span className="sm:hidden">
+                {greeting()}, {firstName}
+              </span>
+              <span className="hidden sm:inline">{workspace.name} dashboard</span>
             </h1>
-            <span className="bg-lavender text-ink inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium">
+            <span className="bg-lavender text-ink hidden shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium sm:inline-flex">
               <Crown className="text-accent dark:text-ink h-3.5 w-3.5" aria-hidden="true" />
               {planLabel(workspace.billing)}
             </span>
           </div>
-          <p className="text-muted mt-1 text-sm">
-            {greeting()}, {firstName}. Here&apos;s what&apos;s moving today.
+          <p className="text-muted mt-0.5 truncate text-sm sm:mt-1">
+            <span className="sm:hidden">Here&apos;s what&apos;s moving today.</span>
+            <span className="hidden sm:inline">
+              {greeting()}, {firstName}. Here&apos;s what&apos;s moving today.
+            </span>
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {team.length > 0 && <AvatarStack people={team} max={4} />}
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {team.length > 0 && (
+            <span className="hidden sm:block">
+              <AvatarStack people={team} max={4} />
+            </span>
+          )}
           <button
             type="button"
             onClick={onCustomize}
             aria-pressed={editing}
+            aria-label="Customize dashboard"
+            title="Customize dashboard"
             className={cn(
-              'flex h-10 items-center gap-2 rounded-full px-4 text-sm font-medium transition-colors',
+              'grid h-11 w-11 place-items-center rounded-full text-sm font-medium transition-colors sm:flex sm:h-10 sm:w-auto sm:gap-2 sm:px-4',
               editing
                 ? 'bg-lavender text-ink'
                 : 'bg-surface shadow-soft border-line/60 hover:bg-subtle border',
             )}
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-            Customize
+            <span className="hidden sm:inline">Customize</span>
           </button>
           {onAdd && (
             <button
               type="button"
               onClick={onAdd}
-              className="pill-active flex items-center gap-2 rounded-full py-1.5 pl-5 pr-1.5 text-sm font-medium hover:opacity-90"
+              aria-label="Add task"
+              className="pill-active grid h-11 w-11 place-items-center rounded-full text-sm font-medium hover:opacity-90 sm:flex sm:h-auto sm:w-auto sm:gap-2 sm:py-1.5 sm:pl-5 sm:pr-1.5"
             >
-              Add task
-              <span className="bg-surface/20 grid h-7 w-7 place-items-center rounded-full">
-                <Plus className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Add task</span>
+              <span className="sm:bg-surface/20 grid place-items-center rounded-full sm:h-7 sm:w-7">
+                <Plus className="h-5 w-5 sm:h-4 sm:w-4" aria-hidden="true" />
               </span>
             </button>
           )}

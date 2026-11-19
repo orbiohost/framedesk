@@ -11,8 +11,10 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import {
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
   Columns3,
   GripVertical,
   LayoutGrid,
@@ -156,14 +158,16 @@ function WidgetSlot({ item, index, count, editing, onMove, onResize, onRemove, c
               onClick={() => onMove(index, index - 1)}
               disabled={index === 0}
             >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              <ArrowUp className="h-4 w-4 md:hidden" aria-hidden="true" />
+              <ArrowLeft className="hidden h-4 w-4 md:block" aria-hidden="true" />
             </ToolButton>
             <ToolButton
               label="Move later"
               onClick={() => onMove(index, index + 1)}
               disabled={index === count - 1}
             >
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              <ArrowDown className="h-4 w-4 md:hidden" aria-hidden="true" />
+              <ArrowRight className="hidden h-4 w-4 md:block" aria-hidden="true" />
             </ToolButton>
             {widget.spans.length > 1 && (
               <button
@@ -241,13 +245,13 @@ export function EditBar({ onAdd, onReset, onDone, canReset, error }) {
       <LayoutGrid className="text-accent hidden h-5 w-5 shrink-0 sm:block" aria-hidden="true" />
       <p className="min-w-0 flex-1 text-sm">
         <span className="font-semibold">Customising your dashboard.</span>{' '}
-        <span className="text-muted">
+        <span className="text-muted hidden sm:inline">
           Drag the handle to move a widget, change its width, or remove it.
         </span>
         {error && <span className="text-danger ml-2">{error}</span>}
       </p>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="secondary" onClick={onAdd}>
+      <div className="flex gap-2">
+        <Button size="sm" variant="secondary" onClick={onAdd} className="flex-1 sm:flex-none">
           <Plus className="h-4 w-4" aria-hidden="true" /> Add widget
         </Button>
         {canReset && (
@@ -255,7 +259,7 @@ export function EditBar({ onAdd, onReset, onDone, canReset, error }) {
             <RotateCcw className="h-4 w-4" aria-hidden="true" /> Reset
           </Button>
         )}
-        <Button size="sm" onClick={onDone}>
+        <Button size="sm" onClick={onDone} className="flex-1 sm:flex-none">
           Done
         </Button>
       </div>

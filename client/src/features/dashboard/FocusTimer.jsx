@@ -119,14 +119,6 @@ export function FocusTimer({ className }) {
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={reset}
-          aria-label="Reset timer"
-          className="hover:bg-surface/50 grid h-8 w-8 place-items-center rounded-full"
-        >
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
-        </button>
       </header>
 
       <div className="mt-auto flex items-end justify-between gap-3 pt-4">
@@ -142,18 +134,29 @@ export function FocusTimer({ className }) {
             {remaining === 0 ? 'Done. Take a break.' : running ? 'Focusing…' : 'Paused'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={running ? 'Pause timer' : 'Start timer'}
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-b from-orange-400 to-red-500 text-white shadow-lg shadow-red-500/30 transition-transform active:scale-95"
-        >
-          {running ? (
-            <Pause className="h-5 w-5" fill="currentColor" aria-hidden="true" />
-          ) : (
-            <Play className="ml-0.5 h-5 w-5" fill="currentColor" aria-hidden="true" />
-          )}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={reset}
+            aria-label="Reset timer"
+            title="Reset timer"
+            className="bg-surface/50 hover:bg-surface/80 grid h-10 w-10 place-items-center rounded-full"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={running ? 'Pause timer' : 'Start timer'}
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-b from-orange-400 to-red-500 text-white shadow-lg shadow-red-500/30 transition-transform active:scale-95"
+          >
+            {running ? (
+              <Pause className="h-5 w-5" fill="currentColor" aria-hidden="true" />
+            ) : (
+              <Play className="ml-0.5 h-5 w-5" fill="currentColor" aria-hidden="true" />
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="bg-surface/40 absolute inset-x-0 bottom-0 h-1" aria-hidden="true">

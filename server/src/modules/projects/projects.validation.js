@@ -34,7 +34,13 @@ const dueDateRule = { path: ['dueDate'], message: 'Due date must be on or after 
 
 export const projectParamsSchema = z.object({ projectId: objectId });
 
-export const createProjectSchema = z.object(projectFields).refine(dueAfterStart, dueDateRule);
+export const createProjectSchema = z
+  .object({
+    ...projectFields,
+    // Start with the project type's task list (Project settings → Task lists).
+    applyTaskTemplate: z.boolean().optional(),
+  })
+  .refine(dueAfterStart, dueDateRule);
 
 export const updateProjectSchema = z
   .object(projectFields)

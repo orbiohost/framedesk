@@ -29,7 +29,15 @@ function useRememberedView() {
 
 // Shared by "My tasks" and a project's Tasks tab.
 // `query` filters the list; `newTaskDefaults` pre-fills new tasks.
-export function TasksPanel({ workspace, query, newTaskDefaults, showProject, emptyText }) {
+// `extraAction` (optional) is a button shown beside "New task" and in the empty state.
+export function TasksPanel({
+  workspace,
+  query,
+  newTaskDefaults,
+  showProject,
+  emptyText,
+  extraAction,
+}) {
   const [view, setView] = useRememberedView();
   const [dialog, setDialog] = useState(null);
   const { data: tasks, isPending, isError, error } = useTasks(workspace.id, query);
@@ -51,9 +59,12 @@ export function TasksPanel({ workspace, query, newTaskDefaults, showProject, emp
           onChange={setView}
         />
         {editable && (
-          <Button onClick={openNew}>
-            <Plus className="h-4 w-4" aria-hidden="true" /> New task
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {tasks?.length > 0 && extraAction}
+            <Button onClick={openNew}>
+              <Plus className="h-4 w-4" aria-hidden="true" /> New task
+            </Button>
+          </div>
         )}
       </div>
 
@@ -69,7 +80,14 @@ export function TasksPanel({ workspace, query, newTaskDefaults, showProject, emp
         <EmptyState
           icon={ListTodo}
           title="Nothing to do here yet"
-          action={editable && <Button onClick={openNew}>Add the first task</Button>}
+          action={
+            editable && (
+              <div className="flex flex-wrap justify-center gap-2">
+                {extraAction}
+                <Button onClick={openNew}>Add the first task</Button>
+              </div>
+            )
+          }
         >
           {emptyText}
         </EmptyState>

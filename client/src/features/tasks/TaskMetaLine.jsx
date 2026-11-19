@@ -1,8 +1,9 @@
-import { CalendarDays, ListChecks } from 'lucide-react';
+import { CalendarDays, ListChecks, Repeat } from 'lucide-react';
 import { Avatar } from '../../components/ui/Avatar.jsx';
 import { cn } from '../../lib/cn.js';
 import { formatDueLabel, isOverdue } from '../../lib/dates.js';
 import { isPressingPriority, priorityLabel } from '../../lib/priorities.js';
+import { repeatLabel } from './taskMeta.js';
 
 // Due date, checklist progress, priority and assignee, in one compact row.
 export function TaskMetaLine({ task, className }) {
@@ -17,6 +18,12 @@ export function TaskMetaLine({ task, className }) {
         <span className={cn('flex items-center gap-1', overdue && 'text-danger font-medium')}>
           <CalendarDays className="h-3 w-3" aria-hidden="true" />
           {overdue ? `Overdue · ${formatDueLabel(task.dueDate)}` : formatDueLabel(task.dueDate)}
+        </span>
+      )}
+      {task.repeat && (
+        <span className="flex items-center" title={repeatLabel(task.repeat)}>
+          <Repeat className="h-3 w-3" aria-hidden="true" />
+          <span className="sr-only">{repeatLabel(task.repeat)}</span>
         </span>
       )}
       {task.checklist.length > 0 && (

@@ -1,7 +1,9 @@
 import mongoose, { Schema } from 'mongoose';
 import { workspaceScopePlugin } from '../../utils/workspaceScope.plugin.js';
 
-export const ITEM_TYPES = ['image', 'video', 'note', 'color', 'link', 'text'];
+export const ITEM_TYPES = ['image', 'video', 'note', 'color', 'link', 'text', 'shape'];
+export const SHAPE_KINDS = ['rect', 'ellipse', 'diamond'];
+export const STROKE_STYLES = ['solid', 'dashed', 'dotted'];
 export const MAX_ITEMS = 400;
 export const MAX_STROKES = 600;
 export const MAX_CONNECTORS = 500;
@@ -12,7 +14,8 @@ export const MAX_CHAT = 40;
 
 // One thing on the board, in board coordinates (pixels at 100% zoom).
 // image/video: a file in the workspace Drive (folder "Moodboards").
-// note: a sticky note; text: a free heading; color: a swatch; link: a web page.
+// note: a sticky note; text: a free heading; color: a swatch; link: a web page;
+// shape: a rectangle, ellipse or diamond with text inside (as in Excalidraw).
 const itemSchema = new Schema(
   {
     id: { type: String, required: true, maxlength: 40 },
@@ -29,6 +32,12 @@ const itemSchema = new Schema(
     title: { type: String, maxlength: 300, default: null },
     // Headings: their type size (the box is fitted around the words).
     fontSize: { type: Number, min: 6, max: 600, default: null },
+    // Shapes: their kind and look (color is the outline and the text).
+    shape: { type: String, enum: [...SHAPE_KINDS, null], default: null },
+    fill: { type: String, maxlength: 20, default: null },
+    strokeWidth: { type: Number, min: 1, max: 24, default: null },
+    strokeStyle: { type: String, enum: [...STROKE_STYLES, null], default: null },
+    rounded: { type: Boolean, default: null },
   },
   { _id: false },
 );

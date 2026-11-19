@@ -7,6 +7,7 @@ import { ChoiceChips } from '../../components/ui/ChoiceChips.jsx';
 import { Dialog, DialogActions } from '../../components/ui/Dialog.jsx';
 import { MoreOptions } from '../../components/ui/MoreOptions.jsx';
 import { SelectField } from '../../components/ui/SelectField.jsx';
+import { Switch } from '../../components/ui/Switch.jsx';
 import { TextAreaField } from '../../components/ui/TextAreaField.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { fromDateInputValue, toDateInputValue } from '../../lib/dates.js';
@@ -16,7 +17,8 @@ import { PRIORITY_OPTIONS } from '../../lib/priorities.js';
 import { clientOptions, useClients } from '../clients/hooks.js';
 import { ReminderField } from '../notifications/ReminderField.jsx';
 import { useSaveProject } from './hooks.js';
-import { PROJECT_STATUS_OPTIONS, PROJECT_TYPE_OPTIONS } from './projectMeta.js';
+import { PROJECT_STATUS_OPTIONS, PROJECT_TYPE_OPTIONS, projectTypeLabel } from './projectMeta.js';
+import { useTaskTemplates } from './projectSettingsHooks.js';
 
 const schema = z
   .object({
@@ -32,6 +34,7 @@ const schema = z
     description: z.string().max(10000),
     reminders: z.array(z.number()).nullable(),
     aiClipSource: z.enum(['transcript', 'video']),
+    applyTaskTemplate: z.boolean(),
   })
   .refine((values) => !values.startDate || !values.dueDate || values.dueDate >= values.startDate, {
     path: ['dueDate'],
@@ -57,12 +60,17 @@ function toFormValues(project, defaults) {
     description: project?.description ?? '',
     reminders: project?.reminders ?? null,
     aiClipSource: project?.aiClipSource ?? 'transcript',
+    applyTaskTemplate: true,
   };
 }
 
-function toPayload(values) {
+// offerTasks: the switch for the type's task list was on show (a new project
+// whose type has one), so its value counts.
+function toPayload(values, offerTasks) {
+  const { applyTaskTemplate, ...fields } = values;
   return {
-    ...values,
+    ...fields,
+    ...(offerTasks && { applyTaskTemplate }),
     clientId: values.clientId || null,
     startDate: fromDateInputValue(values.startDate),
     dueDate: fromDateInputValue(values.dueDate),
@@ -82,10 +90,13 @@ function ProjectForm({ workspaceId, project, defaults, onDone }) {
     formState: { errors },
   } = useForm({ resolver: zodResolver(schema), defaultValues: toFormValues(project, defaults) });
   const dueDate = useWatch({ control, name: 'dueDate' });
+  const type = useWatch({ control, name: 'type' });
+  const { data: taskTemplates } = useTaskTemplates(project ? null : workspaceId);
+  const templateSteps = taskTemplates?.templates[type]?.steps.length ?? 0;
 
   function onSubmit(values) {
     save.mutate(
-      { id: project?.id, ...toPayload(values) },
+      { id: project?.id, ...toPayload(values, !project && templateSteps > 0) },
       { onSuccess: onDone, onError: (error) => applyServerFieldErrors(error, setError) },
     );
   }
@@ -138,6 +149,22 @@ function ProjectForm({ workspaceId, project, defaults, onDone }) {
           name="reminders"
           render={({ field }) => (
             <ReminderField kind="project" value={field.value} onChange={field.onChange} />
+          )}
+        />
+      )}
+      {!project && templateSteps > 0 && (
+        <Controller
+          control={control}
+          name="applyTaskTemplate"
+          render={({ field }) => (
+            <Switch
+              checked={field.value}
+              onChange={field.onChange}
+              label={`Start with the ${projectTypeLabel(type)} task list`}
+              description={`${templateSteps} task${templateSteps === 1 ? '' : 's'}${
+                dueDate ? ', dated back from the due date' : ''
+              }`}
+            />
           )}
         />
       )}

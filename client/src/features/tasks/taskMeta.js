@@ -5,6 +5,19 @@ export const TASK_STATUS_OPTIONS = [
   { value: 'done', label: 'Done' },
 ];
 
+// Must match TASK_REPEATS on the server. '' is "doesn't repeat".
+export const TASK_REPEAT_OPTIONS = [
+  { value: '', label: "Doesn't repeat" },
+  { value: 'daily', label: 'Every day' },
+  { value: 'weekdays', label: 'Every weekday (Mon–Fri)' },
+  { value: 'weekly', label: 'Every week' },
+  { value: 'monthly', label: 'Every month' },
+];
+
+export function repeatLabel(value) {
+  return TASK_REPEAT_OPTIONS.find((option) => option.value === value)?.label ?? null;
+}
+
 export const TASK_STATUSES = TASK_STATUS_OPTIONS.map((option) => option.value);
 
 // Must match ORDER_STEP on the server.

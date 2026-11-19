@@ -6,6 +6,7 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { SettingsRow, SettingsSection } from '../account/SettingsSection.jsx';
 import { canManage } from '../workspaces/roles.js';
 import { useProjectSettings, useSaveProjectSettings } from './projectSettingsHooks.js';
+import { TaskTemplateEditor } from './TaskTemplateEditor.jsx';
 
 function sameList(a, b) {
   return a.length === b.length && a.every((name, index) => name === b[index]);
@@ -186,6 +187,16 @@ export function ProjectSettingsSection({ workspace }) {
             editable={editable}
           />
         )}
+      </SettingsRow>
+      <SettingsRow
+        label="Task lists"
+        description={
+          editable
+            ? 'The tasks a new project starts with, by type. Each one is dated back from the project due date (leave the days empty for no date).'
+            : 'The tasks a new project starts with, by type. Owners, admins and managers can change them.'
+        }
+      >
+        <TaskTemplateEditor workspaceId={workspace.id} editable={editable} />
       </SettingsRow>
     </SettingsSection>
   );

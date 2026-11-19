@@ -1,6 +1,7 @@
 // Arrows between things on the board (as in Excalidraw). An end is either
 // stuck to an item ({ itemId }) and follows it, or a free point ({ x, y }).
 // Stuck ends meet the item's edge, aimed at the other end.
+import { shapeEdgeScale } from './shapes.jsx';
 
 export const ARROW_COLORS = [
   '#16151b',
@@ -37,7 +38,8 @@ function edgePoint(item, target) {
   if (dx === 0 && dy === 0) return c;
   const halfW = item.w / 2 + GAP;
   const halfH = item.h / 2 + GAP;
-  const scale = 1 / Math.max(Math.abs(dx) / halfW, Math.abs(dy) / halfH);
+  // Ellipses and diamonds: the arrow meets their outline, not their box.
+  const scale = shapeEdgeScale(item, dx, dy, halfW, halfH);
   return { x: c.x + dx * scale, y: c.y + dy * scale };
 }
 

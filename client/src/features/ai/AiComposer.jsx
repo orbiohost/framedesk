@@ -1,6 +1,7 @@
 import {
   ArrowUp,
   AtSign,
+  Camera,
   File as FileIcon,
   FileText,
   Film,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../lib/cn.js';
+import { useCamera } from '../media/CameraCapture.jsx';
 import { useProjects } from '../projects/hooks.js';
 import { useQuickNotes } from '../quickNotes/hooks.js';
 import { AI_GRADIENT } from './aiStyle.js';
@@ -403,6 +405,10 @@ export function AiComposer({
   const trigger = disabled ? null : triggerAt(value, caret);
   const pickerOpen = Boolean(trigger) && dismissedAt !== trigger.start;
   const full = attachments.length >= maxAttachments;
+  // Photos from the camera attach like any uploaded file (reference images in image mode).
+  const camera = useCamera((files) => addFiles(files), {
+    maxShots: Math.max(1, maxAttachments - attachments.length),
+  });
   const notesFull = notes.length >= MAX_NOTES;
   const skillsFull = skills.length >= MAX_SKILLS;
   const uploading = attachments.some((file) => file.status === 'uploading');
@@ -862,6 +868,14 @@ export function AiComposer({
               >
                 <Paperclip className="h-4 w-4" aria-hidden="true" />
               </ToolButton>
+              <ToolButton
+                label={imageMode ? 'Take a reference photo' : 'Take a photo for the AI'}
+                onClick={camera.open}
+                disabled={disabled || full}
+              >
+                <Camera className="h-4 w-4" aria-hidden="true" />
+              </ToolButton>
+              {camera.element}
               <input
                 ref={fileInput}
                 type="file"

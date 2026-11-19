@@ -3,6 +3,7 @@ import { cn } from '../../lib/cn.js';
 import { BoardItem } from './BoardItem.jsx';
 import { headingSize, newId, strokeHit, strokePath, topZ } from './boardUtils.js';
 import { arrowHead, connectorEnds, itemAt, shortened } from './connectors.js';
+import { SHAPE_DEFAULT_SIZE, SHAPE_KINDS, ShapeOutline } from './shapes.jsx';
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
@@ -127,7 +128,7 @@ function Connector({
  * coordinates, under a pan/zoom transform. It owns gestures (pan, pinch, move,
  * resize, draw, erase, arrows) and reports changes up; the editor owns the data.
  *
- * tool: 'select' | 'hand' | 'pen' | 'eraser' | 'arrow'
+ * tool: 'select' | 'hand' | 'pen' | 'eraser' | 'arrow' | 'rect' | 'ellipse' | 'diamond'
  */
 export function BoardCanvas({
   workspaceId,
@@ -140,6 +141,9 @@ export function BoardCanvas({
   onToolDone,
   pen,
   arrowStyle,
+  shapeStyle,
+  onCreateShape,
+  onCanvasDoubleClick,
   readOnly,
   selection,
   onSelect,
@@ -169,6 +173,8 @@ export function BoardCanvas({
   const [draft, setDraft] = useState(null); // the stroke being drawn
   const [arrowDraft, setArrowDraft] = useState(null); // the arrow being drawn
   const [hoverId, setHoverId] = useState(null); // item an arrow would stick to
+  const [shapeDraft, setShapeDraft] = useState(null); // the shape being drawn
+  const [marquee, setMarquee] = useState(null); // the drag-to-select box
   const [spaceHeld, setSpaceHeld] = useState(false);
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
@@ -240,6 +246,8 @@ export function BoardCanvas({
     };
     setDraft(null);
     setArrowDraft(null);
+    setShapeDraft(null);
+    setMarquee(null);
   }
 
   // An arrow end: stuck to the item under the point, or free.
@@ -279,10 +287,24 @@ export function BoardCanvas({
       });
       return;
     }
-    // Empty canvas: clear the selection and pan.
+    if (!panning && !readOnly && SHAPE_KINDS.includes(tool)) {
+      gesture.current = { mode: 'shape', start: world };
+      setShapeDraft({ x: world.x, y: world.y, w: 0, h: 0 });
+      return;
+    }
+    // Empty canvas: clear the selection; a mouse drags a selection box (as in
+    // Excalidraw), a finger pans.
     if (!event.shiftKey) {
       onSelect(new Set());
       onSelectConnector(null);
+    }
+    if (!panning && tool === 'select' && event.pointerType !== 'touch') {
+      gesture.current = {
+        mode: 'marquee',
+        start: world,
+        base: event.shiftKey ? new Set(selection) : new Set(),
+      };
+      return;
     }
     gesture.current = {
       mode: 'pan',
@@ -432,6 +454,44 @@ export function BoardCanvas({
       });
     } else if (current.mode === 'erase') {
       erase(world);
+    } else if (current.mode === 'shape') {
+      let w = world.x - current.start.x;
+      let h = world.y - current.start.y;
+      // Shift: a square, circle or even diamond.
+      if (event.shiftKey) {
+        const side = Math.max(Math.abs(w), Math.abs(h));
+        w = Math.sign(w || 1) * side;
+        h = Math.sign(h || 1) * side;
+      }
+      setShapeDraft({
+        x: Math.min(current.start.x, current.start.x + w),
+        y: Math.min(current.start.y, current.start.y + h),
+        w: Math.abs(w),
+        h: Math.abs(h),
+      });
+    } else if (current.mode === 'marquee') {
+      const box = {
+        x: Math.min(current.start.x, world.x),
+        y: Math.min(current.start.y, world.y),
+        w: Math.abs(world.x - current.start.x),
+        h: Math.abs(world.y - current.start.y),
+      };
+      setMarquee(box);
+      // Items wholly inside the box are selected.
+      const next = new Set(current.base);
+      items.forEach((item) => {
+        if (
+          item.x >= box.x &&
+          item.y >= box.y &&
+          item.x + item.w <= box.x + box.w &&
+          item.y + item.h <= box.y + box.h
+        ) {
+          next.add(item.id);
+        }
+      });
+      if (next.size !== selection.size || [...next].some((id) => !selection.has(id))) {
+        onSelect(next);
+      }
     } else if (current.mode === 'arrow') {
       if (!arrowDraft) return;
       const hit = itemAt(items, world.x, world.y, { except: arrowDraft.from.itemId });
@@ -474,8 +534,8 @@ export function BoardCanvas({
         }),
       );
     } else if (current.mode === 'resize') {
-      let w = Math.max(current.text ? 24 : 40, current.origin.w + world.x - current.start.x);
-      let h = Math.max(current.text ? 16 : 32, current.origin.h + world.y - current.start.y);
+      let w = Math.max(current.text ? 24 : 20, current.origin.w + world.x - current.start.x);
+      let h = Math.max(current.text ? 16 : 20, current.origin.h + world.y - current.start.y);
       if (current.aspect && (current.text || !event.shiftKey)) h = w / current.aspect;
       // Headings: the type grows and shrinks with the box.
       const fontSize = current.text
@@ -534,6 +594,25 @@ export function BoardCanvas({
         );
       }
       onCommit();
+    } else if (current.mode === 'shape' && shapeDraft) {
+      // A click without a drag: a shape of the usual size, centred there.
+      const box =
+        shapeDraft.w < 8 && shapeDraft.h < 8
+          ? {
+              x: current.start.x - SHAPE_DEFAULT_SIZE.w / 2,
+              y: current.start.y - SHAPE_DEFAULT_SIZE.h / 2,
+              ...SHAPE_DEFAULT_SIZE,
+            }
+          : { ...shapeDraft, w: Math.max(20, shapeDraft.w), h: Math.max(20, shapeDraft.h) };
+      onCreateShape(tool, {
+        x: Math.round(box.x),
+        y: Math.round(box.y),
+        w: Math.round(box.w),
+        h: Math.round(box.h),
+      });
+      setShapeDraft(null);
+    } else if (current.mode === 'marquee') {
+      setMarquee(null);
     } else if (current.mode === 'erase') {
       if (current.changed) onCommit();
     } else if (current.mode === 'moveConnector') {
@@ -561,7 +640,7 @@ export function BoardCanvas({
       ? gesture.current?.mode === 'pan'
         ? 'cursor-grabbing'
         : 'cursor-grab'
-      : tool === 'pen' || tool === 'arrow'
+      : tool === 'pen' || tool === 'arrow' || SHAPE_KINDS.includes(tool)
         ? 'cursor-crosshair'
         : tool === 'eraser'
           ? 'cursor-cell'
@@ -585,6 +664,11 @@ export function BoardCanvas({
       onPointerCancel={onPointerUp}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onDoubleClick={(event) => {
+        // Double-click on the empty board: write there (as in Excalidraw).
+        if (event.target !== containerRef.current || readOnly || tool !== 'select') return;
+        onCanvasDoubleClick?.(toWorld(event.clientX, event.clientY));
+      }}
       onContextMenu={(event) => event.preventDefault()}
     >
       <div
@@ -604,7 +688,7 @@ export function BoardCanvas({
             onPointerDown={onItemPointerDown}
             onResizeStart={onResizeStart}
             onDoubleClick={(target) =>
-              !readOnly && ['note', 'text'].includes(target.type) && onEdit(target.id)
+              !readOnly && ['note', 'text', 'shape'].includes(target.type) && onEdit(target.id)
             }
             onTextDone={(text) => onTextDone(item.id, text)}
             onColorChange={(color) => onColorChange(item.id, color)}
@@ -612,6 +696,31 @@ export function BoardCanvas({
             onRemove={onRemoveItem}
           />
         ))}
+        {shapeDraft && (
+          <div
+            className="pointer-events-none absolute left-0 top-0"
+            style={{
+              transform: `translate(${shapeDraft.x}px, ${shapeDraft.y}px)`,
+              width: shapeDraft.w,
+              height: shapeDraft.h,
+              zIndex: 999_998,
+            }}
+          >
+            <ShapeOutline shape={tool} {...shapeStyle} w={shapeDraft.w} h={shapeDraft.h} />
+          </div>
+        )}
+        {marquee && (
+          <div
+            className="border-accent bg-accent/10 pointer-events-none absolute left-0 top-0 rounded-sm"
+            style={{
+              transform: `translate(${marquee.x}px, ${marquee.y}px)`,
+              width: marquee.w,
+              height: marquee.h,
+              borderWidth: 1 / zoom,
+              zIndex: 1_000_001,
+            }}
+          />
+        )}
         {/* Arrows above the items, the sketch layer above everything. */}
         <svg
           className="pointer-events-none absolute left-0 top-0 overflow-visible"

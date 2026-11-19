@@ -3,6 +3,9 @@ import { PRIORITIES } from '../../config/constants.js';
 import { workspaceScopePlugin } from '../../utils/workspaceScope.plugin.js';
 
 export const TASK_STATUSES = ['todo', 'doing', 'review', 'done'];
+// How often a task comes back. Ticking a repeating task done makes the next one
+// (see taskRepeat.js); the finished task keeps its history and stops repeating.
+export const TASK_REPEATS = ['daily', 'weekdays', 'weekly', 'monthly'];
 
 // Gap between neighbouring tasks, so a drag-and-drop move can usually take the
 // midpoint of its new neighbours without renumbering the whole column.
@@ -29,6 +32,7 @@ const taskSchema = new Schema(
     // Minutes before to send a reminder (see notifications/reminderRules.js).
     // Missing or null: the default for the kind of item; []: no reminders.
     reminders: { type: [Number], default: undefined },
+    repeat: { type: String, enum: [...TASK_REPEATS, null], default: null },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true },

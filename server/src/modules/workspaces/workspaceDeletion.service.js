@@ -11,6 +11,7 @@ import { FileShare } from '../fileShare/fileShare.model.js';
 import { DashboardLayout } from '../dashboard/dashboardLayout.model.js';
 import { purgeFiles } from '../files/files.service.js';
 import { Folder } from '../files/folder.model.js';
+import { Invite } from '../members/invite.model.js';
 import { Membership } from '../members/membership.model.js';
 import { Note } from '../notes/note.model.js';
 import { Project } from '../projects/project.model.js';
@@ -68,6 +69,7 @@ export async function deleteWorkspace({ workspace, membership, userId, confirmNa
   const workspaceId = workspace._id;
 
   await Membership.deleteMany({ workspaceId });
+  await Invite.deleteMany({ workspaceId });
   const { count: filesDeleted } = await purgeFiles(workspaceId);
   await Promise.all(WORKSPACE_DATA.map((Model) => Model.deleteMany({ workspaceId })));
   await Workspace.deleteOne({ _id: workspaceId });

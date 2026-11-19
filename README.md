@@ -24,13 +24,13 @@ With `MAIL_TRANSPORT=console`, emails (verification, password reset) are printed
 
 ## Scripts (run from the repo root)
 
-| Command              | What it does                                               |
-| -------------------- | ---------------------------------------------------------- |
-| `npm run dev`        | API (node --watch) and Vite dev server together            |
-| `npm run lint`       | ESLint for server and client                               |
-| `npm run format`     | Prettier                                                   |
-| `npm run build`      | Production build of the client into `client/dist`          |
-| `npm run audit:deps` | `npm audit` of production dependencies                     |
+| Command              | What it does                                      |
+| -------------------- | ------------------------------------------------- |
+| `npm run dev`        | API (node --watch) and Vite dev server together   |
+| `npm run lint`       | ESLint for server and client                      |
+| `npm run format`     | Prettier                                          |
+| `npm run build`      | Production build of the client into `client/dist` |
+| `npm run audit:deps` | `npm audit` of production dependencies            |
 
 ## Project layout
 
@@ -83,30 +83,33 @@ All uploaded files live in an Amazon S3 bucket. S3-compatible stores (Cloudflare
 - **2b. Clean up abandoned uploads (recommended):** add a lifecycle rule to the bucket: "Delete expired object delete markers or incomplete multipart uploads", incomplete multipart uploads after 2 days. The API aborts them itself, but this catches any it missed.
 - **3. Give the API access:** use an IAM user or role with [deploy/s3-iam-policy.json](deploy/s3-iam-policy.json), with your bucket name filled in. On EC2 or ECS, attach it to the instance or task role and leave `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` empty.
 - **4. Files from older versions:** earlier versions could keep files on the server disk. Copy them into the bucket with `npm run migrate:local-to-s3 -w server -- --dry`, then again without `--dry` (add `--from <dir>` if they are not in `server/data/uploads`). It is safe to re-run and never deletes local files.
-- **Transcripts:** Whisper can't read the bucket, so the API sends it a signed link that lasts 24 hours, and Whisper downloads the file to a temporary file when the job starts. The Whisper container needs outbound internet access to S3.
+- **Transcripts:** the `asr` container can't read the bucket, so the API sends it a signed link that lasts 24 hours, and it downloads the file to a temporary file when the job starts. It needs outbound internet access to S3.
 - **Admin dashboard:** there is no server-disk storage card, because a bucket has no fixed size. Per-workspace quotas work as before.
 
-## Transcripts & dictation (Whisper)
+## Transcripts & dictation (Qwen3-ASR)
 
-A `whisper` container runs [faster-whisper](https://github.com/SYSTRAN/faster-whisper): the free OpenAI Whisper weights (`large-v3` by default) on a faster engine, fully self-hosted. Nothing leaves the server.
+An `asr` container runs [Qwen3-ASR-1.7B](https://github.com/QwenLM/Qwen3-ASR) locally on PyTorch, with [Qwen3-ForcedAligner-0.6B](https://huggingface.co/Qwen/Qwen3-ForcedAligner-0.6B) for word timings, so subtitle lines get real start and end times. Both are free (Apache-2.0) and fully self-hosted: the audio never leaves the server.
 
 - **Video/audio transcripts:** in the file viewer, **Transcript** → pick the language (or auto-detect), optionally _Translate to English_. Lines appear while it works; click a timestamp to jump there, search the text, copy it, or download `.txt`, `.srt` or `.vtt` subtitles. Editors and up start transcripts; viewers can read them.
+- **Languages:** the 30 Qwen3-ASR supports (English, Hindi, Chinese, Arabic, the main European languages, Japanese, Korean, ...; full list in [asr/app.py](asr/app.py)). Word timings exist for 11 of them (English, Chinese, Cantonese, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish). In the other languages, such as Hindi, lines get times estimated within each ~30 s piece.
+- **Translate to English:** Qwen3-ASR only transcribes, so the API translates the lines with Gemini as they arrive (needs `GEMINI_API_KEY`; it uses the admin's chosen model and no workspace AI credits). Each line keeps its timing.
 - **Dictated notes:** the mic button on the dashboard Notes widget records up to 2 minutes and appends the text to your note (needs HTTPS for microphone access).
 
-How it fits together: the API stores each transcript in MongoDB (`transcripts` module) and a small worker in the API process sends queued files to Whisper one at a time, copying segments back as they arrive. Whisper reads uploads straight from the shared volume (read-only), sits only on the internal Docker network, and checks a shared `WHISPER_API_KEY`. Restarts on either side are safe: a job Whisper lost is queued again (up to 3 times). Deleting a file for good deletes its transcript.
+How it fits together: the API stores each transcript in MongoDB (`transcripts` module), and a small worker in the API process sends queued files to the `asr` service one at a time, copying segments back as they arrive. The service decodes audio with ffmpeg, cuts long files at quiet moments into ~30 s pieces, skips silent ones, and transcribes them in batches. It sits only on the internal Docker network and checks a shared `ASR_API_KEY`. Restarts on either side are safe: a job the service lost is queued again (up to 3 times). Deleting a file for good deletes its transcript.
 
-Local development (with `npm run dev`): put `WHISPER_API_KEY` (and optionally `WHISPER_MODEL`) in the `.env` next to `docker-compose.yml`, set `WHISPER_URL=http://localhost:9000` plus the same `WHISPER_API_KEY` in `server/.env`, then run `docker compose -f docker-compose.dev.yml up -d --build` and restart `npm run dev`. That file runs only Whisper, on 127.0.0.1:9000, downloading files from signed S3 links.
+Local development (with `npm run dev`): put `ASR_API_KEY` (and optionally `ASR_MODEL`) in the `.env` next to `docker-compose.yml`, set `ASR_URL=http://localhost:9000` plus the same `ASR_API_KEY` in `server/.env`, then run `docker compose -f docker-compose.dev.yml up -d --build` and restart `npm run dev`. That file runs only the `asr` service, on 127.0.0.1:9000, downloading files from signed S3 links. (The old `WHISPER_URL` / `WHISPER_API_KEY` names are still read by the API if the new ones are missing.)
 
-Production setup: add `WHISPER_API_KEY=<random 32+ chars>` to the `.env` next to `docker-compose.yml`, then `docker compose up -d --build`. The first start downloads the model (~1.6 GB for large-v3-turbo) into the `whisper_models` volume, and transcription waits until it is loaded. Without `WHISPER_URL` set (e.g. local `npm run dev`) the feature is hidden.
+Production setup: add `ASR_API_KEY=<random 32+ chars>` to the `.env` next to `docker-compose.yml`, then `docker compose up -d --build`. The first start downloads the models (~6 GB) into the `asr_models` volume, and transcription waits until they are loaded. Without `ASR_URL` set (e.g. local `npm run dev`) the feature is hidden.
 
-| Setting (compose `.env`) | Default          | Notes                                                                                     |
-| ------------------------ | ---------------- | ----------------------------------------------------------------------------------------- |
-| `WHISPER_MODEL`          | `large-v3-turbo` | `large-v3` is slightly more accurate but several times slower on a CPU                    |
-| `WHISPER_CPU_THREADS`    | `0` (all cores)  | Whisper runs at low CPU priority (`WHISPER_NICE`, default 10), so the app stays responsive |
-| `WHISPER_BEAM_SIZE`      | `1` on CPU       | `5` = beam search: a little more accurate, roughly 2x slower                              |
-| `WHISPER_BATCH_SIZE`     | `8` on CPU       | 30 s pieces decoded at once; `0` turns batching off (less RAM, slower)                    |
+| Setting (compose `.env`) | Default                         | Notes                                                                          |
+| ------------------------ | ------------------------------- | ------------------------------------------------------------------------------ |
+| `ASR_MODEL`              | `Qwen/Qwen3-ASR-1.7B`           | `Qwen/Qwen3-ASR-0.6B` is faster and lighter, a little less accurate            |
+| `ASR_ALIGNER`            | `Qwen/Qwen3-ForcedAligner-0.6B` | Set it empty for no word timings (estimated line times, ~2.5 GB less RAM)      |
+| `ASR_DTYPE`              | `float32` on CPU                | `bfloat16` halves RAM, but is only fast on CPUs with AVX-512 BF16 / AMX        |
+| `ASR_CPU_THREADS`        | `0` (all cores)                 | Runs at low CPU priority (`ASR_NICE`, default 10), so the app stays responsive |
+| `ASR_BATCH_SIZE`         | `1` on CPU                      | ~30 s pieces decoded at once; higher uses more RAM                             |
 
-**Hardware.** With the defaults (`large-v3-turbo`, greedy, batched) a 1-hour video takes very roughly 10–30 minutes on 4–8 CPU cores and about 2–3 GB of RAM. `large-v3` with beam search needs 4–5 GB RAM and can take 1–3 hours for the same file. With an NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` (needs the NVIDIA Container Toolkit), where an hour of video takes a few minutes.
+**Hardware.** On a CPU, plan for about 10 GB of RAM with both models in float32 (about 7 GB without the aligner, or roughly half that in bfloat16). It is slower than faster-whisper was: on 4–8 cores, expect a 1-hour video to take about as long as the video itself, or longer. With an NVIDIA GPU: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` (needs the NVIDIA Container Toolkit; bfloat16 on CUDA), where an hour of video takes a few minutes.
 
 Transcripts are not yet part of workspace backups.
 

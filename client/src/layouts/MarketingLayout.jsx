@@ -1,5 +1,5 @@
 import { Menu, X } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Logo } from '../components/ui/Logo.jsx';
 import { ThemeToggle } from '../components/ui/ThemeToggle.jsx';
@@ -9,13 +9,34 @@ import { cn } from '../lib/cn.js';
 import { useDismiss } from '../lib/useDismiss.js';
 
 const SECTION_LINKS = [
-  { href: '/#ai', label: 'AI assistant' },
-  { href: '/#connectors', label: 'Connectors' },
-  { href: '/#workflows', label: 'How it works' },
-  { href: '/#pricing', label: 'Pricing' },
-  { href: '/#android', label: 'Android app' },
-  { href: '/#faq', label: 'FAQ' },
+  { href: '/features', label: 'Features' },
+  { href: '/ai', label: 'AI assistant' },
+  { href: '/ai#connectors', label: 'Connectors' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/features#android', label: 'Android app' },
+  { href: '/pricing#faq', label: 'FAQ' },
 ];
+
+// Moving between pages starts at the top, or at the #section asked for once
+// the (lazily loaded) page has drawn it.
+function useScrollOnNavigate() {
+  const { pathname, hash } = useLocation();
+  useEffect(() => {
+    if (!hash) {
+      window.scrollTo(0, 0);
+      return undefined;
+    }
+    let tries = 0;
+    const timer = setInterval(() => {
+      const target = document.getElementById(decodeURIComponent(hash.slice(1)));
+      if (target || ++tries > 40) {
+        clearInterval(timer);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+    return () => clearInterval(timer);
+  }, [pathname, hash]);
+}
 
 function AccountLinks() {
   const { data: user } = useCurrentUser();
@@ -58,14 +79,14 @@ function MobileMenu({ onClose }) {
     >
       <nav aria-label="Main" className="grid">
         {SECTION_LINKS.map((link) => (
-          <a
+          <Link
             key={link.href}
-            href={link.href}
+            to={link.href}
             onClick={onClose}
             className="hover:bg-subtle active:bg-subtle rounded-2xl px-4 py-3 text-[15px] font-medium"
           >
             {link.label}
-          </a>
+          </Link>
         ))}
       </nav>
       <div className="border-line/70 mt-2 flex items-center justify-between gap-3 border-t px-2 pt-3">
@@ -102,9 +123,9 @@ function SiteHeader() {
         </Link>
         <nav className="hidden items-center gap-6 lg:flex" aria-label="Main">
           {SECTION_LINKS.map((link) => (
-            <a key={link.href} href={link.href} className="text-muted hover:text-ink text-sm">
+            <Link key={link.href} to={link.href} className="text-muted hover:text-ink text-sm">
               {link.label}
-            </a>
+            </Link>
           ))}
         </nav>
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -150,9 +171,9 @@ function SiteFooter() {
           </div>
           <nav aria-label="Footer" className="flex flex-wrap gap-x-7 gap-y-2 text-sm">
             {SECTION_LINKS.map((link) => (
-              <a key={link.href} href={link.href} className="text-muted hover:text-ink">
+              <Link key={link.href} to={link.href} className="text-muted hover:text-ink">
                 {link.label}
-              </a>
+              </Link>
             ))}
             <Link to="/login" className="text-muted hover:text-ink">
               Sign in
@@ -176,6 +197,7 @@ function SiteFooter() {
 }
 
 export function MarketingLayout() {
+  useScrollOnNavigate();
   return (
     <div className="min-h-screen">
       <OfferBar />

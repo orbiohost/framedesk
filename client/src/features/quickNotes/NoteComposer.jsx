@@ -15,7 +15,7 @@ function rememberedVisibility() {
   return readLocal(VISIBILITY_KEY) === 'workspace' ? 'workspace' : 'private';
 }
 
-function VisibilityToggle({ value, onChange }) {
+export function VisibilityToggle({ value, onChange }) {
   const shared = value === 'workspace';
   const Icon = shared ? Users : Lock;
   return (
@@ -60,7 +60,7 @@ export function NoteComposer({
   const [dictationError, setDictationError] = useState(null);
 
   const isOpen = expanded || body.length > 0 || title.length > 0;
-  const canSave = body.trim().length > 0 && body.length <= MAX_BODY;
+  const canSave = (body.trim().length > 0 || title.trim().length > 0) && body.length <= MAX_BODY;
 
   function changeVisibility(next) {
     setVisibility(next);

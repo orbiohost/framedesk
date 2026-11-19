@@ -15,6 +15,7 @@
     "optimize:media": "node scripts/optimizeStoredMedia.js"
   },
   "dependencies": {
+    "@aws-sdk/client-cost-explorer": "^3.1166.0",
     "@aws-sdk/client-s3": "^3.1166.0",
     "@aws-sdk/lib-storage": "^3.1166.0",
     "@aws-sdk/s3-request-presigner": "^3.1166.0",
@@ -35,6 +36,7 @@
     "nodemailer": "^10.3.1",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
+    "sharp": "^0.34.5",
     "web-push": "^3.6.7",
     "yauzl": "^3.4.0",
     "yazl": "^3.3.1",

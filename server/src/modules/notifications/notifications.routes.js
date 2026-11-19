@@ -130,17 +130,47 @@ router.delete(
 );
 
 // "Send a test": proves the whole path (server → push service → device).
+// delaySeconds gives time to close the app first, to see that alerts arrive
+// while it is closed; kind "alert" sends it the way project alerts look.
+const testSchema = z
+  .object({
+    delaySeconds: z.number().int().min(0).max(30).default(0),
+    kind: z.enum(['reminder', 'alert']).default('reminder'),
+  })
+  // The older "Send a test" button sends no body at all.
+  .default({});
+
 router.post(
   '/test',
   emailLimiter,
+  validate({ body: testSchema }),
   asyncHandler(async (req, res) => {
-    const delivered = await pushToUser(req.user._id, {
-      title: `${APP_NAME} reminders are on`,
-      body: 'This is how deadlines and calendar events will reach you.',
-      url: `${env.CLIENT_URL}/app`,
-      tag: 'test',
-    });
-    sendSuccess(res, { delivered });
+    const alert = req.body.kind === 'alert';
+    const payload = alert
+      ? {
+          kind: 'project-alert',
+          title: `Test alert from ${APP_NAME}`,
+          body: 'Project alerts reach you like this, even when the app is closed. Tap to open.',
+          url: `${env.CLIENT_URL}/app`,
+          tag: 'test-alert',
+          requireInteraction: true,
+          vibrate: [400, 200, 400, 200, 400],
+        }
+      : {
+          title: `${APP_NAME} reminders are on`,
+          body: 'This is how deadlines and calendar events will reach you.',
+          url: `${env.CLIENT_URL}/app`,
+          tag: 'test',
+        };
+    if (req.body.delaySeconds > 0) {
+      const userId = req.user._id;
+      setTimeout(() => {
+        pushToUser(userId, payload).catch(() => {});
+      }, req.body.delaySeconds * 1000).unref();
+      sendSuccess(res, { delivered: null, scheduled: true });
+      return;
+    }
+    sendSuccess(res, { delivered: await pushToUser(req.user._id, payload) });
   }),
 );
 

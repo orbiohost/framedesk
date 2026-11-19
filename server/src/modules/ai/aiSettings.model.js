@@ -40,6 +40,14 @@ const aiSettingsSchema = new Schema(
     // Larger files are analysed from their transcript (if any) instead.
     maxAnalysisMB: { type: Number, min: 1, max: 2000, default: 1024 },
     packs: { type: [creditPackSchema], default: undefined },
+    // Image generation: the Gemini image model, credits per image, and how
+    // many reference images one request may carry, per plan code.
+    imageModel: { type: String, trim: true, maxlength: 60, default: null },
+    imageCredits: { type: Number, min: 0, default: 5 },
+    refImageLimits: { type: Schema.Types.Mixed, default: () => ({}) },
+    // Changes to the model catalog (aiModels.js), by model key:
+    // { 'frame-ultra': { name, tagline, badge, status, engine, creditMultiplier } }
+    models: { type: Schema.Types.Mixed, default: () => ({}) },
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },

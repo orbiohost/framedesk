@@ -24,9 +24,17 @@ import {
   streamAnswer,
 } from './aiChat.service.js';
 import { listLedger } from './credits.service.js';
+import aiStudioRoutes from './aiStudio.routes.js';
+import { createImage, IMAGE_STYLES } from './aiImage.service.js';
+import { IMAGE_ASPECT_RATIOS } from './gemini.client.js';
+import { MAX_REF_IMAGES } from './aiSettings.service.js';
+import { isSkillId, MAX_SKILLS_PER_QUESTION } from './aiSkills.service.js';
 
 // Mounted at /workspaces/:workspaceId/ai.
 const router = Router();
+
+// Custom assistants, skills and memory.
+router.use(aiStudioRoutes);
 
 const askSchema = z.object({
   text: z.string().trim().min(1, 'Type a question').max(4000),
@@ -34,10 +42,26 @@ const askSchema = z.object({
   threadId: objectId.optional(),
   // Set by picking a project with "/": only that project's files are used.
   projectId: objectId.optional(),
+  // Set by typing "//": the whole Drive is read for this question (footage
+  // suggestions for a script, etc.). Without it (and no project or files),
+  // the Drive is only used when the question names something in it.
+  wholeDrive: z.boolean().optional(),
+  // Text the question is about: a passage picked in an answer, or a whole
+  // earlier answer a new chat was started from.
+  quote: z.string().trim().max(12000).optional(),
   // Files attached with "@" or uploaded in the chat.
   fileIds: z.array(objectId).max(MAX_ATTACHED, `Attach up to ${MAX_ATTACHED} files`).optional(),
   // Saved notes added with "#".
   noteIds: z.array(objectId).max(MAX_NOTES, `Add up to ${MAX_NOTES} notes`).optional(),
+  // A custom assistant to ask (new chats only; a chat keeps its assistant).
+  agentId: objectId.optional(),
+  // Skills picked with "!".
+  skillIds: z
+    .array(z.string().trim().refine(isSkillId, 'Unknown skill'))
+    .max(MAX_SKILLS_PER_QUESTION, `Pick up to ${MAX_SKILLS_PER_QUESTION} skills`)
+    .optional(),
+  // The FrameDesk model to answer with; leave out for the default.
+  modelKey: z.string().trim().max(40).optional(),
 });
 const messageParams = z.object({ threadId: objectId, messageId: objectId });
 const saveNoteSchema = z.object({
@@ -187,6 +211,31 @@ router.post('/ask', aiChatLimiter, canView, validate({ body: askSchema }), async
     res.end();
   }
 });
+
+const imageSchema = z.object({
+  prompt: z.string().trim().min(3, 'Describe the image you want').max(4000),
+  threadId: objectId.optional(),
+  agentId: objectId.optional(),
+  referenceFileIds: z
+    .array(objectId)
+    .max(MAX_REF_IMAGES, `Add up to ${MAX_REF_IMAGES} reference images`)
+    .optional(),
+  aspectRatio: z.enum(IMAGE_ASPECT_RATIOS).optional(),
+  style: z.enum(Object.keys(IMAGE_STYLES)).optional(),
+  modelKey: z.string().trim().max(40).optional(),
+});
+
+// "Create image": a picture from a prompt and reference images, saved to Drive.
+// Editors and up, since the picture becomes a Drive file.
+router.post(
+  '/images',
+  aiChatLimiter,
+  canEdit,
+  validate({ body: imageSchema }),
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, await createImage(context(req), req.body), { status: 201 });
+  }),
+);
 
 // How the account's AI usage was spent. Owners and admins only, like billing.
 router.get(

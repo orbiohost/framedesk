@@ -258,3 +258,44 @@ export function useClearYoutubeKey() {
 export function useTestYoutubeKey() {
   return useMutation({ mutationFn: () => api.post('/admin/social/youtube-key/test') });
 }
+
+// Admin → Expenses: running costs (S3, AWS bill, AI) and hand-entered expenses.
+export function useAdminCosts() {
+  return useQuery({
+    queryKey: adminKey('costs'),
+    queryFn: () => api.get('/admin/costs'),
+    // A bucket listing may be running in the background.
+    refetchInterval: (query) => (query.state.data?.storage?.scanning ? 5000 : false),
+  });
+}
+
+// Every cost change answers with the whole costs page.
+function useCostMutation(request) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: request,
+    onSuccess: (data) => queryClient.setQueryData(adminKey('costs'), data),
+  });
+}
+
+export function useUpdateCostSettings() {
+  return useCostMutation((input) => api.put('/admin/costs/settings', input));
+}
+
+export function useRefreshStorageScan() {
+  return useCostMutation(() => api.post('/admin/costs/refresh-storage'));
+}
+
+export function useRefreshAwsBill() {
+  return useCostMutation(() => api.post('/admin/costs/refresh-aws'));
+}
+
+export function useSaveExpense() {
+  return useCostMutation(({ id, ...input }) =>
+    id ? api.put(`/admin/costs/expenses/${id}`, input) : api.post('/admin/costs/expenses', input),
+  );
+}
+
+export function useDeleteExpense() {
+  return useCostMutation((id) => api.delete(`/admin/costs/expenses/${id}`));
+}

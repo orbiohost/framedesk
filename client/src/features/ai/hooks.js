@@ -198,3 +198,9 @@ export async function askAiStream(workspaceId, question, { signal, onEvent }) {
     });
   }
 }
+
+// "Create image": { prompt, threadId?, agentId?, referenceFileIds?, aspectRatio?, style? }
+// → the same shape as a finished chat answer ({ thread, created, messages, files, credits }).
+export async function createAiImage(workspaceId, input) {
+  return api.post(`/workspaces/${workspaceId}/ai/images`, input);
+}

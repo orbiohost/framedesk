@@ -123,9 +123,14 @@ export async function createNote(workspaceId, userId, input, { source = null } =
 }
 
 export async function updateNote(workspaceId, userId, noteId, input) {
-  await findOwnNoteOrThrow(workspaceId, userId, noteId);
+  const current = await findOwnNoteOrThrow(workspaceId, userId, noteId);
   await assertProjectsExist(workspaceId, input.projectIds);
   const changes = withoutUndefined(input);
+  const title = 'title' in changes ? changes.title : current.title;
+  const body = 'body' in changes ? changes.body : current.body;
+  if (!title && !body?.trim()) {
+    throw AppError.badRequest('Write something first', 'NOTE_EMPTY');
+  }
   if (input.body !== undefined) changes.tags = hashtagsIn(input.body);
   await QuickNote.updateOne(
     { _id: noteId, workspaceId },

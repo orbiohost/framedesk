@@ -46,12 +46,22 @@ router.post(
   controller.createPublicAccount,
 );
 // Import with AI: read screenshots / exported files, then save the checked result.
-router.post('/import/extract', canManage, validate({ body: importExtractSchema }), controller.extractImport);
+router.post(
+  '/import/extract',
+  canManage,
+  validate({ body: importExtractSchema }),
+  controller.extractImport,
+);
 router.post('/import/save', canManage, validate({ body: importSaveSchema }), controller.saveImport);
 
 // Accounts
 router.get('/accounts', canView, controller.listAccounts);
-router.post('/accounts', canManage, validate({ body: manualAccountSchema }), controller.createManualAccount);
+router.post(
+  '/accounts',
+  canManage,
+  validate({ body: manualAccountSchema }),
+  controller.createManualAccount,
+);
 router.get('/accounts/:accountId', canView, withAccountId, controller.getAccount);
 router.patch(
   '/accounts/:accountId',
@@ -69,10 +79,20 @@ router.post(
 );
 
 // Analytics overview
-router.get('/analytics', canView, validate({ query: analyticsQuerySchema }), controller.getAnalytics);
+router.get(
+  '/analytics',
+  canView,
+  validate({ query: analyticsQuerySchema }),
+  controller.getAnalytics,
+);
 
 // Content feed & details
-router.get('/content', canView, validate({ query: listContentQuerySchema }), controller.listContent);
+router.get(
+  '/content',
+  canView,
+  validate({ query: listContentQuerySchema }),
+  controller.listContent,
+);
 router.get('/content/:contentId', canView, withContentId, controller.getContent);
 router.patch(
   '/content/:contentId',

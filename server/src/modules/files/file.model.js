@@ -33,6 +33,14 @@ const fileSchema = new Schema(
     aiState: { type: String, enum: [...AI_STATES, null], default: null },
     aiRetryAt: { type: Date, default: null },
     aiAttempts: { type: Number, default: 0 },
+    // Someone asked the AI to watch this video, not only read its transcript.
+    aiWatchVideo: { type: Boolean, default: false },
+    // Audio/video length in seconds, measured when it was needed (null: not yet).
+    mediaDurationSec: { type: Number, default: null },
+    // Automatic transcription of Notes & Briefs clips (briefs/briefTranscribe.js):
+    // null = not decided yet, queued = sent to speech-to-text, too_long = over
+    // the uploader's limit, off = the uploader turned it off.
+    autoTranscribe: { type: String, enum: ['queued', 'too_long', 'off', null], default: null },
   },
   { timestamps: true },
 );

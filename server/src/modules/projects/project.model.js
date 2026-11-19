@@ -39,6 +39,11 @@ const projectSchema = new Schema(
     // Minutes before to send a reminder (see notifications/reminderRules.js).
     // Missing or null: the default for the kind of item; []: no reminders.
     reminders: { type: [Number], default: undefined },
+    // How the AI reads this project's videos that already have a transcript:
+    // transcript = from the words (fast, few credits); video = watches the
+    // whole clip too (sees shots, faces, on-screen text). Audio always uses
+    // the transcript. One video can still be watched on request (file.aiWatchVideo).
+    aiClipSource: { type: String, enum: ['transcript', 'video'], default: 'transcript' },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     share: { type: shareSchema, default: () => ({}) },
     // Set once the project's starting folders were made, so they are made

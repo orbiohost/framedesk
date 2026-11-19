@@ -250,6 +250,50 @@ export async function saveCanvas(
   return { version: version + 1 };
 }
 
+// A sticky note sent from elsewhere (e.g. text picked in an AI answer), placed
+// to the right of what is on the board. Retries if the board changed meanwhile.
+export const NOTE_FROM_TEXT_COLOR = '#fef3a8';
+export async function addNoteToBoard(workspaceId, boardId, userId, { text, color }) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const board = await Moodboard.findOne({ _id: boardId, workspaceId })
+      .select('items version title')
+      .lean();
+    if (!board) throw AppError.notFound('Moodboard not found');
+    if (board.items.length >= MAX_ITEMS) {
+      throw AppError.badRequest(`A board holds up to ${MAX_ITEMS} items`, 'BOARD_FULL');
+    }
+    const right = board.items.reduce((max, item) => Math.max(max, item.x + item.w), -Infinity);
+    const top = board.items.reduce((min, item) => Math.min(min, item.y), Infinity);
+    const lines = text
+      .split('\n')
+      .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 30)), 0);
+    const item = {
+      id: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
+      type: 'note',
+      x: Number.isFinite(right) ? Math.round(right + 40) : 0,
+      y: Number.isFinite(top) ? Math.round(top) : 0,
+      w: 260,
+      h: Math.min(600, Math.max(160, 40 + lines * 20)),
+      z: board.items.reduce((max, item) => Math.max(max, item.z ?? 0), 0) + 1,
+      text,
+      color: color ?? NOTE_FROM_TEXT_COLOR,
+    };
+    const result = await Moodboard.updateOne(
+      { _id: boardId, workspaceId, version: board.version },
+      { $push: { items: item }, $set: { updatedBy: userId }, $inc: { version: 1 } },
+      { runValidators: true },
+    );
+    if (result.modifiedCount === 1) {
+      return {
+        item,
+        version: board.version + 1,
+        board: { id: String(board._id), title: board.title },
+      };
+    }
+  }
+  throw AppError.conflict('The board is busy being edited. Try again.', 'BOARD_CHANGED');
+}
+
 function unbindMissing(end, items) {
   if (!end.itemId || items.some((item) => item.id === end.itemId)) return end;
   return { ...end, itemId: null };

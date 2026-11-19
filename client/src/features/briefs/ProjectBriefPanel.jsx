@@ -12,7 +12,7 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Button } from '../../components/ui/Button.jsx';
@@ -21,6 +21,7 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { cn } from '../../lib/cn.js';
 import { readLocal, writeLocal } from '../../lib/storage.js';
 import { AiMessageText } from '../ai/AiMessageText.jsx';
+import { BriefTranscripts } from './BriefTranscripts.jsx';
 import { FileTypeIcon } from '../files/FileTypeIcon.jsx';
 import {
   BUSY_STATUSES,
@@ -44,14 +45,25 @@ function statusOf(brief) {
     case 'empty':
       return { text: 'Waiting for your first notes', tone: 'muted' };
     case 'waiting':
-      return {
-        text: `Reading ${progress.reading ? plural(progress.reading, 'file') : 'files'}…`,
-        tone: 'busy',
-      };
     case 'queued':
-      return { text: 'New material — updating in a moment…', tone: 'busy' };
     case 'generating':
-      return { text: 'Writing the brief…', tone: 'busy' };
+      if (progress.stage === 'transcribing') {
+        const clips = brief.clips?.transcribing ?? 0;
+        return {
+          text: `Transcribing ${clips ? plural(clips, 'clip') : 'clips'}…`,
+          tone: 'busy',
+        };
+      }
+      if (progress.stage === 'reading' || (!progress.stage && brief.status === 'waiting')) {
+        return {
+          text: `Analysing ${progress.reading ? plural(progress.reading, 'file') : 'files'}…`,
+          tone: 'busy',
+        };
+      }
+      if (progress.stage === 'writing' || brief.status === 'generating') {
+        return { text: 'Writing the brief…', tone: 'busy' };
+      }
+      return { text: 'New material — updating in a moment…', tone: 'busy' };
     case 'failed':
       return { text: brief.error || 'The brief could not be written', tone: 'danger' };
     case 'no_credits':
@@ -66,7 +78,61 @@ function statusOf(brief) {
   }
 }
 
-function StatusLine({ brief }) {
+function timeLeft(seconds) {
+  if (!seconds) return '';
+  if (seconds < 60) return 'under a minute left';
+  const minutes = Math.round(seconds / 60);
+  return `about ${minutes} min left`;
+}
+
+// The server's percentage, shown so it never goes backwards within one update
+// and keeps creeping forward between polls at the rate the server expects.
+function useSmoothPercent(progress, busy) {
+  const target = busy && typeof progress.percent === 'number' ? progress.percent : null;
+  const run = progress.startedAt ?? null;
+  // The highest value shown so far in this update ({ run, value }).
+  const [ahead, setAhead] = useState({ run: null, value: 0 });
+
+  useEffect(() => {
+    if (target === null || !progress.etaSeconds) return undefined;
+    const perSecond = (100 - target) / progress.etaSeconds;
+    const timer = setInterval(() => {
+      setAhead((current) => {
+        const base = current.run === run ? Math.max(current.value, target) : target;
+        // At most a few points ahead of what the server last said.
+        const next = Math.max(base, Math.min(99, target + 5, base + perSecond));
+        return { run, value: next };
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [target, run, progress.etaSeconds]);
+
+  if (target === null) return null;
+  return Math.floor(ahead.run === run ? Math.max(ahead.value, target) : target);
+}
+
+function ProgressBar({ percent, etaSeconds }) {
+  return (
+    <div className="mt-3">
+      <div
+        role="progressbar"
+        aria-label="Brief progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="bg-accent/15 h-1.5 w-full overflow-hidden rounded-full"
+      >
+        <div
+          className="bg-accent h-full rounded-full transition-[width] duration-1000 ease-linear"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      {etaSeconds > 0 && <p className="text-muted mt-1 text-[11px]">{timeLeft(etaSeconds)}</p>}
+    </div>
+  );
+}
+
+function StatusLine({ brief, percent }) {
   const status = statusOf(brief);
   return (
     <p
@@ -83,6 +149,9 @@ function StatusLine({ brief }) {
         <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       )}
       <span className="truncate">{status.text}</span>
+      {status.tone === 'busy' && percent !== null && (
+        <span className="text-ink shrink-0 font-semibold tabular-nums">{percent}%</span>
+      )}
     </p>
   );
 }
@@ -304,6 +373,8 @@ export function ProjectBriefPanel({ workspaceId, projectId, canEdit, onOpenFile 
   const saveNote = useSaveBriefAsNote(workspaceId, projectId);
   const [tab, setTab] = useState('summary');
   const [collapsed, setCollapsed] = useState(() => readLocal(COLLAPSED_KEY) === '1');
+  const working = Boolean(brief?.aiEnabled && BUSY_STATUSES.includes(brief?.status));
+  const percent = useSmoothPercent(brief?.progress ?? {}, working);
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -325,6 +396,7 @@ export function ProjectBriefPanel({ workspaceId, projectId, canEdit, onOpenFile 
   const hasBrief = Boolean(brief.generatedAt && (brief.overview || brief.notes));
   const busy = BUSY_STATUSES.includes(brief.status);
   const meetingCount = brief.meetings.length;
+  const clipCount = brief.clips?.total ?? 0;
 
   return (
     <section
@@ -337,7 +409,7 @@ export function ProjectBriefPanel({ workspaceId, projectId, canEdit, onOpenFile 
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="text-[15px] font-semibold leading-tight">AI brief</h3>
-          <StatusLine brief={brief} />
+          <StatusLine brief={brief} percent={percent} />
         </div>
         <div className="flex items-center gap-1.5">
           {hasBrief && !collapsed && (
@@ -385,6 +457,8 @@ export function ProjectBriefPanel({ workspaceId, projectId, canEdit, onOpenFile 
         </div>
       </header>
 
+      {percent !== null && <ProgressBar percent={percent} etaSeconds={brief.progress.etaSeconds} />}
+
       {regenerate.error && (
         <Alert tone="error" className="mt-3">
           {regenerate.error.message}
@@ -406,6 +480,17 @@ export function ProjectBriefPanel({ workspaceId, projectId, canEdit, onOpenFile 
                 ? `The AI is going through ${plural(brief.progress.total, 'file')}. The brief appears here in a minute or two — no need to stay on this page.`
                 : 'No brief yet.'}
             </p>
+          )}
+          {brief.clips?.total > 0 && (
+            <div className="mt-4 space-y-2">
+              <h4 className="text-sm font-semibold">Transcripts</h4>
+              <BriefTranscripts
+                workspaceId={workspaceId}
+                projectId={projectId}
+                canEdit={canEdit}
+                onOpenFile={onOpenFile}
+              />
+            </div>
           )}
         </div>
       )}
@@ -429,6 +514,7 @@ export function ProjectBriefPanel({ workspaceId, projectId, canEdit, onOpenFile 
                 label: meetingCount ? `Meetings (${meetingCount})` : 'Meetings',
               },
               { value: 'notes', label: 'Full notes' },
+              ...(clipCount ? [{ value: 'transcripts', label: `Transcripts (${clipCount})` }] : []),
             ]}
           />
 
@@ -472,6 +558,15 @@ export function ProjectBriefPanel({ workspaceId, projectId, canEdit, onOpenFile 
 
           {tab === 'meetings' && (
             <Meetings meetings={brief.meetings} filesById={filesById} onOpenFile={onOpenFile} />
+          )}
+
+          {tab === 'transcripts' && clipCount > 0 && (
+            <BriefTranscripts
+              workspaceId={workspaceId}
+              projectId={projectId}
+              canEdit={canEdit}
+              onOpenFile={onOpenFile}
+            />
           )}
 
           {tab === 'notes' && (

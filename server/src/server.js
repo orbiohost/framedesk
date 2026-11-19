@@ -15,6 +15,7 @@ import {
   stopTranscriptWorker,
 } from './modules/transcripts/transcriptWorker.js';
 import { startReminderWorker, stopReminderWorker } from './modules/notifications/reminderWorker.js';
+import { startAlertWorker, stopAlertWorker } from './modules/alerts/alertWorker.js';
 import {
   startSocialSyncWorker,
   stopSocialSyncWorker,
@@ -34,6 +35,7 @@ function registerGracefulShutdown(server) {
     stopStorageReconciler();
     stopPlanLifecycle();
     stopReminderWorker();
+    stopAlertWorker();
     stopSocialSyncWorker();
     server.close(async () => {
       await Promise.all([disconnectDatabase(), disconnectRedis()]);
@@ -63,6 +65,7 @@ async function start() {
   startStorageReconciler();
   startPlanLifecycle();
   startReminderWorker();
+  startAlertWorker();
   startSocialSyncWorker();
   verifyMailer();
 }

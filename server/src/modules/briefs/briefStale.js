@@ -26,6 +26,15 @@ async function markRootStale(workspaceId, root) {
     { ...filter, status: { $nin: ['generating', 'waiting'] } },
     { $set: { status: 'queued', attempts: 0, retryAt: null, error: null } },
   );
+  await startBriefRun(filter);
+}
+
+// Marks when an update began, unless one is already running.
+export function startBriefRun(filter) {
+  return ProjectBrief.updateOne(
+    { ...filter, runStartedAt: null },
+    { $set: { runStartedAt: new Date() } },
+  );
 }
 
 /**

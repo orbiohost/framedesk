@@ -33,9 +33,16 @@ export async function findOpenRequest(workspaceId) {
 // One open request per workspace: asking again replaces the plan choice
 // (and re-quotes the price, so an expired offer can't be kept by re-submitting).
 export async function requestUpgrade(workspaceId, userId, { planCode, interval, couponCode }) {
-  const { amount: listAmount, offerCode } = await quote(planCode, interval);
+  const { amount: listAmount, offerCode, floor } = await quote(planCode, interval);
   const pool = await findPoolWorkspaceById(workspaceId);
-  const discount = await discountFor({ pool, planCode, interval, amount: listAmount, couponCode });
+  const discount = await discountFor({
+    pool,
+    planCode,
+    interval,
+    amount: listAmount,
+    couponCode,
+    floor,
+  });
   const amount = listAmount - (discount?.amount ?? 0);
   const request = await UpgradeRequest.findOneAndUpdate(
     { workspaceId, status: 'open' },

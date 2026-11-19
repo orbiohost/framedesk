@@ -1,17 +1,25 @@
 // Notes are plain text with a little Markdown, so they read fine anywhere
 // (backups, search) and stay easy to type:
 //   ## Heading   **bold**   _italic_   ~~strike~~   `code`
+//   ++underline++   ==highlight==   [coloured or sized words]{.red .lg}
 //   - bullet     1. numbered     - [ ] to-do     - [x] done
+//   > quote      --- (a divider line)
 
 const HEADING = /^(#{1,3}) (.*)$/;
 const CHECK = /^(\s*)- \[( |x|X)\](?: (.*))?$/;
 const BULLET = /^(\s*)[-*] (.*)$/;
 const NUMBERED = /^(\s*)(\d+)[.)] (.*)$/;
+const QUOTE = /^> ?(.*)$/;
+const DIVIDER = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 
-// One line of a note as a block: heading, check, bullet, numbered, blank or text.
+// One line of a note as a block: heading, divider, quote, check, bullet,
+// numbered, blank or text.
 export function parseLine(line) {
   let match = line.match(HEADING);
   if (match) return { type: 'heading', level: match[1].length, text: match[2] };
+  if (DIVIDER.test(line)) return { type: 'divider' };
+  match = line.match(QUOTE);
+  if (match) return { type: 'quote', text: match[1] };
   match = line.match(CHECK);
   if (match) {
     return {

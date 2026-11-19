@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { objectId, optionalText, password, personName } from '../../utils/zodHelpers.js';
 
-export const updateProfileSchema = z.object({ name: personName });
+export const updateProfileSchema = z
+  .object({
+    name: personName.optional(),
+    // Notes & Briefs clips up to this long are transcribed by themselves (0: off).
+    autoTranscribeMinutes: z.number().int().min(0).max(600).optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, { message: 'Nothing to change' });
 
 // A base64 data URL; ~280 KB of text covers the 200 KB byte limit checked later.
 export const setAvatarSchema = z.object({

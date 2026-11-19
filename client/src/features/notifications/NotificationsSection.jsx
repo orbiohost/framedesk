@@ -6,6 +6,7 @@ import { ChoiceChips } from '../../components/ui/ChoiceChips.jsx';
 import { controlClassName } from '../../components/ui/FieldShell.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { SettingsRow, SettingsSection } from '../account/SettingsSection.jsx';
+import { openPermissions } from '../install/DevicePermissions.jsx';
 import { openInstall } from '../install/InstallApp.jsx';
 import {
   useEnableThisDevice,
@@ -16,6 +17,7 @@ import {
   useUpdateNotificationSettings,
 } from './hooks.js';
 import { pushSupport } from './pushDevice.js';
+import { AlertSettingsSection } from '../alerts/AlertSettingsSection.jsx';
 
 const EMAIL_OPTIONS = [
   { value: 'fallback', label: 'If no device gets it' },
@@ -104,6 +106,18 @@ export function ThisDeviceControl({ overview, compact = false }) {
           >
             <Send className="h-4 w-4" aria-hidden="true" /> Send a test
           </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={test.isPending}
+            onClick={() => test.mutate({ delaySeconds: 10, kind: 'alert' })}
+            title="A test project alert in 10 seconds: close the app to see it arrive"
+          >
+            <BellRing className="h-4 w-4" aria-hidden="true" /> Test with the app closed
+          </Button>
+          <Button size="sm" variant="ghost" onClick={openPermissions}>
+            Device permissions
+          </Button>
           {!compact && (
             <Button
               size="sm"
@@ -117,9 +131,11 @@ export function ThisDeviceControl({ overview, compact = false }) {
         </div>
         {test.isSuccess && (
           <p className="text-muted text-xs">
-            {test.data.delivered
-              ? `Sent to ${test.data.delivered} device${test.data.delivered === 1 ? '' : 's'}. It should appear in a few seconds.`
-              : 'No device accepted it. Turn notifications off and on again here.'}
+            {test.data.scheduled
+              ? 'A test alert arrives in 10 seconds — close the app now to see it reach you while closed.'
+              : test.data.delivered
+                ? `Sent to ${test.data.delivered} device${test.data.delivered === 1 ? '' : 's'}. It should appear in a few seconds.`
+                : 'No device accepted it. Turn notifications off and on again here.'}
           </p>
         )}
         {test.error && <p className="text-danger text-xs">{test.error.message}</p>}
@@ -207,6 +223,8 @@ export function NotificationsSection() {
           </div>
         )}
       </SettingsSection>
+
+      <AlertSettingsSection />
 
       {devices.length > 0 && (
         <SettingsSection

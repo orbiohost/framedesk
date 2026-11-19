@@ -14,6 +14,8 @@ const planSettingsSchema = new Schema(
     free: { type: Schema.Types.Mixed, default: null },
     offer: { type: Schema.Types.Mixed, default: null },
     referral: { type: Schema.Types.Mixed, default: null },
+    // { maxDiscountPercent }: the most any mix of discounts may take off.
+    pricing: { type: Schema.Types.Mixed, default: null },
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },

@@ -9,6 +9,7 @@ import { viewerOf } from '../files/folderAccess.js';
 import {
   createTasksFromBrief,
   getBrief,
+  listBriefTranscripts,
   regenerateBrief,
   saveBriefAsNote,
 } from './briefs.service.js';
@@ -27,6 +28,18 @@ router.get(
   asyncHandler(async (req, res) => {
     const brief = await getBrief(req.workspace._id, req.params.projectId, viewerOf(req));
     sendSuccess(res, { brief });
+  }),
+);
+
+router.get(
+  '/:projectId/transcripts',
+  canView,
+  validate({ params }),
+  asyncHandler(async (req, res) => {
+    sendSuccess(
+      res,
+      await listBriefTranscripts(req.workspace._id, req.params.projectId, viewerOf(req)),
+    );
   }),
 );
 

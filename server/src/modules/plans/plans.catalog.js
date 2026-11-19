@@ -56,10 +56,10 @@ export const PLANS = Object.freeze([
 // Everyone has this until they pay; it can't be bought.
 export const FREE_DEFAULTS = Object.freeze({
   name: 'Free',
-  storageGB: 2,
+  storageGB: 1,
   summary: 'Free for as long as you like.',
   features: [
-    '2 GB of storage',
+    '1 GB of storage',
     'Projects, tasks, calendar and notes',
     'Client review links',
     'AI assistant with a small usage limit',
@@ -76,11 +76,20 @@ export const OFFER_DEFAULTS = Object.freeze({
   endsAt: '2026-12-31T23:59:59+05:30',
 });
 
+// Profit guard: however offers, coupons and referral discounts combine, a
+// plan is never sold for more than this much off its full price (the monthly
+// price, or 12 × monthly for a year). Stops a 40% yearly offer plus a 20%
+// referral plus a coupon from selling a year far below cost.
+export const PRICING_DEFAULTS = Object.freeze({
+  maxDiscountPercent: 50,
+});
+
 // Refer & earn: the friend gets a discount on their first paid plan; whoever
-// invited them gets extra storage, up to rewardLimit friends.
+// invited them gets extra storage, up to rewardLimit friends: 500 MB each,
+// 1 GB at most.
 export const REFERRAL_DEFAULTS = Object.freeze({
   enabled: true,
-  rewardGB: 3,
-  rewardLimit: 1,
+  rewardGB: 0.5,
+  rewardLimit: 2,
   discountPercent: 20,
 });

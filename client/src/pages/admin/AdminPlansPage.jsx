@@ -11,6 +11,7 @@ import { TextAreaField } from '../../components/ui/TextAreaField.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
 import { SettingsRow, SettingsSection } from '../../features/account/SettingsSection.jsx';
 import { shortDate } from '../../features/admin/adminFormat.js';
+import { PlanProfitCalculator } from '../../features/admin/PlanProfitCalculator.jsx';
 import {
   useAdminCoupons,
   useAdminPlans,
@@ -64,6 +65,9 @@ function toForm(catalog) {
       rewardLimit: String(catalog.referral.rewardLimit),
       discountPercent: String(catalog.referral.discountPercent),
     },
+    pricing: {
+      maxDiscountPercent: String(catalog.pricing?.maxDiscountPercent ?? 50),
+    },
   };
 }
 
@@ -102,6 +106,9 @@ function toInput(form) {
       rewardGB: Number(form.referral.rewardGB),
       rewardLimit: int(form.referral.rewardLimit),
       discountPercent: int(form.referral.discountPercent),
+    },
+    pricing: {
+      maxDiscountPercent: int(form.pricing.maxDiscountPercent) ?? 0,
     },
   };
 }
@@ -199,6 +206,41 @@ function CatalogForm({ catalog }) {
           </SettingsRow>
         ))}
       </SettingsSection>
+
+      <SettingsSection
+        title="Profit guard"
+        description="However the yearly offer, coupons and referral discounts combine, no plan sells for more than this much off its full price (monthly, or 12 × monthly for a year). The yearly offer must stay within it."
+      >
+        <SettingsRow label="Discount cap">
+          <TextField
+            id="max-discount"
+            label="Most off, all discounts together (%)"
+            type="number"
+            min="0"
+            max="90"
+            hint="50 means a year never sells below 6 months' worth"
+            value={form.pricing.maxDiscountPercent}
+            onChange={input(setIn('pricing', 'maxDiscountPercent'))}
+            error={fieldError('pricing.maxDiscountPercent')}
+          />
+        </SettingsRow>
+      </SettingsSection>
+
+      {catalog.costModel && (
+        <SettingsSection
+          title="Profit per plan"
+          description="What one account on each plan earns you a month after storage, downloads, AI and the payment fee, for the prices above (before you save). Red loses money, amber is under 30%."
+        >
+          <div className="py-5">
+            <PlanProfitCalculator
+              plans={form.plans}
+              offer={form.offer}
+              maxDiscountPercent={form.pricing.maxDiscountPercent}
+              model={catalog.costModel}
+            />
+          </div>
+        </SettingsSection>
+      )}
 
       <SettingsSection
         title="Free plan"

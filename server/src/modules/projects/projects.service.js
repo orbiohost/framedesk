@@ -31,6 +31,7 @@ export function toProjectDto(project, taskCounts) {
     description: project.description,
     tags: project.tags,
     reminders: project.reminders ?? null,
+    aiClipSource: project.aiClipSource ?? 'transcript',
     tasks: { total: taskCounts?.total ?? 0, done: taskCounts?.done ?? 0 },
     // Whether a share link is live. The link itself comes from the share settings route.
     sharing: project.share?.enabled

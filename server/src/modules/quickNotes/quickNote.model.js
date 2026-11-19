@@ -9,7 +9,8 @@ export const MAX_NOTE_PROJECTS = 10;
 const quickNoteSchema = new Schema(
   {
     title: { type: String, trim: true, maxlength: 160, default: null },
-    body: { type: String, required: true, maxlength: 10000 },
+    // A note needs a title or some text; a title on its own is fine.
+    body: { type: String, maxlength: 10000, default: '' },
     projectIds: {
       type: [{ type: Schema.Types.ObjectId, ref: 'Project' }],
       default: [],

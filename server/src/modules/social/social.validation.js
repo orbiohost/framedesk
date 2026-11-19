@@ -33,10 +33,16 @@ const MAX_IMAGE_CHARS = 2_000_000; // ~1.5 MB per screenshot after base64
 export const importExtractSchema = z
   .object({
     platform: z.enum(SOCIAL_PLATFORMS),
-    images: z.array(z.string().max(MAX_IMAGE_CHARS, 'A screenshot is too large')).max(8, 'Up to 8 screenshots at a time').optional(),
+    images: z
+      .array(z.string().max(MAX_IMAGE_CHARS, 'A screenshot is too large'))
+      .max(8, 'Up to 8 screenshots at a time')
+      .optional(),
     text: z.string().max(400_000, 'That file is too large; export a shorter date range').optional(),
   })
-  .refine((value) => value.images?.length || value.text?.trim(), 'Add a screenshot or an exported file');
+  .refine(
+    (value) => value.images?.length || value.text?.trim(),
+    'Add a screenshot or an exported file',
+  );
 
 const importedPost = z.object({
   caption: z.string().trim().min(1).max(5000),

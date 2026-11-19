@@ -48,16 +48,24 @@ export function LegalPage({ title, intro, sections, other }) {
     <main className="mx-auto max-w-6xl px-4 pb-20 pt-10 sm:px-6">
       <div className="max-w-3xl">
         <p className="text-muted text-sm">Effective {LEGAL.effective}</p>
-        <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
+        <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+          {title}
+        </h1>
         <div className="text-ink/85 mt-4 space-y-3 text-[15px] leading-relaxed">{intro}</div>
       </div>
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav aria-label="On this page" className="hidden lg:block">
           <div className="sticky top-24 space-y-1 text-sm">
-            <p className="text-muted mb-2 text-xs font-semibold uppercase tracking-wider">On this page</p>
+            <p className="text-muted mb-2 text-xs font-semibold uppercase tracking-wider">
+              On this page
+            </p>
             {sections.map((section, index) => (
-              <a key={section.id} href={`#${section.id}`} className="text-muted hover:text-ink block py-0.5">
+              <a
+                key={section.id}
+                href={`#${section.id}`}
+                className="text-muted hover:text-ink block py-0.5"
+              >
                 {index + 1}. {section.title}
               </a>
             ))}

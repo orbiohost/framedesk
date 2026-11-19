@@ -1,4 +1,5 @@
 import { parseLine } from './noteFormat.js';
+import { parseStyleClasses, styleClasses } from './noteStyles.js';
 
 // Converts between a note's stored text (the light Markdown described in
 // noteFormat.js) and the rich editor's document. Notes stay plain text on the
@@ -13,27 +14,34 @@ const LIST_NODES = {
 };
 
 // Outermost first. The same marks, in the same spelling, that NoteMarkdown reads.
+// Colour and size are written as one bracketed span around them: [text]{.red .lg}.
 const MARKS = [
   ['bold', '**'],
   ['strike', '~~'],
   ['italic', '_'],
+  ['underline', '++'],
+  ['highlight', '=='],
   ['code', '`'],
 ];
 const MARKER = Object.fromEntries(MARKS);
+const STYLE = 'style:';
 
-const INLINE = new RegExp(
-  [
-    String.raw`(?<bold>\*\*(?<boldText>[^*\n]+?)\*\*)`,
-    String.raw`(?<strike>~~(?<strikeText>[^~\n]+?)~~)`,
-    String.raw`(?<code>\x60(?<codeText>[^\x60\n]+?)\x60)`,
-    String.raw`(?<italic>(?<![\p{L}\p{N}_*])[_*](?<italicText>[^\s_*][^_*\n]*?)[_*](?![\p{L}\p{N}_*]))`,
-  ].join('|'),
-  'gu',
-);
+export const INLINE_SOURCE = [
+  String.raw`(?<style>\[(?<styleText>[^\]\n]+)\]\{(?<styleCls>\.[a-z]+(?: \.[a-z]+)*)\})`,
+  String.raw`(?<bold>\*\*(?<boldText>[^*\n]+?)\*\*)`,
+  String.raw`(?<under>\+\+(?<underText>[^+\n]+?)\+\+)`,
+  String.raw`(?<hl>==(?<hlText>[^=\n]+?)==)`,
+  String.raw`(?<strike>~~(?<strikeText>[^~\n]+?)~~)`,
+  String.raw`(?<code>\x60(?<codeText>[^\x60\n]+?)\x60)`,
+  String.raw`(?<italic>(?<![\p{L}\p{N}_*])[_*](?<italicText>[^\s_*][^_*\n]*?)[_*](?![\p{L}\p{N}_*]))`,
+];
+const INLINE = new RegExp(INLINE_SOURCE.join('|'), 'gu');
 
+// marks: [{ type, attrs? }]; a later mark of the same type wins.
 function textNode(text, marks) {
   if (marks.length === 0) return { type: 'text', text };
-  return { type: 'text', text, marks: [...new Set(marks)].map((type) => ({ type })) };
+  const byType = new Map(marks.map((mark) => [mark.type, mark]));
+  return { type: 'text', text, marks: [...byType.values()] };
 }
 
 function inlineNodes(text, marks = []) {
@@ -43,10 +51,24 @@ function inlineNodes(text, marks = []) {
     const { groups } = match;
     if (match.index > last) nodes.push(textNode(text.slice(last, match.index), marks));
     last = match.index + match[0].length;
-    if (groups.bold) nodes.push(...inlineNodes(groups.boldText, [...marks, 'bold']));
-    else if (groups.strike) nodes.push(...inlineNodes(groups.strikeText, [...marks, 'strike']));
-    else if (groups.italic) nodes.push(...inlineNodes(groups.italicText, [...marks, 'italic']));
-    else nodes.push(textNode(groups.codeText, [...marks, 'code']));
+    if (groups.style) {
+      const { color, size } = parseStyleClasses(groups.styleCls);
+      const added = [
+        color && { type: 'textColor', attrs: { color } },
+        size && { type: 'textSize', attrs: { size } },
+      ].filter(Boolean);
+      nodes.push(...inlineNodes(groups.styleText, [...marks, ...added]));
+    } else if (groups.bold)
+      nodes.push(...inlineNodes(groups.boldText, [...marks, { type: 'bold' }]));
+    else if (groups.under) {
+      nodes.push(...inlineNodes(groups.underText, [...marks, { type: 'underline' }]));
+    } else if (groups.hl) {
+      nodes.push(...inlineNodes(groups.hlText, [...marks, { type: 'highlight' }]));
+    } else if (groups.strike) {
+      nodes.push(...inlineNodes(groups.strikeText, [...marks, { type: 'strike' }]));
+    } else if (groups.italic) {
+      nodes.push(...inlineNodes(groups.italicText, [...marks, { type: 'italic' }]));
+    } else nodes.push(textNode(groups.codeText, [...marks, { type: 'code' }]));
   }
   if (last < text.length) nodes.push(textNode(text.slice(last), marks));
   return nodes;
@@ -105,17 +127,34 @@ function listBlocks(lines) {
 export function noteToDoc(text) {
   const content = [];
   let run = [];
+  let quote = [];
   const flush = () => {
     if (run.length > 0) content.push(...listBlocks(run));
     run = [];
   };
+  const flushQuote = () => {
+    if (quote.length > 0) {
+      content.push({ type: 'blockquote', content: quote.map((line) => paragraph(line)) });
+    }
+    quote = [];
+  };
   for (const line of String(text ?? '').split('\n')) {
     const parsed = parseLine(line);
     if (parsed.type in LIST_NODES) {
+      flushQuote();
       run.push(parsed);
       continue;
     }
     flush();
+    if (parsed.type === 'quote') {
+      quote.push(parsed.text);
+      continue;
+    }
+    flushQuote();
+    if (parsed.type === 'divider') {
+      content.push({ type: 'horizontalRule' });
+      continue;
+    }
     if (parsed.type === 'heading') {
       const inline = inlineNodes(parsed.text);
       content.push({
@@ -128,8 +167,25 @@ export function noteToDoc(text) {
     }
   }
   flush();
+  flushQuote();
   return { type: 'doc', content };
 }
+
+// The marks a text node is written with, outermost first: its colour/size span
+// (as one "style:" key), then the simple marks in MARKS order.
+function wantedMarks(node) {
+  const marks = node.marks ?? [];
+  const color = marks.find((mark) => mark.type === 'textColor')?.attrs?.color ?? null;
+  const size = marks.find((mark) => mark.type === 'textSize')?.attrs?.size ?? null;
+  const classes = styleClasses({ color, size });
+  return [
+    ...(classes ? [STYLE + classes] : []),
+    ...MARKS.map(([type]) => type).filter((type) => marks.some((mark) => mark.type === type)),
+  ];
+}
+
+const opener = (key) => (key.startsWith(STYLE) ? '[' : MARKER[key]);
+const closer = (key) => (key.startsWith(STYLE) ? `]{${key.slice(STYLE.length)}}` : MARKER[key]);
 
 // Inline content -> text. Marks are opened and closed as a stack, and spaces at
 // the edge of a marked run are kept outside the markers ("**bold** next").
@@ -139,7 +195,7 @@ function inlineText(content = []) {
   let pending = ''; // trailing spaces not yet written
 
   const closeTo = (keep) => {
-    for (let i = open.length - 1; i >= keep; i -= 1) out += MARKER[open[i]];
+    for (let i = open.length - 1; i >= keep; i -= 1) out += closer(open[i]);
     open = open.slice(0, keep);
   };
 
@@ -156,14 +212,12 @@ function inlineText(content = []) {
       pending += text;
       continue;
     }
-    const want = MARKS.map(([type]) => type).filter((type) =>
-      node.marks?.some((mark) => mark.type === type),
-    );
+    const want = wantedMarks(node);
     let keep = 0;
     while (keep < open.length && keep < want.length && open[keep] === want[keep]) keep += 1;
     closeTo(keep);
     out += pending + text.slice(0, text.indexOf(core));
-    for (const type of want.slice(keep)) out += MARKER[type];
+    for (const key of want.slice(keep)) out += opener(key);
     open = want;
     out += core;
     pending = text.slice(text.indexOf(core) + core.length);
@@ -177,6 +231,12 @@ function blockLines(node, indent = '') {
     return inlineText(node.content)
       .split('\n')
       .map((line) => indent + line);
+  }
+  if (node.type === 'horizontalRule') return [`${indent}---`];
+  if (node.type === 'blockquote') {
+    return (node.content ?? [])
+      .flatMap((child) => blockLines(child, ''))
+      .map((line) => `${indent}> ${line}`.trimEnd());
   }
   if (node.type === 'heading') {
     const text = inlineText(node.content).replaceAll('\n', ' ');

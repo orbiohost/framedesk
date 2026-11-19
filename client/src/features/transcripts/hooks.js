@@ -28,7 +28,7 @@ export function useTranscriptionEnabled(workspaceId) {
   return Boolean(data?.enabled);
 }
 
-// Polls while Whisper is working, so new lines show up as they are written.
+// Polls while speech-to-text is working, so new lines show up as they are written.
 export function useTranscript(workspaceId, fileId, { enabled = true } = {}) {
   return useQuery({
     queryKey: featureKey(workspaceId, 'transcripts', fileId),
@@ -144,29 +144,39 @@ export async function dictate(workspaceId, blob, language) {
   return api.postBlob(`${path(workspaceId)}/dictation${toQueryString({ language })}`, blob);
 }
 
-// Whisper's codes; "" lets it detect the language.
+// The languages Qwen3-ASR transcribes (ISO codes); "" lets it detect the language.
 export const LANGUAGE_OPTIONS = [
   { value: '', label: 'Detect automatically' },
   { value: 'en', label: 'English' },
   { value: 'hi', label: 'Hindi' },
-  { value: 'bn', label: 'Bengali' },
-  { value: 'mr', label: 'Marathi' },
-  { value: 'gu', label: 'Gujarati' },
-  { value: 'pa', label: 'Punjabi' },
-  { value: 'ta', label: 'Tamil' },
-  { value: 'te', label: 'Telugu' },
-  { value: 'kn', label: 'Kannada' },
-  { value: 'ml', label: 'Malayalam' },
-  { value: 'ur', label: 'Urdu' },
   { value: 'ar', label: 'Arabic' },
-  { value: 'es', label: 'Spanish' },
+  { value: 'yue', label: 'Cantonese' },
+  { value: 'zh', label: 'Chinese' },
+  { value: 'cs', label: 'Czech' },
+  { value: 'da', label: 'Danish' },
+  { value: 'nl', label: 'Dutch' },
+  { value: 'fil', label: 'Filipino' },
+  { value: 'fi', label: 'Finnish' },
   { value: 'fr', label: 'French' },
   { value: 'de', label: 'German' },
-  { value: 'pt', label: 'Portuguese' },
-  { value: 'ru', label: 'Russian' },
+  { value: 'el', label: 'Greek' },
+  { value: 'hu', label: 'Hungarian' },
+  { value: 'id', label: 'Indonesian' },
+  { value: 'it', label: 'Italian' },
   { value: 'ja', label: 'Japanese' },
   { value: 'ko', label: 'Korean' },
-  { value: 'zh', label: 'Chinese' },
+  { value: 'mk', label: 'Macedonian' },
+  { value: 'ms', label: 'Malay' },
+  { value: 'fa', label: 'Persian' },
+  { value: 'pl', label: 'Polish' },
+  { value: 'pt', label: 'Portuguese' },
+  { value: 'ro', label: 'Romanian' },
+  { value: 'ru', label: 'Russian' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'sv', label: 'Swedish' },
+  { value: 'th', label: 'Thai' },
+  { value: 'tr', label: 'Turkish' },
+  { value: 'vi', label: 'Vietnamese' },
 ];
 
 export function languageName(code) {
@@ -176,4 +186,44 @@ export function languageName(code) {
     new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ??
     code
   );
+}
+
+// Suggestions in an Indian script for a word typed in English letters
+// ("aapka" → ["आपका", ...]). Answers are kept for the session.
+const transliterations = new Map();
+export async function fetchTransliteration(workspaceId, text, language) {
+  const key = `${language}:${text.toLowerCase()}`;
+  if (!transliterations.has(key)) {
+    const request = api
+      .get(`${path(workspaceId)}/transliterate${toQueryString({ text, language })}`)
+      .then((data) => data.suggestions ?? []);
+    transliterations.set(key, request);
+    // A failed lookup is asked again next time.
+    request.catch(() => transliterations.delete(key));
+  }
+  return transliterations.get(key);
+}
+
+// Saves hand-corrected lines: edits = [{ index, text }].
+export function useEditTranscriptSegments(workspaceId, fileId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (edits) =>
+      (await api.patch(`${path(workspaceId)}/${fileId}/segments`, { edits })).transcript,
+    onSuccess: (transcript) => {
+      queryClient.setQueryData(featureKey(workspaceId, 'transcripts', fileId), transcript);
+      queryClient.invalidateQueries({ queryKey: featureKey(workspaceId, 'briefs') });
+    },
+  });
+}
+
+// Has the AI watch a video too, not only read its transcript.
+export function useWatchVideo(workspaceId, fileId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      (await api.post(`${path(workspaceId)}/${fileId}/watch-video`)).transcript,
+    onSuccess: (transcript) =>
+      queryClient.setQueryData(featureKey(workspaceId, 'transcripts', fileId), transcript),
+  });
 }

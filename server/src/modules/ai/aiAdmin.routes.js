@@ -5,6 +5,7 @@ import { sendSuccess } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { objectId, searchQuery } from '../../utils/zodHelpers.js';
 import { PLANS } from '../plans/plans.catalog.js';
+import { IMAGE_PROVIDERS, MODEL_CATALOG, MODEL_STATUSES } from './aiModels.js';
 import { RESET_PRICE_CODES } from './aiSettings.service.js';
 import {
   accountLedger,
@@ -21,6 +22,24 @@ const router = Router();
 
 const credits = (max) => z.number().int().min(0).max(max);
 const limits = z.object({ session: credits(1_000_000), weekly: credits(10_000_000) });
+
+const modelSchema = z.object({
+  name: z.string().trim().min(2).max(40),
+  tagline: z.string().trim().max(120),
+  badge: z.string().trim().max(12),
+  status: z.enum(MODEL_STATUSES),
+  // Image models only; chat always runs on Gemini.
+  provider: z.enum(IMAGE_PROVIDERS).optional(),
+  // Empty: the provider's default (main Gemini model, or FLUX.2 klein on Cloudflare).
+  engine: z
+    .string()
+    .trim()
+    .regex(
+      /^([@\w./-]{3,80})?$/,
+      'Use a model id like gemini-3-pro or @cf/black-forest-labs/flux-2-dev',
+    ),
+  creditMultiplier: z.number().min(0.1).max(20),
+});
 
 const settingsSchema = z
   .object({
@@ -40,6 +59,17 @@ const settingsSchema = z
     minChatCredits: credits(1000),
     minAnalysisCredits: credits(1000),
     maxAnalysisMB: z.number().int().min(1).max(2000),
+    imageModel: z
+      .string()
+      .trim()
+      .regex(/^[\w.-]{3,60}$/, 'Use a Gemini image model name like gemini-2.5-flash-image'),
+    imageCredits: credits(1000),
+    refImageLimits: z.object(
+      Object.fromEntries(RESET_PRICE_CODES.map((code) => [code, z.number().int().min(0).max(14)])),
+    ),
+    models: z
+      .object(Object.fromEntries(MODEL_CATALOG.map((model) => [model.key, modelSchema])))
+      .partial(),
     packs: z
       .array(
         z.object({

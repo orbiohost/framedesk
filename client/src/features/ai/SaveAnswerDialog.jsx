@@ -24,7 +24,7 @@ function shortTitle(text) {
 export function SaveAnswerDialog({ workspaceId, threadId, message, question, onClose, onSaved }) {
   const [title, setTitle] = useState(() => shortTitle(question?.text));
   const [projectIds, setProjectIds] = useState(() =>
-    question?.project ? [question.project.id] : [],
+    question?.project && !question.project.wholeDrive ? [question.project.id] : [],
   );
   const [visibility, setVisibility] = useState('private');
   const save = useSaveAnswerAsNote(workspaceId);

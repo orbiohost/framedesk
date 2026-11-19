@@ -2,6 +2,7 @@ import {
   Archive,
   ArchiveRestore,
   ArrowLeft,
+  BellRing,
   CalendarDays,
   ChevronDown,
   FolderOpen,
@@ -14,7 +15,8 @@ import {
   Trash2,
   Sparkles,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { Alert } from '../../../components/ui/Alert.jsx';
 import { Button } from '../../../components/ui/Button.jsx';
@@ -22,6 +24,8 @@ import { EmptyState } from '../../../components/ui/EmptyState.jsx';
 import { Skeleton } from '../../../components/ui/Skeleton.jsx';
 import { openAi, useAiAvailable } from '../../../features/ai/aiBridge.js';
 import { AI_GRADIENT } from '../../../features/ai/aiStyle.js';
+import { markProjectOpened } from '../../../features/alerts/hooks.js';
+import { SendAlertDialog } from '../../../features/alerts/SendAlertDialog.jsx';
 import { ActionMenu } from '../../../features/files/ActionMenu.jsx';
 import { ConfirmDialog } from '../../../features/files/FileDialogs.jsx';
 import { useDeleteProject, useProject, useSaveProject } from '../../../features/projects/hooks.js';
@@ -33,7 +37,7 @@ import {
 } from '../../../features/projects/projectMeta.js';
 import { ProjectStatusBadge } from '../../../features/projects/ProjectStatusBadge.jsx';
 import { ShareProjectDialog } from '../../../features/projectShare/ShareProjectDialog.jsx';
-import { canAdminister, canManage } from '../../../features/workspaces/roles.js';
+import { canAdminister, canEdit, canManage } from '../../../features/workspaces/roles.js';
 import { cn } from '../../../lib/cn.js';
 
 const TABS = [
@@ -119,6 +123,13 @@ export function ProjectLayout() {
   const deleteProject = useDeleteProject(workspace.id);
   const save = useSaveProject(workspace.id);
   const navigate = useNavigate();
+  const [isAlerting, setIsAlerting] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Opening the project answers any alerts about it (they stop ringing).
+  useEffect(() => {
+    markProjectOpened(queryClient, workspace.id, projectId).catch(() => {});
+  }, [queryClient, workspace.id, projectId]);
 
   function confirmDelete() {
     deleteProject.mutate(projectId, {
@@ -221,6 +232,15 @@ export function ProjectLayout() {
               <Sparkles className="h-4 w-4" aria-hidden="true" /> Ask AI
             </Button>
           )}
+          {canEdit(workspace) && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsAlerting(true)}
+              title="Ring teammates about this project"
+            >
+              <BellRing className="h-4 w-4" aria-hidden="true" /> Alert
+            </Button>
+          )}
           {manager && (
             <Button variant="secondary" onClick={() => setIsSharing(true)}>
               <Share2 className="h-4 w-4" aria-hidden="true" /> Share
@@ -254,6 +274,14 @@ export function ProjectLayout() {
           project={project}
           open={isSharing}
           onClose={() => setIsSharing(false)}
+        />
+      )}
+      {canEdit(workspace) && isAlerting && (
+        <SendAlertDialog
+          workspace={workspace}
+          project={project}
+          open={isAlerting}
+          onClose={() => setIsAlerting(false)}
         />
       )}
       <ConfirmDialog

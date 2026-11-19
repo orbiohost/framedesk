@@ -11,10 +11,7 @@ export function OfferBar() {
   if (!timeLeft) return null;
 
   return (
-    <a
-      href="/#pricing"
-      className="pill-active block px-4 py-2 text-center text-sm hover:opacity-95"
-    >
+    <a href="/pricing" className="pill-active block px-4 py-2 text-center text-sm hover:opacity-95">
       <span className="text-accent font-semibold">{offer.percentOff}% off yearly plans</span>
       <span className="opacity-80">
         {' '}

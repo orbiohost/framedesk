@@ -56,6 +56,11 @@ const projectBriefSchema = new Schema(
     // batch of uploads makes one brief rather than one per file.
     staleSince: { type: Date, default: null },
     claimedAt: { type: Date, default: null },
+    // When the current update began (first change since it was last settled);
+    // the progress percentage counts from here. Null when settled.
+    runStartedAt: { type: Date, default: null },
+    // How long the last AI write took, for the next one's progress estimate.
+    writeMs: { type: Number, default: 0 },
     attempts: { type: Number, default: 0 },
     retryAt: { type: Date, default: null },
     error: { type: String, default: null, maxlength: 300 },

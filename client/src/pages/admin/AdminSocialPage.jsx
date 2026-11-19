@@ -1,4 +1,12 @@
-import { Check, CircleAlert, CircleCheck, Copy, ExternalLink, KeyRound, RefreshCw } from 'lucide-react';
+import {
+  Check,
+  CircleAlert,
+  CircleCheck,
+  Copy,
+  ExternalLink,
+  KeyRound,
+  RefreshCw,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
@@ -82,7 +90,11 @@ function AppCard({ app }) {
   async function submit(event) {
     event.preventDefault();
     setResult(null);
-    const body = await save.mutateAsync({ app: app.id, clientId: clientId.trim(), clientSecret: clientSecret.trim() || undefined });
+    const body = await save.mutateAsync({
+      app: app.id,
+      clientId: clientId.trim(),
+      clientSecret: clientSecret.trim() || undefined,
+    });
     setClientSecret('');
     setResult(body.test);
   }
@@ -93,7 +105,8 @@ function AppCard({ app }) {
         <div>
           <h2 className="text-[15px] font-semibold">{app.label}</h2>
           <p className="text-muted text-xs">
-            Lets people press &ldquo;Log in with {app.label.split(' ')[0]}&rdquo; and sync automatically.
+            Lets people press &ldquo;Log in with {app.label.split(' ')[0]}&rdquo; and sync
+            automatically.
           </p>
         </div>
         <Status configured={app.configured} source={app.source} />
@@ -113,11 +126,15 @@ function AppCard({ app }) {
           Open the developer console <ExternalLink className="h-3.5 w-3.5" />
         </a>
         <div>
-          <span className="text-muted mb-1 block text-xs font-semibold">Redirect URL to register</span>
+          <span className="text-muted mb-1 block text-xs font-semibold">
+            Redirect URL to register
+          </span>
           <CopyField value={app.redirectUri} />
         </div>
         <div>
-          <span className="text-muted mb-1 block text-xs font-semibold">Permissions to request</span>
+          <span className="text-muted mb-1 block text-xs font-semibold">
+            Permissions to request
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {app.scopes.map((scope) => (
               <code key={scope} className="bg-subtle rounded-lg px-2 py-0.5 text-xs">
@@ -185,10 +202,18 @@ function AppCard({ app }) {
             )}
             <Button
               type="submit"
-              disabled={save.isPending || !clientId.trim() || (!clientSecret.trim() && !app.saved.secretSaved)}
+              disabled={
+                save.isPending ||
+                !clientId.trim() ||
+                (!clientSecret.trim() && !app.saved.secretSaved)
+              }
               className="pill-active gap-1.5 text-xs"
             >
-              {save.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+              {save.isPending ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <KeyRound className="h-3.5 w-3.5" />
+              )}
               Save &amp; test
             </Button>
           </div>
@@ -211,7 +236,8 @@ function YoutubeKeyCard({ info }) {
         <div>
           <h2 className="text-[15px] font-semibold">YouTube API key</h2>
           <p className="text-muted text-xs">
-            The easiest one: anyone can add a YouTube channel from just its link. No login, no app review.
+            The easiest one: anyone can add a YouTube channel from just its link. No login, no app
+            review.
           </p>
         </div>
         <Status configured={info.configured} source={info.source} />
@@ -246,7 +272,9 @@ function YoutubeKeyCard({ info }) {
           autoComplete="new-password"
           className={inputClass}
         />
-        {(save.error || clear.error) && <p className="text-danger text-xs">{(save.error || clear.error).message}</p>}
+        {(save.error || clear.error) && (
+          <p className="text-danger text-xs">{(save.error || clear.error).message}</p>
+        )}
         <TestResult test={result} />
         <div className="flex flex-wrap justify-end gap-2">
           {info.saved && (
@@ -275,7 +303,11 @@ function YoutubeKeyCard({ info }) {
               {test.isPending ? 'Testing…' : 'Test key'}
             </Button>
           )}
-          <Button type="submit" disabled={save.isPending || !apiKey.trim()} className="pill-active gap-1.5 text-xs">
+          <Button
+            type="submit"
+            disabled={save.isPending || !apiKey.trim()}
+            className="pill-active gap-1.5 text-xs"
+          >
             <KeyRound className="h-3.5 w-3.5" /> Save &amp; test
           </Button>
         </div>

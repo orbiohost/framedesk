@@ -1,14 +1,16 @@
 import express, { Router } from 'express';
-import { dictationLimiter } from '../../middleware/rateLimit.js';
+import { dictationLimiter, transliterateLimiter } from '../../middleware/rateLimit.js';
 import { canEdit, canView } from '../../middleware/requireWorkspaceRole.js';
 import { validate } from '../../middleware/validate.js';
 import * as controller from './transcripts.controller.js';
 import {
   dictationQuerySchema,
+  editSegmentsSchema,
   exportQuerySchema,
   listTranscriptsQuerySchema,
   requestTranscriptSchema,
   transcriptParamsSchema,
+  transliterateQuerySchema,
 } from './transcripts.validation.js';
 
 const MAX_DICTATION_BYTES = '25mb';
@@ -38,6 +40,16 @@ router.post(
   controller.dictation,
 );
 
+// Suggestions in an Indian script for a word typed in English letters, used
+// while fixing transcript lines (Google Input Tools, proxied and cached).
+router.get(
+  '/transliterate',
+  canView,
+  transliterateLimiter,
+  validate({ query: transliterateQuerySchema }),
+  controller.transliterate,
+);
+
 // One transcript per file, keyed by the file id.
 router.get('/:fileId', canView, withFileId, controller.get);
 router.post(
@@ -47,6 +59,15 @@ router.post(
   controller.request,
 );
 router.delete('/:fileId', canEdit, withFileId, controller.remove);
+// Has the AI watch a video too, not only read its transcript.
+router.post('/:fileId/watch-video', canEdit, withFileId, controller.watchVideo);
+// Hand-corrected lines (spelling, names) of a finished transcript.
+router.patch(
+  '/:fileId/segments',
+  canEdit,
+  validate({ params: transcriptParamsSchema, body: editSegmentsSchema }),
+  controller.editSegments,
+);
 router.get(
   '/:fileId/export',
   canView,

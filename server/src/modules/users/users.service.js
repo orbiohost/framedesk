@@ -1,6 +1,7 @@
 import { AppError } from '../../utils/AppError.js';
 import { hashPassword, verifyPassword } from '../../utils/password.js';
 import { revokeAllSessions } from '../auth/session.service.js';
+import { autoTranscribeMinutesOf } from './transcribePrefs.js';
 import { User } from './user.model.js';
 
 const BILLING_PROFILE_FIELDS = [
@@ -31,6 +32,7 @@ export function toPublicUser(user) {
     isSuperadmin: Boolean(user.isSuperadmin),
     createdAt: user.createdAt,
     billingProfile: toBillingProfile(user),
+    autoTranscribeMinutes: autoTranscribeMinutesOf(user),
   };
 }
 
@@ -50,10 +52,13 @@ export async function updateBillingProfile(userId, input) {
   return user;
 }
 
-export async function updateProfile(userId, { name }) {
+export async function updateProfile(userId, { name, autoTranscribeMinutes }) {
+  const set = {};
+  if (name !== undefined) set.name = name;
+  if (autoTranscribeMinutes !== undefined) set.autoTranscribeMinutes = autoTranscribeMinutes;
   const user = await User.findByIdAndUpdate(
     userId,
-    { $set: { name } },
+    { $set: set },
     { new: true, runValidators: true },
   );
   if (!user) throw AppError.notFound('User not found');

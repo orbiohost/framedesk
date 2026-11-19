@@ -82,14 +82,15 @@ const envSchema = z
       .optional()
       .transform((value) => value || undefined)
       .pipe(z.string().min(32, 'must be at least 32 characters').optional()),
-    // Speech-to-text service (the "whisper" container). Leave empty to turn
-    // transcripts and dictation off.
-    WHISPER_URL: z
+    // Speech-to-text service (the "asr" container, Qwen3-ASR). Leave empty to
+    // turn transcripts and dictation off. WHISPER_URL / WHISPER_API_KEY are
+    // still read when these are unset (older .env files).
+    ASR_URL: z
       .string()
       .optional()
       .transform((value) => value || undefined)
       .pipe(z.string().url().optional()),
-    WHISPER_API_KEY: z
+    ASR_API_KEY: z
       .string()
       .optional()
       .transform((value) => value || undefined),
@@ -105,6 +106,27 @@ const envSchema = z
       .optional()
       .transform((value) => value?.trim() || 'gemini-3.5-flash')
       .pipe(z.string().regex(/^[\w.-]+$/, 'must be a model name like gemini-3.5-flash')),
+    // The default image model (for "Create image"); the admin panel can change it.
+    GEMINI_IMAGE_MODEL: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined)
+      .pipe(
+        z
+          .string()
+          .regex(/^[\w.-]+$/, 'must be a model name')
+          .optional(),
+      ),
+    // Cloudflare Workers AI, for "Create image" (FLUX). Free daily allowance.
+    // Account ID: dashboard sidebar. Token: My Profile → API Tokens → "Workers AI" template.
+    CLOUDFLARE_ACCOUNT_ID: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    CLOUDFLARE_AI_TOKEN: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
     // Who may sign up. "standard" refuses temporary/disposable inboxes and
     // domains that can't receive mail. "strict" also refuses free mailboxes
     // other than Gmail (Outlook, Yahoo, iCloud...), so only Gmail and work email.
@@ -311,11 +333,11 @@ const envSchema = z
         message: 'set both S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY, or neither',
       });
     }
-    if (env.WHISPER_URL && (env.WHISPER_API_KEY?.length ?? 0) < 24) {
+    if (env.ASR_URL && (env.ASR_API_KEY?.length ?? 0) < 24) {
       ctx.addIssue({
         code: 'custom',
-        path: ['WHISPER_API_KEY'],
-        message: 'must be at least 24 characters when WHISPER_URL is set',
+        path: ['ASR_API_KEY'],
+        message: 'must be at least 24 characters when ASR_URL is set',
       });
     }
     if (env.MAIL_TRANSPORT === 'smtp' && !env.SMTP_HOST) {
@@ -350,7 +372,11 @@ const envSchema = z
   });
 
 function loadEnv() {
-  const result = envSchema.safeParse(process.env);
+  const result = envSchema.safeParse({
+    ...process.env,
+    ASR_URL: process.env.ASR_URL || process.env.WHISPER_URL,
+    ASR_API_KEY: process.env.ASR_API_KEY || process.env.WHISPER_API_KEY,
+  });
   if (!result.success) {
     console.error('Invalid environment configuration:');
     for (const issue of result.error.issues) {

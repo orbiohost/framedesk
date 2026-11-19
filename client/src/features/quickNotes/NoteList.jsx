@@ -21,10 +21,10 @@ function SectionLabel({ children }) {
 }
 
 // Pinned notes first under their own heading, then the rest (newest first).
-export function NoteList({ notes, workspaceId, onTagClick, hideProjectId }) {
+export function NoteList({ notes, workspaceId, onTagClick, hideProjectId, onOpen }) {
   const pinned = notes.filter((note) => note.pinned);
   const others = notes.filter((note) => !note.pinned);
-  const cardProps = { workspaceId, onTagClick, hideProjectId };
+  const cardProps = { workspaceId, onTagClick, hideProjectId, onOpen };
 
   if (pinned.length === 0) return <NoteGrid notes={others} {...cardProps} />;
   return (

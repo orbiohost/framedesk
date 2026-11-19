@@ -15,6 +15,7 @@ import {
   MAX_STROKES,
 } from './moodboard.model.js';
 import {
+  addNoteToBoard,
   analyseMoodboard,
   askMoodboard,
   createMoodboard,
@@ -205,6 +206,28 @@ router.post(
   }),
   asyncHandler(async (req, res) => {
     sendSuccess(res, { moodboard: await askMoodboard(ctx(req), req.params.boardId, req.body) });
+  }),
+);
+
+// A sticky note with given text (e.g. text picked in an AI answer).
+router.post(
+  '/:boardId/notes',
+  canEdit,
+  validate({
+    params,
+    body: z.object({
+      text: z.string().trim().min(1, 'Nothing to add').max(4000),
+      color: hexColor.optional(),
+    }),
+  }),
+  asyncHandler(async (req, res) => {
+    const result = await addNoteToBoard(
+      req.workspace._id,
+      req.params.boardId,
+      req.user._id,
+      req.body,
+    );
+    sendSuccess(res, result, { status: 201 });
   }),
 );
 

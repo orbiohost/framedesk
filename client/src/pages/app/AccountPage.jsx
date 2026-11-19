@@ -11,6 +11,7 @@ import {
   KeyRound,
   Plug,
   Settings,
+  Sparkles,
   UserRound,
 } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
@@ -18,21 +19,53 @@ import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Avatar } from '../../components/ui/Avatar.jsx';
 import { Dialog } from '../../components/ui/Dialog.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
+import { AutoTranscribeSection } from '../../features/account/AutoTranscribeSection.jsx';
 import { BillingSection } from '../../features/account/BillingSection.jsx';
 import { ConnectorsSection } from '../../features/connectors/ConnectorsSection.jsx';
 import { ProfileSection } from '../../features/account/ProfileSection.jsx';
 import { SecuritySection } from '../../features/account/SecuritySection.jsx';
 import { SettingsSection } from '../../features/account/SettingsSection.jsx';
+import { useAiStatus } from '../../features/ai/hooks.js';
 import { useCurrentUser } from '../../features/auth/hooks.js';
 import { NotificationsSection } from '../../features/notifications/NotificationsSection.jsx';
 import { ProjectSettingsSection } from '../../features/projects/ProjectSettingsSection.jsx';
 import { ReferralSection } from '../../features/referrals/ReferralSection.jsx';
 import { planLabel } from '../../features/workspaces/planLabel.js';
-import { canAdminister } from '../../features/workspaces/roles.js';
+import { canAdminister, canView } from '../../features/workspaces/roles.js';
 import { cn } from '../../lib/cn.js';
 
 // The avatar styles are a few hundred KB, so they load only when the picker opens.
 const AvatarPicker = lazy(() => import('../../features/users/AvatarPicker.jsx'));
+// The AI studio controls load only when their tab opens.
+const AiStudio = lazy(() =>
+  import('./AiStudioPage.jsx').then((module) => ({ default: module.AiStudio })),
+);
+
+// Assistants, skills and memory: the same controls as the AI studio page.
+function AiAssistantSection({ workspace }) {
+  return (
+    <section className="space-y-4">
+      <div className="bg-surface border-line/60 shadow-soft flex flex-wrap items-center justify-between gap-3 rounded-3xl border px-4 py-4 sm:px-6">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold">AI assistant</h2>
+          <p className="text-muted mt-0.5 text-sm">
+            Your custom assistants, reusable skills and what the AI remembers about you in{' '}
+            {workspace.name}.
+          </p>
+        </div>
+        <Link
+          to={`/w/${workspace.id}/ai`}
+          className="text-accent inline-flex shrink-0 items-center gap-1 text-sm font-medium hover:underline"
+        >
+          Open Ask AI <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </div>
+      <Suspense fallback={<Skeleton className="h-64 rounded-3xl" />}>
+        <AiStudio workspace={workspace} param="section" />
+      </Suspense>
+    </section>
+  );
+}
 
 function AccountHeader({ user, workspace, onChangePicture }) {
   return (
@@ -144,6 +177,10 @@ export function AccountPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const isAdmin = workspace && canAdminister(workspace);
+  const aiStatus = useAiStatus(workspace?.id, {
+    enabled: Boolean(workspace) && canView(workspace),
+  });
+  const aiEnabled = Boolean(workspace && aiStatus.data?.enabled);
   const tabs = [
     { id: 'profile', label: 'Profile', icon: UserRound },
     ...(workspace ? [{ id: 'projects', label: 'Projects', icon: FolderKanban }] : []),
@@ -151,6 +188,7 @@ export function AccountPage() {
     { id: 'security', label: 'Security', icon: KeyRound },
     { id: 'billing', label: 'Billing & invoices', icon: CreditCard },
     { id: 'refer', label: 'Refer & earn', icon: Gift },
+    ...(aiEnabled ? [{ id: 'ai', label: 'AI assistant', icon: Sparkles }] : []),
     { id: 'connectors', label: 'AI connectors', icon: Plug },
     ...(isAdmin ? [{ id: 'workspace', label: 'Workspace', icon: Settings }] : []),
   ];
@@ -169,11 +207,13 @@ export function AccountPage() {
       <Tabs tabs={tabs} active={active} onChange={selectTab} />
 
       {active === 'profile' && <ProfileSection user={user} onChangePicture={openPicker} />}
+      {active === 'profile' && <AutoTranscribeSection user={user} />}
       {active === 'projects' && workspace && <ProjectSettingsSection workspace={workspace} />}
       {active === 'notifications' && <NotificationsSection />}
       {active === 'security' && <SecuritySection />}
       {active === 'billing' && <BillingSection user={user} />}
       {active === 'refer' && <ReferralSection />}
+      {active === 'ai' && aiEnabled && <AiAssistantSection workspace={workspace} />}
       {active === 'connectors' && <ConnectorsSection />}
       {active === 'workspace' && isAdmin && <WorkspaceAdminSection workspace={workspace} />}
 

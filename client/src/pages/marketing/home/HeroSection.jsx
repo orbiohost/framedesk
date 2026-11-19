@@ -4,7 +4,12 @@ import { AI_GRADIENT, AI_TEXT } from '../../../features/ai/aiStyle.js';
 import { cn } from '../../../lib/cn.js';
 import { DashboardPreview } from './DashboardPreview.jsx';
 
-const PROOF = ['Free plan with 2 GB', 'No card needed', 'AI included on every plan'];
+const PROOF = [
+  'Free plan with 1 GB',
+  'No card needed',
+  'AI included on every plan',
+  'Hindi & English transcripts',
+];
 
 // Small cards that sit over the edges of the dashboard on wide screens.
 function FloatingCard({ icon: Icon, title, detail, className, tint }) {
@@ -37,7 +42,7 @@ export function HeroSection() {
       />
       <div className="relative mx-auto max-w-6xl px-4 pb-24 pt-14 text-center sm:px-6 md:pt-20">
         <a
-          href="#ai"
+          href="#tools"
           className="border-line/80 bg-surface/80 hover:border-accent/40 shadow-soft group mb-7 inline-flex max-w-full items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-sm backdrop-blur transition-colors"
         >
           <span
@@ -48,7 +53,9 @@ export function HeroSection() {
           >
             <Sparkles className="h-3 w-3" aria-hidden="true" /> New
           </span>
-          <span className="truncate">AI assistant and AI connectors are here</span>
+          <span className="truncate">
+            New: Notes & Briefs, Moodboards, Social hub and AI Studio
+          </span>
           <ArrowRight
             className="text-muted h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-x-0.5"
             aria-hidden="true"
@@ -60,9 +67,9 @@ export function HeroSection() {
           has seen it all.
         </h1>
         <p className="text-muted mx-auto mt-6 max-w-2xl text-lg leading-relaxed">
-          FrameDesk keeps each project’s rushes, versions, tasks and client notes together. The
-          built-in assistant transcribes your recordings, watches your clips and reads your briefs,
-          so you can ask what was said, what is ready and what to do next.
+          FrameDesk keeps each project’s rushes, versions, tasks and client feedback together. The
+          built-in assistant turns client calls into briefs, watches your clips and plans your
+          posts, so you can ask what was said, what is ready and what to do next.
         </p>
 
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
@@ -73,13 +80,13 @@ export function HeroSection() {
             Start free
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
-          <a
-            href="#ai"
+          <Link
+            to="/ai"
             className="border-line bg-surface hover:bg-subtle inline-flex items-center gap-2 rounded-full border px-6 py-3.5 text-sm font-semibold"
           >
             <Sparkles className="text-accent h-4 w-4" aria-hidden="true" />
             See the AI at work
-          </a>
+          </Link>
         </div>
         <ul className="text-muted mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm">
           {PROOF.map((item) => (

@@ -2,13 +2,47 @@ import { z } from 'zod';
 import { objectId } from '../../utils/zodHelpers.js';
 import { TRANSCRIPT_TASKS } from './transcript.model.js';
 import { EXPORT_FORMATS } from './transcriptFormats.js';
+import { TRANSLITERATE_LANGUAGES } from './transliterate.js';
 
-// Whisper's own codes ("en", "hi", "haw"...). The service rejects unknown ones.
+// The languages Qwen3-ASR can transcribe, as ISO codes (asr/app.py has the same list).
+export const ASR_LANGUAGES = [
+  'zh',
+  'en',
+  'yue',
+  'ar',
+  'de',
+  'fr',
+  'es',
+  'pt',
+  'id',
+  'it',
+  'ko',
+  'ru',
+  'th',
+  'vi',
+  'ja',
+  'tr',
+  'hi',
+  'ms',
+  'nl',
+  'sv',
+  'da',
+  'fi',
+  'pl',
+  'cs',
+  'fil',
+  'fa',
+  'el',
+  'hu',
+  'mk',
+  'ro',
+];
+
 const language = z
   .string()
   .trim()
   .toLowerCase()
-  .regex(/^[a-z]{2,3}$/, 'Use a language code such as en or hi')
+  .refine((value) => !value || ASR_LANGUAGES.includes(value), 'That language is not supported')
   .nullable()
   .optional()
   .transform((value) => value || null);
@@ -35,3 +69,26 @@ export const exportQuerySchema = z.object({
 });
 
 export const dictationQuerySchema = z.object({ language });
+
+// Fixed lines of a finished transcript (spelling, names): index → new text.
+export const editSegmentsSchema = z.object({
+  edits: z
+    .array(
+      z.object({
+        index: z.number().int().min(0),
+        text: z.string().trim().min(1, 'A line cannot be empty').max(2000),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+
+export const transliterateQuerySchema = z.object({
+  text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .regex(/^[a-zA-Z']+$/, 'Only English letters'),
+  language: z.enum(Object.keys(TRANSLITERATE_LANGUAGES)),
+});

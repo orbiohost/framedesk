@@ -1,12 +1,16 @@
 import { Check } from 'lucide-react';
 import { cn } from '../../lib/cn.js';
 import { parseLine } from './noteFormat.js';
+import { parseStyleClasses, styleClassNames } from './noteStyles.js';
 
 // Inline marks, in priority order. Built into React elements, never HTML,
 // so a note can't inject markup.
 const INLINE = new RegExp(
   [
+    String.raw`(?<style>\[(?<styleText>[^\]\n]+)\]\{(?<styleCls>\.[a-z]+(?: \.[a-z]+)*)\})`,
     String.raw`(?<bold>\*\*(?<boldText>[^*\n]+?)\*\*)`,
+    String.raw`(?<under>\+\+(?<underText>[^+\n]+?)\+\+)`,
+    String.raw`(?<hl>==(?<hlText>[^=\n]+?)==)`,
     String.raw`(?<strike>~~(?<strikeText>[^~\n]+?)~~)`,
     String.raw`(?<code>\x60(?<codeText>[^\x60\n]+?)\x60)`,
     String.raw`(?<italic>(?<![\p{L}\p{N}_*])[_*](?<italicText>[^\s_*][^_*\n]*?)[_*](?![\p{L}\p{N}_*]))`,
@@ -25,7 +29,25 @@ function Inline({ text, onTagClick }) {
     parts.push(text.slice(last, match.index));
     last = match.index + match[0].length;
 
-    if (groups.bold) {
+    if (groups.style) {
+      parts.push(
+        <span key={key} className={styleClassNames(parseStyleClasses(groups.styleCls))}>
+          <Inline text={groups.styleText} onTagClick={onTagClick} />
+        </span>,
+      );
+    } else if (groups.under) {
+      parts.push(
+        <u key={key} className="underline-offset-2">
+          <Inline text={groups.underText} onTagClick={onTagClick} />
+        </u>,
+      );
+    } else if (groups.hl) {
+      parts.push(
+        <mark key={key} className="note-hl">
+          <Inline text={groups.hlText} onTagClick={onTagClick} />
+        </mark>,
+      );
+    } else if (groups.bold) {
       parts.push(
         <strong key={key} className="font-semibold">
           <Inline text={groups.boldText} onTagClick={onTagClick} />
@@ -142,7 +164,7 @@ function toBlocks(text) {
   text.split('\n').forEach((line, index) => {
     const parsed = { ...parseLine(line), line: index };
     const previous = blocks[blocks.length - 1];
-    const isList = ['check', 'bullet', 'numbered'].includes(parsed.type);
+    const isList = ['check', 'bullet', 'numbered', 'quote'].includes(parsed.type);
     if (isList && previous?.type === parsed.type) previous.items.push(parsed);
     else if (isList) blocks.push({ type: parsed.type, items: [parsed], line: index });
     else blocks.push(parsed);
@@ -169,6 +191,20 @@ export function NoteMarkdown({ text, onToggle, onTagClick, className }) {
             <p key={key} className={cn('pt-1 font-semibold', HEADING_SIZES[block.level])}>
               <Inline text={block.text} onTagClick={onTagClick} />
             </p>
+          );
+        }
+        if (block.type === 'divider') {
+          return <hr key={key} className="border-line my-2" />;
+        }
+        if (block.type === 'quote') {
+          return (
+            <blockquote key={key} className="border-ink/20 text-ink/80 border-l-2 pl-3">
+              {block.items.map((item) => (
+                <p key={item.line} className="min-h-[1em] whitespace-pre-wrap">
+                  <Inline text={item.text} onTagClick={onTagClick} />
+                </p>
+              ))}
+            </blockquote>
           );
         }
         if (block.type === 'check') {

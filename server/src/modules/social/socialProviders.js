@@ -115,7 +115,12 @@ async function request(url, { method = 'GET', headers = {}, form, json, bearer }
   }
   if (!response.ok) throw readApiError(response.status, body);
   // TikTok answers 200 with error.code !== 'ok' on some failures.
-  if (body?.error && typeof body.error === 'object' && body.error.code && body.error.code !== 'ok') {
+  if (
+    body?.error &&
+    typeof body.error === 'object' &&
+    body.error.code &&
+    body.error.code !== 'ok'
+  ) {
     throw readApiError(response.status, body);
   }
   return body ?? {};
@@ -240,7 +245,9 @@ const instagram = {
     );
     const permissions = Array.isArray(row.permissions)
       ? row.permissions
-      : String(row.permissions ?? '').split(',').filter(Boolean);
+      : String(row.permissions ?? '')
+          .split(',')
+          .filter(Boolean);
     return {
       accessToken: long.access_token,
       refreshToken: null,
@@ -367,7 +374,8 @@ function fbProfile(page) {
   };
 }
 
-const PAGE_FIELDS = 'id,name,username,category,fan_count,followers_count,link,about,picture.type(large){url}';
+const PAGE_FIELDS =
+  'id,name,username,category,fan_count,followers_count,link,about,picture.type(large){url}';
 
 const facebook = {
   id: 'facebook',
@@ -530,9 +538,13 @@ function ytGet(path, params, auth) {
 }
 
 async function ytChannels(accessToken) {
-  const body = await ytGet('channels', { part: 'snippet,statistics,contentDetails', mine: 'true' }, {
-    bearer: accessToken,
-  });
+  const body = await ytGet(
+    'channels',
+    { part: 'snippet,statistics,contentDetails', mine: 'true' },
+    {
+      bearer: accessToken,
+    },
+  );
   return body.items ?? [];
 }
 
@@ -546,7 +558,11 @@ async function ytVideos(channel, auth) {
   );
   const ids = (list.items ?? []).map((item) => item.contentDetails?.videoId).filter(Boolean);
   if (!ids.length) return [];
-  const details = await ytGet('videos', { part: 'snippet,statistics,contentDetails', id: ids.join(',') }, auth);
+  const details = await ytGet(
+    'videos',
+    { part: 'snippet,statistics,contentDetails', id: ids.join(',') },
+    auth,
+  );
   return (details.items ?? []).map(ytPost);
 }
 
@@ -563,7 +579,9 @@ function ytPost(video) {
     mediaType: isShort ? 'short' : 'video',
     mediaUrl: null,
     thumbnailUrl: snippet.thumbnails?.high?.url ?? snippet.thumbnails?.medium?.url ?? null,
-    permalink: isShort ? `https://www.youtube.com/shorts/${video.id}` : `https://www.youtube.com/watch?v=${video.id}`,
+    permalink: isShort
+      ? `https://www.youtube.com/shorts/${video.id}`
+      : `https://www.youtube.com/watch?v=${video.id}`,
     publishedAt: snippet.publishedAt ? new Date(snippet.publishedAt) : new Date(),
     durationSeconds: seconds,
     metrics: {
@@ -589,14 +607,22 @@ export const youtubePublic = {
     else params.forHandle = ref.startsWith('@') ? ref : `@${ref}`;
     const body = await ytGet('channels', params, auth);
     const channel = body.items?.[0];
-    if (!channel) throw new SocialApiError('No YouTube channel found with that handle or link', { status: 404 });
+    if (!channel)
+      throw new SocialApiError('No YouTube channel found with that handle or link', {
+        status: 404,
+      });
     return { externalId: String(channel.id), profile: ytChannelProfile(channel), channel };
   },
   async snapshot(externalId) {
     const auth = { key: youtubeApiKey().key };
-    const body = await ytGet('channels', { part: 'snippet,statistics,contentDetails', id: externalId }, auth);
+    const body = await ytGet(
+      'channels',
+      { part: 'snippet,statistics,contentDetails', id: externalId },
+      auth,
+    );
     const channel = body.items?.[0];
-    if (!channel) throw new SocialApiError('The YouTube channel is no longer available', { status: 404 });
+    if (!channel)
+      throw new SocialApiError('The YouTube channel is no longer available', { status: 404 });
     return {
       profile: ytChannelProfile(channel),
       posts: await ytVideos(channel, auth),
@@ -641,11 +667,16 @@ const youtube = {
         code_verifier: verifier,
       },
     });
-    const scopes = String(body.scope ?? '').split(' ').filter(Boolean);
+    const scopes = String(body.scope ?? '')
+      .split(' ')
+      .filter(Boolean);
     if (!scopes.some((scope) => scope.includes('youtube'))) {
-      throw new SocialApiError('YouTube access was not granted. Tick the YouTube permission and try again.', {
-        status: 403,
-      });
+      throw new SocialApiError(
+        'YouTube access was not granted. Tick the YouTube permission and try again.',
+        {
+          status: 403,
+        },
+      );
     }
     return {
       accessToken: body.access_token,
@@ -656,7 +687,8 @@ const youtube = {
     };
   },
   async refresh(tokenSet) {
-    if (tokenSet.expiresAt && tokenSet.expiresAt.getTime() - Date.now() > 2 * 60 * 1000) return null;
+    if (tokenSet.expiresAt && tokenSet.expiresAt.getTime() - Date.now() > 2 * 60 * 1000)
+      return null;
     if (!tokenSet.refreshToken) {
       throw new SocialApiError('YouTube access has expired', { status: 401, needsReconnect: true });
     }
@@ -686,7 +718,8 @@ const youtube = {
   async snapshot(tokenSet, externalId) {
     const channels = await ytChannels(tokenSet.accessToken);
     const channel = channels.find((item) => item.id === externalId) ?? channels[0];
-    if (!channel) throw new SocialApiError('The YouTube channel is no longer available', { status: 404 });
+    if (!channel)
+      throw new SocialApiError('The YouTube channel is no longer available', { status: 404 });
     const posts = await ytVideos(channel, { bearer: tokenSet.accessToken });
     return {
       profile: ytChannelProfile(channel),
@@ -710,7 +743,9 @@ function ttTokenSet(body) {
     refreshToken: body.refresh_token ?? null,
     expiresAt: expiresIn(body.expires_in),
     refreshExpiresAt: expiresIn(body.refresh_expires_in),
-    scopes: String(body.scope ?? '').split(',').filter(Boolean),
+    scopes: String(body.scope ?? '')
+      .split(',')
+      .filter(Boolean),
   };
 }
 
@@ -726,7 +761,9 @@ async function ttUser(accessToken) {
       accountName: user.display_name || user.username,
       accountType: 'creator',
       avatarUrl: user.avatar_url ?? null,
-      profileUrl: user.profile_deep_link ?? (user.username ? `https://www.tiktok.com/@${user.username}` : null),
+      profileUrl:
+        user.profile_deep_link ??
+        (user.username ? `https://www.tiktok.com/@${user.username}` : null),
       bio: user.bio_description ?? '',
       followerCount: num(user.follower_count),
       followingCount: num(user.following_count),
@@ -769,7 +806,8 @@ const tiktok = {
     return ttTokenSet(body);
   },
   async refresh(tokenSet) {
-    if (tokenSet.expiresAt && tokenSet.expiresAt.getTime() - Date.now() > 5 * 60 * 1000) return null;
+    if (tokenSet.expiresAt && tokenSet.expiresAt.getTime() - Date.now() > 5 * 60 * 1000)
+      return null;
     if (!tokenSet.refreshToken) {
       throw new SocialApiError('TikTok access has expired', { status: 401, needsReconnect: true });
     }

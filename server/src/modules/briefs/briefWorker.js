@@ -13,6 +13,7 @@ import { Transcript } from '../transcripts/transcript.model.js';
 import { User } from '../users/user.model.js';
 import { findPoolWorkspace } from '../workspaces/storagePool.js';
 import { Workspace } from '../workspaces/workspace.model.js';
+import { autoTranscribeBriefFiles } from './briefTranscribe.js';
 import { ProjectBrief } from './projectBrief.model.js';
 
 // Writes each project's brief from what is in its "Notes & Briefs" folder.
@@ -123,7 +124,7 @@ async function finish(brief, staleAtClaim, changes) {
   // Changed again while this ran: keep it queued so the newest material gets in.
   const result = await ProjectBrief.updateOne(
     { _id: brief._id, workspaceId: brief.workspaceId, staleSince: staleAtClaim },
-    { $set: { ...changes, staleSince: null, claimedAt: null } },
+    { $set: { ...changes, staleSince: null, claimedAt: null, runStartedAt: null } },
   );
   if (result.matchedCount === 0) {
     const { status: _ignored, ...rest } = changes;
@@ -329,6 +330,8 @@ async function writeBrief(brief, settings) {
     return;
   }
 
+  // Clips that were never looked at (put here before this existed, or missed).
+  await autoTranscribeBriefFiles(files);
   if (await readPending(files, settings)) {
     // Checked again after the debounce; a finished analysis also re-queues it.
     await ProjectBrief.updateOne(
@@ -367,6 +370,7 @@ async function writeBrief(brief, settings) {
     return;
   }
 
+  const writeStartedAt = Date.now();
   const result = await generateContent({
     model: settings.model,
     system: SYSTEM,
@@ -380,6 +384,7 @@ async function writeBrief(brief, settings) {
       maxOutputTokens: 16_384,
     },
   });
+  const writeMs = Date.now() - writeStartedAt;
   const known = new Set(ordered.map((file) => String(file._id)));
   const content = parse(result.text, known);
 
@@ -405,6 +410,7 @@ async function writeBrief(brief, settings) {
     model: result.model,
     tokens: result.totalTokens,
     credits: spent,
+    writeMs,
     // A rewritten brief has new action items; old ids no longer match.
     tasksCreatedFor: [],
   });
@@ -424,7 +430,14 @@ async function retryLater(brief, error) {
     { _id: brief._id, workspaceId: brief.workspaceId },
     {
       $set: final
-        ? { status: 'failed', error: message, attempts, staleSince: null, claimedAt: null }
+        ? {
+            status: 'failed',
+            error: message,
+            attempts,
+            staleSince: null,
+            claimedAt: null,
+            runStartedAt: null,
+          }
         : {
             status: 'queued',
             error: message,

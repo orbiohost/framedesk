@@ -1,26 +1,18 @@
-import { AiSection } from './home/AiSection.jsx';
-import { AndroidAppSection } from './home/AndroidAppSection.jsx';
-import { ConnectorsShowcase } from './home/ConnectorsShowcase.jsx';
-import { FaqSection } from './home/FaqSection.jsx';
-import { FeatureGrid } from './home/FeatureGrid.jsx';
+import { ExploreLinks } from './home/ExploreLinks.jsx';
 import { FinalCta } from './home/FinalCta.jsx';
 import { HeroSection } from './home/HeroSection.jsx';
 import { PricingPreview } from './home/PricingPreview.jsx';
-import { ProblemSection } from './home/ProblemSection.jsx';
-import { WorkflowsSection } from './home/WorkflowsSection.jsx';
+import { StudioToolsSection } from './home/StudioToolsSection.jsx';
 
+// Kept short: what FrameDesk is, what it does, what it costs. The detail
+// lives on /features, /ai and /pricing.
 export function HomePage() {
   return (
     <main>
       <HeroSection />
-      <ProblemSection />
-      <AiSection />
-      <ConnectorsShowcase />
-      <WorkflowsSection />
-      <FeatureGrid />
+      <StudioToolsSection />
+      <ExploreLinks />
       <PricingPreview />
-      <AndroidAppSection />
-      <FaqSection />
       <FinalCta />
     </main>
   );

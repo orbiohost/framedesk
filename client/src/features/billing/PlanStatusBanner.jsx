@@ -18,7 +18,7 @@ function bannerMessage(billing) {
   }
   if (billing.status === 'none') return 'This workspace has no plan yet, so uploads are paused.';
   if (billing.status === 'read_only')
-    return 'Your plan has ended and this account is moving to the free plan (2 GB). Your files are safe; renew to keep your space.';
+    return 'Your plan has ended and this account is moving to the free plan (1 GB). Your files are safe; renew to keep your space.';
   return null;
 }
 

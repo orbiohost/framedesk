@@ -16,6 +16,10 @@ import { analyseOnDemand } from './analysisWorker.js';
 import { clock, formatSize, transcriptText, truncate } from './aiText.js';
 import { creditBalance, creditsForTokens, resetPriceFor, spendCredits } from './credits.service.js';
 import { isGeminiConfigured, streamContent, toAppError } from './gemini.client.js';
+import { findUsableAgent } from './aiAgents.service.js';
+import { getPreferences, learnFromChat, memoriesForChat, memoryBlock } from './aiMemory.service.js';
+import { defaultModel, maxReferencesFor, publicModels, resolveModel } from './aiModels.js';
+import { MAX_SKILLS_PER_QUESTION, recordSkillUse, resolveSkills } from './aiSkills.service.js';
 
 // The chat: answers questions about the workspace's files from the notes the
 // analysis worker made (plus transcripts), never from files the asker can't open.
@@ -31,6 +35,9 @@ const ON_DEMAND_FILES = 4;
 const ON_DEMAND_WAIT_MS = 60_000;
 // Files listed by name only, after the focus files; keeps prompts (and waits) small.
 const OTHER_FILES_LISTED = 150;
+// "//" (whole Drive): more files read in full, and more listed with their summaries.
+const WHOLE_DRIVE_FOCUS = 20;
+const WHOLE_DRIVE_LISTED = 400;
 const THREADS_LISTED = 60;
 // Files one question can carry ("@" or uploaded in the chat), and "@" results.
 export const MAX_ATTACHED = 5;
@@ -74,7 +81,7 @@ function firstName(user) {
   return (user.name ?? '').trim().split(/\s+/)[0] || 'there';
 }
 
-function assertLive(settings, pool) {
+export function assertLive(settings, pool) {
   if (!isAiLive(settings)) {
     throw AppError.unavailable('The AI assistant is turned off right now', 'AI_OFF');
   }
@@ -92,10 +99,18 @@ function timeOfDay(date) {
   }).format(date);
 }
 
-function noCreditsError(balance) {
+export function noCreditsError(balance) {
   const window = balance?.limitedBy === 'weekly' ? balance.weekly : balance?.session;
   const which = balance?.limitedBy === 'weekly' ? 'weekly' : '5-hour';
   const when = window?.resetsAt ? ` It resets ${timeOfDay(new Date(window.resetsAt))}.` : '';
+  if (!balance?.limitedBy) {
+    return new AppError(
+      402,
+      'NO_CREDITS',
+      'You don’t have enough AI credits left for this. Owners can buy extra usage on the Upgrade page.',
+      { usage: balance },
+    );
+  }
   return new AppError(
     402,
     'NO_CREDITS',
@@ -117,6 +132,7 @@ export async function getAiStatus({ workspace, pool }) {
     // Only files being studied right now (others wait until someone asks).
     StoredFile.countDocuments({ ...base, aiState: 'processing' }),
   ]);
+  const planRefs = settings.refImageLimits[resetPriceFor(pool, settings)] ?? 3;
   return {
     enabled: true,
     configured: true,
@@ -125,6 +141,27 @@ export async function getAiStatus({ workspace, pool }) {
     // Rupees before GST to reset the limits now; null when it can't be bought.
     resetPrice: resetPriceFor(pool, settings),
     library: { total, analyzed, waiting },
+    // "Create image": what it costs and how many reference images this plan allows.
+    images: {
+      credits: Math.max(1, settings.imageCredits),
+      maxReferences: maxReferencesFor(settings, defaultModel(settings, 'image'), planRefs),
+    },
+    // The models people can pick (FrameDesk names; "soon" ones show as coming soon).
+    // Image models carry their own reference limit (Cloudflare FLUX takes 4).
+    models: publicModels(settings).map((model) =>
+      model.kind === 'image'
+        ? {
+            ...model,
+            // Credits one picture costs with this model.
+            credits: Math.max(1, Math.ceil(settings.imageCredits * model.creditMultiplier)),
+            maxReferences: maxReferencesFor(
+              settings,
+              settings.models.find((entry) => entry.key === model.key),
+              planRefs,
+            ),
+          }
+        : model,
+    ),
   };
 }
 
@@ -207,7 +244,7 @@ async function toEntries(workspaceId, files) {
 
 // Files attached to a question with "@" or uploaded in the chat. Every one must
 // still exist and be open to the asker.
-async function loadAttached(workspaceId, viewer, fileIds) {
+export async function loadAttached(workspaceId, viewer, fileIds) {
   const unique = [...new Set((fileIds ?? []).map(String))];
   if (unique.length === 0) return [];
   const [hidden, files] = await Promise.all([
@@ -227,6 +264,32 @@ async function loadAttached(workspaceId, viewer, fileIds) {
   const order = new Map(unique.map((id, index) => [id, index]));
   visible.sort((a, b) => order.get(String(a._id)) - order.get(String(b._id)));
   return toEntries(workspaceId, visible);
+}
+
+// An assistant's knowledge files: unlike attachments, ones the asker can't open
+// (or that were deleted) are skipped quietly.
+async function loadKnowledgeFiles(workspaceId, viewer, fileIds) {
+  if (!fileIds?.length) return [];
+  const [hidden, files] = await Promise.all([
+    hiddenFolderIds(workspaceId, viewer),
+    StoredFile.find({ workspaceId, _id: { $in: fileIds }, deletedAt: null })
+      .select(LIBRARY_FIELDS)
+      .populate('uploadedBy', 'name')
+      .lean(),
+  ]);
+  return toEntries(
+    workspaceId,
+    files.filter((file) => !hidden.has(String(file.folderId))),
+  );
+}
+
+// An assistant's knowledge notes the asker may read (others are skipped).
+async function loadKnowledgeNotes(workspaceId, userId, noteIds) {
+  if (!noteIds?.length) return [];
+  const notes = await Promise.all(
+    noteIds.map((id) => loadNotesForAi(workspaceId, userId, [id]).catch(() => [])),
+  );
+  return notes.flat();
 }
 
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -295,6 +358,11 @@ function describe(entry, { full }) {
   } else if (insight?.note) {
     lines.push(`  (Not analysed: ${insight.note})`);
   }
+  if (insight?.summary && insight.source === 'transcript' && file.category === 'video') {
+    lines.push(
+      '  (Read from its transcript only: the picture was not watched. For shots, people or on-screen text, the user can choose "Watch the video too" in the transcript panel of the file.)',
+    );
+  }
   return lines.join('\n');
 }
 
@@ -348,6 +416,51 @@ function notesBlock(notes) {
   return blocks.join('\n\n');
 }
 
+// Who the assistant is: the default FrameDesk assistant, or a custom one.
+function identityBlock({ workspaceName, user, agent }) {
+  if (!agent) {
+    return `You are the FrameDesk AI assistant inside the workspace "${workspaceName}". You help the team find and understand the files they uploaded: videos, audio, images and documents, plus their transcripts.
+You are talking to ${user.name}; call them ${firstName(user)} when greeting them.`;
+  }
+  return `You are "${agent.name}", a custom AI assistant the team built inside the FrameDesk workspace "${workspaceName}".${agent.description ? ` Purpose: ${agent.description}` : ''}
+You are talking to ${user.name}; call them ${firstName(user)} when greeting them. If asked who you are, say you are ${agent.name}.
+You can also read the team's uploaded files (videos, audio, images, documents and transcripts) listed in the LIBRARY.${
+    agent.instructions
+      ? `\n\nYOUR INSTRUCTIONS (from the person who set you up; follow them unless they conflict with the rules below)\n${agent.instructions}`
+      : ''
+  }`;
+}
+
+// One skill as a prompt section; its example (if any) shows the shape to match.
+function skillText(skill) {
+  const example = skill.example
+    ? `\nExample of a great answer (match its structure and tone, not its facts):\n<<<\n${truncate(skill.example, 4000)}\n>>>`
+    : '';
+  return `### ${skill.name}\n${skill.instructions}${example}`;
+}
+
+// Skills: saved instructions for the kind of answer to write.
+function skillsBlock({ picked, standing }) {
+  const blocks = [];
+  if (picked.length) {
+    blocks.push(
+      `SKILLS FOR THIS QUESTION (the user picked these; follow them for this answer)\n${picked
+        .map(skillText)
+        .join('\n\n')}`,
+    );
+  }
+  const pickedIds = new Set(picked.map((skill) => skill.id));
+  const rest = standing.filter((skill) => !pickedIds.has(skill.id));
+  if (rest.length) {
+    blocks.push(
+      `YOUR SKILLS (use one when the request clearly calls for it)\n${rest
+        .map(skillText)
+        .join('\n\n')}`,
+    );
+  }
+  return blocks.join('\n\n');
+}
+
 function systemPrompt({
   workspaceName,
   user,
@@ -358,13 +471,30 @@ function systemPrompt({
   attached,
   notes,
   brief = null,
+  agent = null,
+  knowledgeNotes = [],
+  skills = { picked: [], standing: [] },
+  memories = [],
+  wholeDrive = false,
+  general = false,
+  quote = '',
 }) {
   const focusIds = new Set(focus.map((entry) => entry.id));
   const rest = library.entries.filter((entry) => !focusIds.has(entry.id));
   const omitted = library.total - library.entries.length;
+  const listed = wholeDrive ? WHOLE_DRIVE_LISTED : OTHER_FILES_LISTED;
   let scope = project
     ? `\nThis question is limited to the project "${project.title}": the library below holds only that project's files. Answer about this project only.\n`
     : '';
+  if (wholeDrive) {
+    scope += `\nThe user typed "//": they want you to use their WHOLE Drive (all footage, images, audio and documents in the LIBRARY) for this task. When they are writing a script, a shot list, an edit plan, a post or anything similar, do the task and, for each part (scene, beat, line or section), suggest the files from the LIBRARY that fit it best, with a short reason and m:ss timestamps where you know them. Say plainly when nothing in the Drive fits a part and what footage would be needed.\n`;
+  }
+  if (quote) {
+    scope += `\nThe user quoted a passage (see QUOTED TEXT below), usually from one of your earlier answers, and is asking about it. Words like "this", "it" or "that part" mean the quoted text. Build on it, explain, rewrite or expand it as asked.\n`;
+  }
+  if (general) {
+    scope += `\nNo project, file or note was picked, and the question doesn't name anything in the team's Drive, so no files are included. Answer it as a general assistant from your own knowledge and this conversation only. Don't bring up or guess at the team's files or earlier chats. If the answer needs their files, say they can type "//" to use the whole Drive, "/" to pick a project or "@" to attach a file.\n`;
+  }
   if (attached.length > 0) {
     scope += `\nThe user attached ${attached.length === 1 ? 'this file' : 'these files'} to the question: ${attached
       .map((entry) => `${entry.file.displayName} [[file:${entry.id}]]`)
@@ -380,17 +510,37 @@ function systemPrompt({
   }
   const notesText = notesBlock(notes);
   const briefText = brief ? briefBlock(brief) : '';
-  return `You are the FrameDesk AI assistant inside the workspace "${workspaceName}". You help the team find and understand the files they uploaded: videos, audio, images and documents, plus their transcripts.
-You are talking to ${user.name}; call them ${firstName(user)} when greeting them.
+  const knowledgeText = [agent?.knowledge, knowledgeNotes.length ? notesBlock(knowledgeNotes) : '']
+    .filter(Boolean)
+    .join('\n\n');
+  const skillsText = skillsBlock(skills);
+  const memoryText = memoryBlock(memories, { ids: false });
+  const libraryText = libraryBlock({ library, focus, rest, transcripts, omitted, listed, general });
+  // With a persona or a writing skill, the assistant may write and use general
+  // know-how; facts about the team's files still come only from the library.
+  const creative = Boolean(agent || skillsText || general || wholeDrive);
+  const groundingRule = !libraryText
+    ? `- You have no access to the team's files for this question. Never invent file names or contents.`
+    : creative
+      ? `- Facts about the team's files, projects and clients come only from the LIBRARY${notesText ? ', the NOTES' : ''}${knowledgeText ? ', YOUR KNOWLEDGE' : ''} and this conversation; never invent file contents. For writing, ideas, advice and general know-how you may use your own knowledge.`
+      : `- Answer only from the LIBRARY${notesText ? ', the NOTES' : ''} below and this conversation. If the answer isn't there, say so plainly and suggest what to look at. Never invent file contents.`;
+  return `${identityBlock({ workspaceName, user, agent })}
 ${scope}
 Rules:
-- Answer only from the LIBRARY${notesText ? ', the NOTES' : ''} below and this conversation. If the answer isn't there, say so plainly and suggest what to look at. Never invent file contents.
+${groundingRule}${memoryText ? '\n- MEMORY holds what you know about this person from earlier chats. Use it quietly to tailor answers; mention it only if asked what you remember. If it conflicts with what they say now, follow what they say now.' : ''}
 - Every time you mention a file, put its citation right after its name, exactly as written in the library, e.g. "Interview_01.mp4 [[file:0123456789abcdef01234567]]".
 - Point into clips with m:ss timestamps when you can.
 - Be concise. Use short bullet lists for several files. Use **bold** sparingly.
 - Reply in the language the user writes in.
 - Today is ${new Date().toISOString().slice(0, 10)}.
-${briefText ? `\nPROJECT BRIEF (written ${brief.generatedAt.toISOString().slice(0, 10)})\n\n${briefText}\n` : ''}${notesText ? `\nNOTES (added by the user)\n\n${notesText}\n` : ''}
+${memoryText ? `\nMEMORY (about ${firstName(user)})\n${memoryText}\n` : ''}${skillsText ? `\n${skillsText}\n` : ''}${knowledgeText ? `\nYOUR KNOWLEDGE (written or chosen by the person who set you up; trusted)\n\n${truncate(knowledgeText, 50_000)}\n` : ''}${briefText ? `\nPROJECT BRIEF (written ${brief.generatedAt.toISOString().slice(0, 10)})\n\n${briefText}\n` : ''}${notesText ? `\nNOTES (added by the user)\n\n${notesText}\n` : ''}${quote ? `\nQUOTED TEXT\n<<<\n${quote}\n>>>\n` : ''}${libraryText}`;
+}
+
+// The LIBRARY section: focus files in full, then the rest by name and summary.
+// A general question (nothing picked or named) gets none.
+function libraryBlock({ library, focus, rest, transcripts, omitted, listed, general }) {
+  if (general && library.entries.length === 0) return '';
+  return `
 LIBRARY (${library.total} files the user can open${omitted > 0 ? `; the oldest ${omitted} are not listed` : ''})
 
 Most relevant files, in full:
@@ -399,13 +549,13 @@ ${focus.map((entry) => describe(entry, { full: true })).join('\n\n') || '(none)'
 ${transcripts ? `TRANSCRIPTS\n${transcripts}\n\n` : ''}Other files:
 ${
   rest
-    .slice(0, OTHER_FILES_LISTED)
+    .slice(0, listed)
     .map((entry) => describe(entry, { full: false }))
     .join('\n') || '(none)'
-}${rest.length > OTHER_FILES_LISTED ? `\n(${rest.length - OTHER_FILES_LISTED} more files not listed)` : ''}`;
+}${rest.length > listed ? `\n(${rest.length - listed} more files not listed)` : ''}`;
 }
 
-function toMessageDto(message) {
+export function toMessageDto(message) {
   return {
     id: String(message._id),
     role: message.role,
@@ -415,19 +565,26 @@ function toMessageDto(message) {
     project: message.projectId
       ? { id: String(message.projectId), title: message.projectTitle }
       : null,
+    wholeDrive: Boolean(message.wholeDrive),
+    quote: message.quote ?? null,
     attachments: (message.attachments ?? []).map((file) => ({
       id: String(file.fileId),
       name: file.name,
       category: file.category,
     })),
     notes: (message.notes ?? []).map((note) => ({ id: String(note.noteId), title: note.title })),
+    skills: (message.skills ?? []).map((skill) => ({ id: skill.id, name: skill.name })),
     stopped: Boolean(message.stopped),
+    modelName: message.modelName ?? null,
+    kind: message.kind ?? 'text',
+    images: (message.images ?? []).map(String),
+    imageOptions: message.imageOptions ?? null,
     createdAt: message.createdAt,
   };
 }
 
 // File cards for cited files the viewer can still open.
-async function citedFiles(workspaceId, fileIds, viewer) {
+export async function citedFiles(workspaceId, fileIds, viewer) {
   const unique = [...new Set(fileIds.map(String))];
   if (unique.length === 0) return [];
   const hidden = await hiddenFolderIds(workspaceId, viewer);
@@ -437,12 +594,13 @@ async function citedFiles(workspaceId, fileIds, viewer) {
   return files.filter((file) => !hidden.has(String(file.folderId))).map(toFileDto);
 }
 
-function toThreadSummary(thread) {
+export function toThreadSummary(thread) {
   return {
     id: String(thread._id),
     title: thread.title,
     lastMessageAt: thread.lastMessageAt,
     messageCount: thread.messageCount ?? thread.messages?.length ?? 0,
+    agent: thread.agentId ? { id: String(thread.agentId), name: thread.agentName } : null,
   };
 }
 
@@ -472,12 +630,20 @@ export async function listThreads({ workspace, user }) {
     { $match: { workspaceId: workspace._id, userId: user._id } },
     { $sort: { lastMessageAt: -1 } },
     { $limit: THREADS_LISTED },
-    { $project: { title: 1, lastMessageAt: 1, messageCount: { $size: '$messages' } } },
+    {
+      $project: {
+        title: 1,
+        lastMessageAt: 1,
+        agentId: 1,
+        agentName: 1,
+        messageCount: { $size: '$messages' },
+      },
+    },
   ]);
   return threads.map(toThreadSummary);
 }
 
-async function findThreadOrThrow(workspace, user, threadId) {
+export async function findThreadOrThrow(workspace, user, threadId) {
   const thread = await AiThread.findOne({
     _id: threadId,
     workspaceId: workspace._id,
@@ -567,7 +733,7 @@ export async function deleteThread({ workspace, user }, threadId) {
 }
 
 // A chat is named after its first question.
-function titleFrom(text) {
+export function titleFrom(text) {
   const clean = text.replace(/\s+/g, ' ').trim();
   if (!clean) return 'New chat';
   return clean.length > 60 ? `${clean.slice(0, 57).trimEnd()}…` : clean;
@@ -626,8 +792,23 @@ async function prepareContext({
   text,
   history,
   emit,
+  agent = null,
+  pinned = [],
+  knowledgeNotes = [],
+  skills = { picked: [], standing: [] },
+  memories = [],
+  wholeDrive = false,
+  quote = '',
 }) {
-  const smallTalk = !project && attached.length === 0 && notes.length === 0 && isSmallTalk(text);
+  const smallTalk =
+    !agent &&
+    !quote &&
+    !skills.picked.length &&
+    !project &&
+    !wholeDrive &&
+    attached.length === 0 &&
+    notes.length === 0 &&
+    isSmallTalk(text);
   if (smallTalk) {
     const fileCount = await StoredFile.countDocuments({
       workspaceId: workspace._id,
@@ -647,37 +828,49 @@ async function prepareContext({
   const library = await loadLibrary(workspace._id, viewer, project);
   // Attached files lead the library (and can come from outside the project).
   const attachedIds = new Set(attached.map((entry) => entry.id));
-  const others = library.entries.filter((entry) => !attachedIds.has(entry.id));
-  library.total += attached.length - (library.entries.length - others.length);
-  library.entries = [...attached, ...others];
+  // The assistant's knowledge files are always read in full, after attachments.
+  const knowledge = pinned.filter((entry) => !attachedIds.has(entry.id));
+  const leadIds = new Set([...attachedIds, ...knowledge.map((entry) => entry.id)]);
+  const lead = [...attached, ...knowledge];
+  const others = library.entries.filter((entry) => !leadIds.has(entry.id));
+  library.total += lead.length - (library.entries.length - others.length);
+  library.entries = [...lead, ...others];
 
   const queryTerms = terms(`${text} ${lastUserTurns}`);
+  // Scoped ("/" project or "//" whole Drive): any hit counts. Unscoped: a
+  // question must really name something (a file name, or several words from
+  // its notes), so a general request like "write a script" pulls in nothing.
+  const scoped = Boolean(project || wholeDrive);
+  const minScore = scoped || queryTerms.length <= 2 ? 1 : 2;
   const ranked = others
     .map((entry) => ({ entry, score: scoreOf(entry, queryTerms, text) }))
     .sort((a, b) => b.score - a.score);
-  // Nothing matched (a general question): the newest files are the focus.
-  // With files attached, only real matches join them.
-  const room = Math.max(FOCUS_FILES - attached.length, attached.length ? 2 : 0);
-  const focus = [
-    ...attached,
-    ...ranked
-      .filter(
-        (row, index) =>
-          row.score > 0 || (!attached.length && ranked[0]?.score === 0 && index < FOCUS_FILES),
-      )
-      .slice(0, room)
-      .map((row) => row.entry),
-  ];
+  const matchedRows = ranked.filter((row) => row.score >= minScore);
+  // Scoped and nothing matched: the newest files are the focus. Unscoped,
+  // only real matches join (never the newest files, which made a fresh chat
+  // talk about old videos nobody asked about).
+  const focusSize = wholeDrive ? WHOLE_DRIVE_FOCUS : FOCUS_FILES;
+  const room = Math.max(focusSize - lead.length, lead.length ? 2 : 0);
+  const candidates = matchedRows.length || !scoped || lead.length ? matchedRows : ranked;
+  const focus = [...lead, ...candidates.slice(0, room).map((row) => row.entry)];
+
+  // Unscoped with nothing attached, picked or matched: a general question.
+  // The library is left out of the prompt entirely.
+  const general = !scoped && lead.length === 0 && notes.length === 0 && matchedRows.length === 0;
+  if (general) {
+    library.entries = [];
+    library.total = 0;
+  }
 
   // Files the question is about that haven't been studied yet are studied now,
   // and only now: attached files always; without a project, other files only
   // when the question actually matches them.
-  const matched = new Set(ranked.filter((row) => row.score > 0).map((row) => row.entry.id));
+  const matched = new Set(matchedRows.map((row) => row.entry.id));
   const unread = focus
-    .filter((entry) => attachedIds.has(entry.id) || project || matched.has(entry.id))
+    .filter((entry) => leadIds.has(entry.id) || scoped || matched.has(entry.id))
     .filter((entry) => !entry.insight?.summary && ANALYSABLE.includes(entry.file.category))
     .filter((entry) => [null, undefined, 'no_credits'].includes(entry.file.aiState))
-    .slice(0, Math.max(ON_DEMAND_FILES, attached.length));
+    .slice(0, Math.max(ON_DEMAND_FILES, lead.length));
   if (unread.length > 0) {
     emit('status', {
       stage: 'studying',
@@ -722,6 +915,13 @@ async function prepareContext({
       attached,
       notes,
       brief,
+      agent,
+      knowledgeNotes,
+      skills,
+      memories,
+      wholeDrive,
+      general,
+      quote,
     }),
   };
 }
@@ -739,14 +939,27 @@ export async function getUploadFolder({ workspace, user }) {
  */
 export async function streamAnswer(
   { workspace, pool, user, viewer },
-  { threadId, text, projectId, fileIds: attachIds = [], noteIds = [] },
+  {
+    threadId,
+    text,
+    projectId,
+    wholeDrive: wantsWholeDrive = false,
+    quote = '',
+    fileIds: attachIds = [],
+    noteIds = [],
+    agentId = null,
+    skillIds = [],
+    modelKey = null,
+  },
   { emit, signal },
 ) {
   const settings = await getAiSettings();
   assertLive(settings, pool);
-  const minimum = Math.max(1, settings.minChatCredits);
+  const chosen = resolveModel(settings, 'chat', modelKey);
+  const multiplier = chosen?.creditMultiplier ?? 1;
+  // Any credits left are enough; the answer uses up at most what remains.
   const balance = creditBalance(pool, settings);
-  if (balance.total < minimum) throw noCreditsError(balance);
+  if (balance.total < 1) throw noCreditsError(balance);
 
   const [existing, project, attached, notes] = await Promise.all([
     threadId ? findThreadOrThrow(workspace, user, threadId) : null,
@@ -757,6 +970,28 @@ export async function streamAnswer(
     loadNotesForAi(workspace._id, user._id, noteIds.slice(0, MAX_NOTES)),
   ]);
   if (projectId && !project) throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');
+  // A picked project is narrower than "//" and wins.
+  const wholeDrive = Boolean(wantsWholeDrive && !project);
+
+  // A chat stays with the assistant it started with.
+  const wantedAgentId = existing ? existing.agentId : agentId;
+  const [agent, prefs, picked] = await Promise.all([
+    findUsableAgent(workspace._id, user._id, wantedAgentId),
+    getPreferences(workspace._id, user._id),
+    resolveSkills(workspace._id, user._id, skillIds.slice(0, MAX_SKILLS_PER_QUESTION)),
+  ]);
+  if (wantedAgentId && !agent) {
+    throw AppError.notFound(
+      'This assistant was deleted or is no longer shared with you. Start a new chat.',
+      'AGENT_NOT_FOUND',
+    );
+  }
+  const [standing, pinned, knowledgeNotes, memories] = await Promise.all([
+    agent ? resolveSkills(workspace._id, user._id, agent.skills) : [],
+    agent ? loadKnowledgeFiles(workspace._id, viewer, agent.fileIds) : [],
+    agent ? loadKnowledgeNotes(workspace._id, user._id, agent.noteIds) : [],
+    memoriesForChat(workspace._id, user._id, { agent, prefs }),
+  ]);
 
   const thread =
     existing ??
@@ -765,6 +1000,8 @@ export async function streamAnswer(
         workspaceId: workspace._id,
         userId: user._id,
         title: titleFrom(text),
+        agentId: agent?._id ?? null,
+        agentName: agent?.name ?? null,
         messages: [],
       })
     ).toObject();
@@ -783,21 +1020,28 @@ export async function streamAnswer(
     text,
     history,
     emit,
+    agent,
+    pinned,
+    knowledgeNotes,
+    skills: { picked, standing },
+    memories,
+    wholeDrive,
+    quote,
   });
 
-  emit('status', { stage: 'writing', text: 'Writing' });
+  emit('status', { stage: 'writing', text: picked.length ? `Using ${picked[0].name}` : 'Writing' });
   let answer = '';
   let tokens = 0;
   let stopped = false;
   try {
     for await (const event of streamContent({
-      model: settings.model,
+      model: chosen?.engine || settings.model,
       system,
       contents: [
         ...history.map((message) => ({ role: message.role, parts: [{ text: message.text }] })),
         { role: 'user', parts: [{ text }] },
       ],
-      config: { temperature: 0.3, maxOutputTokens: 8192 },
+      config: { temperature: agent?.creativity ?? 0.3, maxOutputTokens: 8192 },
       thinkingLevel: 'minimal',
       signal,
     })) {
@@ -831,7 +1075,9 @@ export async function streamAnswer(
 
   // A stopped answer has no token count: charge for what was written, roughly.
   const usedTokens = tokens || Math.ceil((system.length + cleaned.length) / 4);
-  const cost = creditsForTokens(usedTokens, settings, settings.minChatCredits);
+  const cost = Math.ceil(
+    creditsForTokens(usedTokens, settings, settings.minChatCredits) * multiplier,
+  );
   const { spent, balance: after } = await spendCredits(pool._id, cost, {
     kind: 'chat',
     userId: user._id,
@@ -845,6 +1091,8 @@ export async function streamAnswer(
     text: truncate(text, 20_000),
     projectId: project?._id ?? null,
     projectTitle: project?.title ?? null,
+    wholeDrive,
+    quote: quote || null,
     attachments: attached.map((entry) => ({
       fileId: entry.file._id,
       name: truncate(entry.file.displayName, 200),
@@ -854,6 +1102,7 @@ export async function streamAnswer(
       noteId: note._id,
       title: truncate(note.title || titleFrom(note.body), 160),
     })),
+    skills: picked.map((skill) => ({ id: skill.id, name: truncate(skill.name, 60) })),
     createdAt: now,
   };
   const modelMessage = {
@@ -862,6 +1111,7 @@ export async function streamAnswer(
     fileIds,
     credits: spent,
     stopped,
+    modelName: chosen?.name ?? null,
     createdAt: new Date(now.getTime() + 1),
   };
   const saved = await AiThread.findOneAndUpdate(
@@ -880,5 +1130,27 @@ export async function streamAnswer(
     credits: after,
   };
   emit('done', result);
+
+  if (picked.length) {
+    recordSkillUse(
+      workspace._id,
+      picked.map((skill) => skill.id),
+    ).catch(() => {});
+  }
+
+  // Learn from the question in the background; the answer is already out.
+  if (!stopped) {
+    void learnFromChat({
+      workspace,
+      pool,
+      user,
+      settings,
+      agent,
+      prefs,
+      threadId: thread._id,
+      question: text,
+      answer: cleaned,
+    });
+  }
   return result;
 }

@@ -72,6 +72,11 @@ function ThreadRow({ thread, active, onSelect, onRename, onDelete }) {
         title={thread.title}
       >
         <span className={cn(active ? 'text-ink font-medium' : 'text-ink/80')}>{thread.title}</span>
+        {thread.agent && (
+          <span className="text-muted block truncate text-[11px] leading-tight">
+            with {thread.agent.name}
+          </span>
+        )}
       </button>
       <div
         className={cn(

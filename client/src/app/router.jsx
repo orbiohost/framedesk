@@ -48,6 +48,18 @@ export const router = createBrowserRouter([
         children: [
           { path: '/', lazy: page(() => import('../pages/marketing/HomePage.jsx'), 'HomePage') },
           {
+            path: '/features',
+            lazy: page(() => import('../pages/marketing/FeaturesPage.jsx'), 'FeaturesPage'),
+          },
+          {
+            path: '/ai',
+            lazy: page(() => import('../pages/marketing/AiFeaturesPage.jsx'), 'AiFeaturesPage'),
+          },
+          {
+            path: '/pricing',
+            lazy: page(() => import('../pages/marketing/PricingPage.jsx'), 'PricingPage'),
+          },
+          {
             path: '/privacy',
             lazy: page(() => import('../pages/marketing/legal/PrivacyPage.jsx'), 'PrivacyPage'),
           },
@@ -80,6 +92,11 @@ export const router = createBrowserRouter([
       {
         path: '/verify-email',
         lazy: page(() => import('../pages/auth/VerifyEmailPage.jsx'), 'VerifyEmailPage'),
+      },
+      // Joining a workspace from an invite email.
+      {
+        path: '/invite/:token',
+        lazy: page(() => import('../pages/auth/AcceptInvitePage.jsx'), 'AcceptInvitePage'),
       },
       // A project someone shared by link. The server decides whether signing in is needed.
       {
@@ -174,11 +191,21 @@ export const router = createBrowserRouter([
                   },
                   {
                     path: 'social',
-                    lazy: page(() => import('../pages/admin/AdminSocialPage.jsx'), 'AdminSocialPage'),
+                    lazy: page(
+                      () => import('../pages/admin/AdminSocialPage.jsx'),
+                      'AdminSocialPage',
+                    ),
                   },
                   {
                     path: 'audit-log',
                     lazy: page(() => import('../pages/admin/AdminAuditPage.jsx'), 'AdminAuditPage'),
+                  },
+                  {
+                    path: 'expenses',
+                    lazy: page(
+                      () => import('../pages/admin/AdminExpensesPage.jsx'),
+                      'AdminExpensesPage',
+                    ),
                   },
                   {
                     path: 'system',
@@ -260,6 +287,10 @@ export const router = createBrowserRouter([
                   {
                     path: 'ai',
                     lazy: page(() => import('../pages/app/AiPage.jsx'), 'AiPage'),
+                  },
+                  {
+                    path: 'ai/studio',
+                    lazy: page(() => import('../pages/app/AiStudioPage.jsx'), 'AiStudioPage'),
                   },
                   {
                     path: 'transcribe',

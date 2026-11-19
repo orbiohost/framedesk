@@ -9,3 +9,7 @@ coverage/
 
 # Uploaded files and upload staging (never commit user data)
 server/data/
+
+# Python bytecode (asr service)
+__pycache__/
+*.pyc

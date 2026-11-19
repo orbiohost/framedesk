@@ -17,6 +17,24 @@ export function verificationEmail({ to, name, token }) {
   };
 }
 
+export function workspaceInviteEmail({ to, inviterName, workspaceName, role, link, days }) {
+  return {
+    to,
+    subject: `${inviterName} invited you to ${workspaceName} on ${APP_NAME}`,
+    text: [
+      'Hi,',
+      '',
+      `${inviterName} invited you to join "${workspaceName}" on ${APP_NAME} as ${role === 'admin' ? 'an' : 'a'} ${role}.`,
+      '',
+      'Accept the invite here:',
+      link,
+      '',
+      `Sign in or create your account with this email address (${to}). The link expires in ${days} days.`,
+      "If you weren't expecting this, you can ignore this email.",
+    ].join('\n'),
+  };
+}
+
 export function passwordResetEmail({ to, name, token }) {
   const link = `${env.CLIENT_URL}/reset-password?token=${encodeURIComponent(token)}`;
   return {

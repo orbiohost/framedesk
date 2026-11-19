@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/cn.js';
 import { fetchPreviewUrl } from '../files/hooks.js';
 import { headingBox, headingSize, hostOf, youtubeId } from './boardUtils.js';
+import { SpellcheckLayer } from '../spellcheck/SpellcheckLayer.jsx';
 
 // A signed link to a board file (cached and batched by the files feature).
 export function useFileUrl(workspaceId, fileId) {
@@ -133,20 +134,23 @@ function TextEditor({ item, onDone, className, style }) {
     ref.current?.select();
   }, []);
   return (
-    <textarea
-      ref={ref}
-      value={value}
-      onChange={(event) => setValue(event.target.value)}
-      onBlur={() => onDone(value)}
-      onKeyDown={(event) => {
-        event.stopPropagation();
-        if (event.key === 'Escape') ref.current.blur();
-      }}
-      onPointerDown={(event) => event.stopPropagation()}
-      maxLength={4000}
-      className={cn('h-full w-full resize-none bg-transparent outline-none', className)}
-      style={style}
-    />
+    <div className="relative h-full w-full">
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={() => onDone(value)}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === 'Escape') ref.current.blur();
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        maxLength={4000}
+        className={cn('h-full w-full resize-none bg-transparent outline-none', className)}
+        style={style}
+      />
+      <SpellcheckLayer textareaRef={ref} value={value} />
+    </div>
   );
 }
 
@@ -177,6 +181,7 @@ function HeadingEditor({ item, onDone }) {
       }}
       onPointerDown={(event) => event.stopPropagation()}
       maxLength={4000}
+      spellCheck
       placeholder="Heading"
       className="font-display absolute left-0 top-0 resize-none overflow-hidden bg-transparent outline-none"
       style={{

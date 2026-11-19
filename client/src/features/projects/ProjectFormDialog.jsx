@@ -31,11 +31,17 @@ const schema = z
     tags: z.string().max(400),
     description: z.string().max(10000),
     reminders: z.array(z.number()).nullable(),
+    aiClipSource: z.enum(['transcript', 'video']),
   })
   .refine((values) => !values.startDate || !values.dueDate || values.dueDate >= values.startDate, {
     path: ['dueDate'],
     message: 'Due date must be on or after the start date',
   });
+
+const AI_CLIP_OPTIONS = [
+  { value: 'transcript', label: 'Read the transcript — fast, few credits (recommended)' },
+  { value: 'video', label: 'Watch the whole video — sees shots and on-screen text, slower' },
+];
 
 function toFormValues(project, defaults) {
   return {
@@ -50,6 +56,7 @@ function toFormValues(project, defaults) {
     tags: project?.tags.join(', ') ?? '',
     description: project?.description ?? '',
     reminders: project?.reminders ?? null,
+    aiClipSource: project?.aiClipSource ?? 'transcript',
   };
 }
 
@@ -192,6 +199,13 @@ function ProjectForm({ workspaceId, project, defaults, onDone }) {
             {...register('tags')}
           />
         </div>
+        <SelectField
+          id="project-ai-clips"
+          label="AI analysis of transcribed videos"
+          hint="Audio is always read from its transcript. Any single video can still be watched from its transcript panel."
+          options={AI_CLIP_OPTIONS}
+          {...register('aiClipSource')}
+        />
       </MoreOptions>
       <DialogActions>
         <Button type="button" variant="secondary" onClick={onDone}>

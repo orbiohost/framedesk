@@ -4,6 +4,7 @@ import { loadWorkspace } from '../middleware/loadWorkspace.js';
 import { optionalAuthenticate } from '../middleware/optionalAuthenticate.js';
 import adminRoutes from './admin/admin.routes.js';
 import aiRoutes from './ai/ai.routes.js';
+import { myAlertsRouter, workspaceAlertsRouter } from './alerts/alerts.routes.js';
 import authRoutes from './auth/auth.routes.js';
 import { backupDownloadsRouter, workspaceBackupsRouter } from './backups/backups.routes.js';
 import briefsRoutes from './briefs/briefs.routes.js';
@@ -17,7 +18,7 @@ import dashboardRoutes from './dashboard/dashboard.routes.js';
 import { fileSharesRouter, publicFileShareRouter } from './fileShare/fileShare.routes.js';
 import filesRoutes from './files/files.routes.js';
 import foldersRoutes from './files/folders.routes.js';
-import membersRoutes from './members/members.routes.js';
+import membersRoutes, { publicInviteRouter } from './members/members.routes.js';
 import moodboardsRoutes from './moodboards/moodboards.routes.js';
 import notesRoutes from './notes/notes.routes.js';
 import notificationsRoutes from './notifications/notifications.routes.js';
@@ -50,7 +51,11 @@ apiRouter.use('/users', usersRoutes);
 apiRouter.use('/avatars', avatarsRoutes);
 // Reminder settings and the devices (phones, browsers) that receive them.
 apiRouter.use('/notifications', notificationsRoutes);
+// Project alerts ringing for the signed-in person, and how they ring.
+apiRouter.use('/alerts', myAlertsRouter);
 apiRouter.use('/plans', plansRoutes);
+// Workspace invite links: preview (signed in or not) and accept.
+apiRouter.use('/invites/:token', publicInviteRouter);
 apiRouter.use('/support', supportRoutes);
 // AI connectors: connected assistants, API keys and the OAuth consent screen.
 apiRouter.use('/connectors', connectorsRoutes);
@@ -76,6 +81,7 @@ mountWorkspaceFeature('chat', chatRoutes);
 mountWorkspaceFeature('notes', notesRoutes);
 mountWorkspaceFeature('quick-notes', quickNotesRoutes);
 mountWorkspaceFeature('moodboards', moodboardsRoutes);
+mountWorkspaceFeature('alerts', workspaceAlertsRouter);
 mountWorkspaceFeature('dashboard', dashboardRoutes);
 mountWorkspaceFeature('folders', foldersRoutes);
 mountWorkspaceFeature('files', filesRoutes);

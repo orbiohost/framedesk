@@ -1,14 +1,14 @@
-# Runs Whisper on an NVIDIA GPU (needs the NVIDIA Container Toolkit on the host):
+# Runs Qwen3-ASR on an NVIDIA GPU (needs the NVIDIA Container Toolkit on the host):
 #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 services:
-  whisper:
+  asr:
     build:
-      context: ./whisper
+      context: ./asr
       args:
         WITH_CUDA: 'true'
     environment:
-      WHISPER_DEVICE: cuda
-      WHISPER_COMPUTE_TYPE: float16
+      ASR_DEVICE: cuda
+      ASR_DTYPE: bfloat16
     deploy:
       resources:
         reservations:

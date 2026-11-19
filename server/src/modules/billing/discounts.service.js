@@ -8,7 +8,8 @@ import { Payment } from './payment.model.js';
 // Money off a plan at checkout: a coupon the owner types, or the referral
 // discount a referred account gets on its first paid plan. They don't stack;
 // whichever saves more is used. The plan price (offer included) is what they
-// come off, and the result never drops below ₹1 (Razorpay's minimum).
+// come off, and the result never drops below the plan's price floor (the
+// admin's discount cap, Admin → Plans & coupons) or ₹1 (Razorpay's minimum).
 
 export const REFERRAL_DISCOUNT_CODE = 'REFERRAL';
 
@@ -80,17 +81,28 @@ async function referralDiscount(pool, amount) {
   };
 }
 
+// Never takes the price below the floor; says so on the label when it had to stop short.
+function capped(discount, room) {
+  if (!discount || discount.amount <= room) return discount;
+  return { ...discount, amount: room, label: `${discount.label} (capped at the lowest price)` };
+}
+
 /**
  * The best discount for a plan purchase, or null. `amount` is the plan price
- * before GST. A coupon that doesn't apply throws, so the owner sees why.
+ * before GST; `floor` the least it may come down to (from quote()). A coupon
+ * that doesn't apply throws, so the owner sees why.
  */
-export async function discountFor({ pool, planCode, interval, amount, couponCode }) {
+export async function discountFor({ pool, planCode, interval, amount, couponCode, floor = 1 }) {
   const code = normaliseCode(couponCode);
+  const room = Math.max(0, amount - Math.max(1, floor));
   const [coupon, referral] = await Promise.all([
     code ? couponDiscount(code, { pool, planCode, interval, amount }) : null,
     referralDiscount(pool, amount),
   ]);
-  const best = [coupon, referral]
+  if (coupon && coupon.amount > 0 && room === 0) {
+    throw invalid('This price is already as low as it goes, so the coupon cannot take more off');
+  }
+  const best = [capped(coupon, room), capped(referral, room)]
     .filter((discount) => discount && discount.amount > 0)
     .sort((a, b) => b.amount - a.amount)[0];
   return best ?? null;

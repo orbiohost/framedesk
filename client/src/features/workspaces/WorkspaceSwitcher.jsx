@@ -42,8 +42,9 @@ export function WorkspaceSwitcher({ current, compact = false }) {
       {isOpen && (
         <div
           className={cn(
-            'border-line/70 bg-surface/95 shadow-lift animate-[fade-in_120ms_ease-out] absolute top-full z-20 mt-2 rounded-2xl border p-1.5 backdrop-blur-md',
-            compact ? 'left-0 w-60' : 'inset-x-0',
+            'border-line/70 bg-surface shadow-lift absolute z-50 animate-[fade-in_120ms_ease-out] rounded-2xl border p-1.5',
+            // Collapsed rail: open beside it so the menu is never cut off.
+            compact ? 'left-full top-0 ml-3 w-64' : 'inset-x-0 top-full mt-2',
           )}
         >
           <ul>

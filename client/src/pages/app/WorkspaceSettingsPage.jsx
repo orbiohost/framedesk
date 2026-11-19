@@ -12,6 +12,7 @@ import { TextField } from '../../components/ui/TextField.jsx';
 import { useDeleteWorkspace, useRenameWorkspace } from '../../features/workspaces/hooks.js';
 import { planLabel, trialEndsLabel } from '../../features/workspaces/planLabel.js';
 import { StorageMeter } from '../../features/workspaces/StorageMeter.jsx';
+import { MembersSection } from '../../features/members/MembersSection.jsx';
 
 const schema = z.object({ name: z.string().trim().min(1, 'Give the workspace a name').max(80) });
 
@@ -128,12 +129,14 @@ export function WorkspaceSettingsPage() {
 
   return (
     <>
-      <PageHeader title="Settings" description="Workspace details and plan." />
+      <PageHeader title="Settings" description="Workspace details, members and plan." />
       <div className="max-w-2xl space-y-6">
         <Card>
           <CardHeader title="General" />
           <RenameForm workspace={workspace} />
         </Card>
+
+        <MembersSection workspace={workspace} />
 
         <Card>
           <CardHeader title="Plan and storage" />

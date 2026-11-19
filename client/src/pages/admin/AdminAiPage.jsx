@@ -7,6 +7,7 @@ import { Dialog, DialogActions } from '../../components/ui/Dialog.jsx';
 import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import { SearchInput } from '../../components/ui/SearchInput.jsx';
 import { SegmentedControl } from '../../components/ui/SegmentedControl.jsx';
+import { SelectField } from '../../components/ui/SelectField.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { Switch } from '../../components/ui/Switch.jsx';
 import { TextField } from '../../components/ui/TextField.jsx';
@@ -30,6 +31,9 @@ const LEDGER_LABELS = {
   analysis: 'File analysed',
   brief: 'Project brief written',
   moodboard: 'Moodboard AI',
+  memory: 'AI memory',
+  skill: 'AI skill writer',
+  image: 'AI images',
   social: 'Social media AI',
   purchase: 'Bought',
   grant: 'Admin adjustment',
@@ -60,10 +64,22 @@ function toForm(settings) {
     minChatCredits: String(settings.minChatCredits),
     minAnalysisCredits: String(settings.minAnalysisCredits),
     maxAnalysisMB: String(settings.maxAnalysisMB),
+    imageModel: settings.imageModel ?? '',
+    imageCredits: String(settings.imageCredits ?? 5),
+    refImageLimits: Object.fromEntries(
+      Object.entries(settings.refImageLimits ?? {}).map(([code, limit]) => [code, String(limit)]),
+    ),
     packs: settings.packs.map((pack) => ({
       code: pack.code,
       credits: String(pack.credits),
       price: String(pack.price),
+    })),
+    models: (settings.models ?? []).map((model) => ({
+      ...model,
+      tagline: model.tagline ?? '',
+      badge: model.badge ?? '',
+      engine: model.engine ?? '',
+      creditMultiplier: String(model.creditMultiplier),
     })),
   };
 }
@@ -96,6 +112,25 @@ function toPayload(form) {
     minChatCredits: toInt(form.minChatCredits),
     minAnalysisCredits: toInt(form.minAnalysisCredits),
     maxAnalysisMB: toInt(form.maxAnalysisMB),
+    imageModel: form.imageModel.trim(),
+    imageCredits: toInt(form.imageCredits),
+    refImageLimits: Object.fromEntries(
+      Object.entries(form.refImageLimits).map(([code, limit]) => [code, toInt(limit)]),
+    ),
+    models: Object.fromEntries(
+      form.models.map((model) => [
+        model.key,
+        {
+          name: model.name.trim(),
+          tagline: model.tagline.trim(),
+          badge: model.badge.trim(),
+          status: model.status,
+          ...(model.kind === 'image' && { provider: model.provider }),
+          engine: model.engine.trim(),
+          creditMultiplier: Number(model.creditMultiplier),
+        },
+      ]),
+    ),
     // A pack keeps its code once it exists, so open checkouts stay valid.
     packs: form.packs.map((pack) => ({
       code: pack.code || `pack-${toInt(pack.credits)}`,
@@ -103,6 +138,120 @@ function toPayload(form) {
       price: toInt(pack.price),
     })),
   };
+}
+
+const PROVIDER_OPTIONS = [
+  { value: 'cloudflare', label: 'Cloudflare (FLUX, free)' },
+  { value: 'gemini', label: 'Google Gemini (paid)' },
+];
+
+const MODEL_STATUS_OPTIONS = [
+  { value: 'available', label: 'Available' },
+  { value: 'soon', label: 'Coming soon' },
+  { value: 'hidden', label: 'Hidden' },
+];
+
+// One card per model in the catalog (aiModels.js on the server).
+function ModelsEditor({ models, onChange, fieldError, defaults }) {
+  function change(key, field) {
+    return (event) =>
+      onChange(
+        models.map((model) =>
+          model.key === key ? { ...model, [field]: event.target.value } : model,
+        ),
+      );
+  }
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {models.map((model) => {
+        const err = (field) => fieldError(`models.${model.key}.${field}`);
+        return (
+          <div key={model.key} className="border-line/70 bg-subtle/40 rounded-2xl border p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="font-semibold">{model.name || model.key}</span>
+              <Badge>{model.kind === 'image' ? 'Images' : 'Chat'}</Badge>
+              {model.status === 'soon' && <Badge tone="accent">Coming soon</Badge>}
+              {model.status === 'hidden' && <Badge tone="muted">Hidden</Badge>}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextField
+                id={`model-${model.key}-name`}
+                label="Name"
+                value={model.name}
+                maxLength={40}
+                error={err('name')}
+                onChange={change(model.key, 'name')}
+              />
+              <SelectField
+                id={`model-${model.key}-status`}
+                label="Status"
+                options={MODEL_STATUS_OPTIONS}
+                value={model.status}
+                error={err('status')}
+                onChange={change(model.key, 'status')}
+              />
+              <TextField
+                id={`model-${model.key}-tagline`}
+                label="Tagline"
+                value={model.tagline}
+                maxLength={120}
+                error={err('tagline')}
+                onChange={change(model.key, 'tagline')}
+                className="sm:col-span-2"
+              />
+              {model.kind === 'image' ? (
+                <SelectField
+                  id={`model-${model.key}-provider`}
+                  label="Runs on"
+                  options={PROVIDER_OPTIONS}
+                  value={model.provider}
+                  error={err('provider')}
+                  onChange={change(model.key, 'provider')}
+                  className="sm:col-span-2"
+                />
+              ) : (
+                <p className="text-muted text-xs sm:col-span-2">Runs on Google Gemini.</p>
+              )}
+              <TextField
+                id={`model-${model.key}-engine`}
+                label="Engine"
+                value={model.engine}
+                placeholder={`Default (${
+                  model.kind === 'image' && model.provider === 'cloudflare'
+                    ? '@cf/black-forest-labs/flux-2-klein-4b'
+                    : defaults[model.kind] || 'main model'
+                })`}
+                error={err('engine')}
+                onChange={change(model.key, 'engine')}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <TextField
+                  id={`model-${model.key}-badge`}
+                  label="Badge"
+                  value={model.badge}
+                  maxLength={12}
+                  placeholder="Pro"
+                  error={err('badge')}
+                  onChange={change(model.key, 'badge')}
+                />
+                <TextField
+                  id={`model-${model.key}-credits`}
+                  label="× credits"
+                  type="number"
+                  min="0.1"
+                  max="20"
+                  step="0.1"
+                  value={model.creditMultiplier}
+                  error={err('creditMultiplier')}
+                  onChange={change(model.key, 'creditMultiplier')}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function StatusLine({ ok, children }) {
@@ -238,6 +387,18 @@ function SettingsForm({ data }) {
           )}
         </SettingsRow>
         <SettingsRow
+          label="Cloudflare Workers AI"
+          description="Runs “Create image” (FLUX, free daily allowance). Chat and file analysis stay on Gemini. CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_AI_TOKEN in the server's .env."
+        >
+          {data.cloudflare?.configured ? (
+            <StatusLine ok>Connected</StatusLine>
+          ) : (
+            <StatusLine ok={false}>
+              Not set. Images fall back to Gemini until both are added and the API restarts.
+            </StatusLine>
+          )}
+        </SettingsRow>
+        <SettingsRow
           label="Turn on for everyone"
           description="Off hides the assistant for all users and stops analysis. Nothing is deleted."
           align="center"
@@ -293,7 +454,7 @@ function SettingsForm({ data }) {
               key={plan.code}
               label={plan.name}
               description={
-                isFree ? 'Every account that has not paid for a plan (2 GB).' : undefined
+                isFree ? 'Every account that has not paid for a plan (1 GB).' : undefined
               }
             >
               <div className="grid gap-3 sm:grid-cols-2">
@@ -403,6 +564,73 @@ function SettingsForm({ data }) {
             onChange={input('maxAnalysisMB')}
           />
         </SettingsRow>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Image creation"
+        description="“Create image” in the AI chat. Pictures are saved to each workspace's Drive → AI images."
+      >
+        <SettingsRow
+          label="Gemini image model"
+          description="Used by image models set to the Gemini provider (and as the fallback when Cloudflare isn't set up). Needs billing on the Gemini API key: the free tier has no image quota."
+        >
+          <TextField
+            id="ai-image-model"
+            label="Model"
+            value={form.imageModel}
+            placeholder="gemini-3.1-flash-image"
+            error={fieldError('imageModel')}
+            onChange={input('imageModel')}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Credits per image"
+          description="Charged per picture (at least this, more if Gemini reports more tokens)."
+        >
+          <TextField
+            id="ai-image-credits"
+            label="Credits"
+            type="number"
+            min="0"
+            value={form.imageCredits}
+            error={fieldError('imageCredits')}
+            onChange={input('imageCredits')}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Reference images per request"
+          description="How many images people can feed the AI at once, by plan (0–14). Cloudflare FLUX takes at most 4, whatever the plan allows."
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[{ code: 'free', name: 'Free plan' }, ...data.plans].map((plan) => (
+              <TextField
+                key={plan.code}
+                id={`ai-refs-${plan.code}`}
+                label={plan.name}
+                type="number"
+                min="0"
+                max="14"
+                value={form.refImageLimits[plan.code] ?? '0'}
+                error={fieldError(`refImageLimits.${plan.code}`)}
+                onChange={(event) =>
+                  set('refImageLimits')({ ...form.refImageLimits, [plan.code]: event.target.value })
+                }
+              />
+            ))}
+          </div>
+        </SettingsRow>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Models"
+        description="What people pick from in the AI chat, under FrameDesk names. The engine (Gemini model) is only shown here. “Coming soon” models are listed but can't be picked yet."
+      >
+        <ModelsEditor
+          models={form.models}
+          onChange={set('models')}
+          fieldError={fieldError}
+          defaults={{ chat: form.model, image: form.imageModel }}
+        />
       </SettingsSection>
 
       <SettingsSection

@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /w/
+Disallow: /admin
+Disallow: /share/
+Disallow: /invite/
+
+Sitemap: https://desk.orbio.in/sitemap.xml

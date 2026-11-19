@@ -18,8 +18,8 @@ services:
       # Files live in S3 (S3_* in server/.env); this volume only holds unfinished uploads.
       UPLOAD_STAGING_DIR: /data/upload-staging
       # Speech-to-text (transcripts, dictation). Remove both lines to turn it off.
-      WHISPER_URL: http://whisper:9000
-      WHISPER_API_KEY: ${WHISPER_API_KEY:?Set WHISPER_API_KEY in .env next to docker-compose.yml}
+      ASR_URL: http://asr:9000
+      ASR_API_KEY: ${ASR_API_KEY:?Set ASR_API_KEY in .env next to docker-compose.yml}
       # Request cache + shared rate limits. The API keeps working (on MongoDB
       # alone) if Redis is down; remove the line to run without it.
       REDIS_URL: redis://redis:6379
@@ -38,26 +38,30 @@ services:
       redis-server --save "" --appendonly no
       --maxmemory 128mb --maxmemory-policy volatile-lru
 
-  # Free, self-hosted OpenAI Whisper (faster-whisper). No ports: only the API reaches it.
-  whisper:
-    build: ./whisper
+  # Self-hosted speech-to-text: Qwen3-ASR-1.7B (+ Qwen3-ForcedAligner-0.6B for
+  # subtitle timings) on PyTorch. No ports: only the API reaches it.
+  # On a CPU it needs about 10 GB of RAM in float32 (both models).
+  asr:
+    build: ./asr
     restart: unless-stopped
     environment:
-      WHISPER_API_KEY: ${WHISPER_API_KEY}
-      # large-v3-turbo is several times faster than large-v3 on a CPU with nearly
-      # the same quality. Set WHISPER_MODEL=large-v3 for the last bit of accuracy.
-      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3-turbo}
-      WHISPER_DEVICE: cpu
-      # 0 = every core. Whisper runs at low CPU priority, so the site stays fast meanwhile.
-      WHISPER_CPU_THREADS: ${WHISPER_CPU_THREADS:-0}
-      # 1 = greedy decoding (fast on a CPU); 5 = beam search (slower, slightly more accurate).
-      WHISPER_BEAM_SIZE: ${WHISPER_BEAM_SIZE:-1}
-      # Pieces of a long file decoded at once. 0 = off (less memory, slower).
-      WHISPER_BATCH_SIZE: ${WHISPER_BATCH_SIZE:-8}
-    # Downloads each file from a signed S3 link, so it needs outbound internet access.
+      ASR_API_KEY: ${ASR_API_KEY}
+      ASR_MODEL: ${ASR_MODEL:-Qwen/Qwen3-ASR-1.7B}
+      # Empty = no word timings (lines get estimated times; ~2.5 GB less RAM).
+      ASR_ALIGNER: ${ASR_ALIGNER-Qwen/Qwen3-ForcedAligner-0.6B}
+      ASR_DEVICE: cpu
+      # float32 is safe everywhere; bfloat16 halves RAM but is only fast on CPUs with AVX-512 BF16/AMX.
+      ASR_DTYPE: ${ASR_DTYPE:-float32}
+      # 0 = every core. It runs at low CPU priority, so the site stays fast meanwhile.
+      ASR_CPU_THREADS: ${ASR_CPU_THREADS:-0}
+      # ~30 s pieces decoded at once. 1 keeps the progress bar moving; higher uses more RAM.
+      ASR_BATCH_SIZE: ${ASR_BATCH_SIZE:-1}
+    # A hard cap so a long file can never starve the other apps on the box.
+    mem_limit: ${ASR_MEM_LIMIT:-10g}
+    # Downloads each file from a signed S3 link (and the models once), so it needs outbound internet access.
     volumes:
-      # Downloaded model weights (~1.6 GB for large-v3-turbo), kept across rebuilds.
-      - whisper_models:/models
+      # Downloaded model weights (~6 GB), kept across rebuilds.
+      - asr_models:/models
 
   web:
     build:
@@ -71,4 +75,4 @@ services:
 
 volumes:
   framedesk_data:
-  whisper_models:
+  asr_models:

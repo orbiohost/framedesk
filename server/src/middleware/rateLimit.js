@@ -130,6 +130,16 @@ export const dictationLimiter = createLimiter({
   message: 'Too many recordings in a short time. Please wait a few minutes.',
 });
 
+// Typing suggestions (transliteration) fire as people type, so the limit is
+// generous; it only stops runaway clients. Counted per person.
+export const transliterateLimiter = createLimiter({
+  name: 'transliterate',
+  windowMs: FIFTEEN_MINUTES,
+  limit: 3000,
+  message: 'Too many typing suggestions in a short time. Please wait a few minutes.',
+  keyGenerator: (req) => `user:${req.user?._id ?? req.ip}`,
+});
+
 // OAuth sign-in for AI connectors (registration, token exchange). Calls come
 // from the assistants' servers, so each IP stands for many people.
 export const oauthLimiter = createLimiter({

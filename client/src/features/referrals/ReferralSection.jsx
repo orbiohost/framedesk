@@ -3,6 +3,7 @@ import { Alert } from '../../components/ui/Alert.jsx';
 import { Button } from '../../components/ui/Button.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { SettingsRow, SettingsSection } from '../account/SettingsSection.jsx';
+import { gbLabel } from '../billing/pricing.js';
 import { useCopy, useMyReferrals } from './referrals.js';
 
 function Step({ icon: Icon, title, children }) {
@@ -43,7 +44,7 @@ export function ReferralSection() {
     );
   }
 
-  const reward = `${data.rewardGB} GB`;
+  const reward = gbLabel(data.rewardGB);
   const share = () =>
     navigator
       .share?.({
@@ -113,7 +114,7 @@ export function ReferralSection() {
         <div className="grid grid-cols-3 gap-2">
           <Stat label="Signed up" value={data.invited} />
           <Stat label="Verified" value={data.joined} />
-          <Stat label="Storage earned" value={`${data.earnedGB} GB`} />
+          <Stat label="Storage earned" value={gbLabel(data.earnedGB)} />
         </div>
         {data.rewardsLeft === 0 && (
           <p className="text-muted mt-3 flex items-center gap-1.5 text-xs">

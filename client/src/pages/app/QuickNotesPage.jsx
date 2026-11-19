@@ -10,7 +10,9 @@ import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { useProjects } from '../../features/projects/hooks.js';
 import { useQuickNotes } from '../../features/quickNotes/hooks.js';
 import { NoteComposer } from '../../features/quickNotes/NoteComposer.jsx';
+import { NoteDocument } from '../../features/quickNotes/NoteDocument.jsx';
 import { NoteList } from '../../features/quickNotes/NoteList.jsx';
+import { NotesSidebar } from '../../features/quickNotes/NotesSidebar.jsx';
 
 const SCOPES = [
   { value: 'all', label: 'All' },
@@ -141,6 +143,93 @@ export function QuickNotesPage() {
 
   const filtered = Boolean(q || projectId || tag || scope !== 'all');
 
+  // ?note=<id>: that note fills the section, with the notes list beside it on
+  // wide screens; ?note=new writes a new one. Opening adds a history entry, so
+  // the browser's back button returns to the list.
+  const openId = params.get('note');
+  const allNotes = useQuickNotes(workspace.id, {}, { enabled: Boolean(openId) });
+  const openNote =
+    openId && openId !== 'new'
+      ? (notes?.find((note) => note.id === openId) ??
+        allNotes.data?.find((note) => note.id === openId) ??
+        null)
+      : null;
+  // A new note keeps its editor when it gets its id (no remount mid-typing).
+  const [newKey, setNewKey] = useState(() => `new-${Date.now()}`);
+  const [created, setCreated] = useState({});
+  const docKey = openId === 'new' ? newKey : (created[openId] ?? openId);
+
+  function showNote(id, { replace = false } = {}) {
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (id) next.set('note', id);
+        else next.delete('note');
+        return next;
+      },
+      { replace },
+    );
+  }
+
+  function openNoteInPage(note) {
+    showNote(note.id);
+    window.scrollTo({ top: 0 });
+  }
+
+  function newNote() {
+    setNewKey(`new-${Date.now()}`);
+    showNote('new');
+  }
+
+  if (openId) {
+    const listed = notes ?? allNotes.data ?? [];
+    let main;
+    if (openId === 'new' || openNote) {
+      main = (
+        <NoteDocument
+          key={docKey}
+          workspaceId={workspace.id}
+          note={openNote}
+          onBack={() => showNote(null)}
+          onCreated={(saved) => {
+            setCreated((current) => ({ ...current, [saved.id]: newKey }));
+            showNote(saved.id, { replace: true });
+          }}
+          className="min-w-0 flex-1"
+        />
+      );
+    } else if (allNotes.isPending || isPending) {
+      main = <Skeleton className="h-full min-w-0 flex-1" />;
+    } else {
+      main = (
+        <div className="min-w-0 flex-1">
+          <EmptyState icon={NotebookPen} title="This note isn’t here any more">
+            It may have been deleted, or it’s no longer shared with you.{' '}
+            <button
+              type="button"
+              onClick={() => showNote(null)}
+              className="text-ink underline underline-offset-4"
+            >
+              Back to notes
+            </button>
+          </EmptyState>
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-[calc(100dvh-10.5rem)] gap-4 lg:h-[calc(100dvh-6.5rem)]">
+        <NotesSidebar
+          notes={listed}
+          activeId={openNote?.id ?? null}
+          onSelect={(note) => showNote(note.id, { replace: true })}
+          onNew={newNote}
+          className="hidden w-72 shrink-0 lg:flex"
+        />
+        {main}
+      </div>
+    );
+  }
+
   return (
     <>
       <PageHeader
@@ -198,6 +287,7 @@ export function QuickNotesPage() {
           notes={notes}
           workspaceId={workspace.id}
           onTagClick={(value) => setParam('tag', value)}
+          onOpen={openNoteInPage}
         />
       )}
     </>

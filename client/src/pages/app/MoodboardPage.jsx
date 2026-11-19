@@ -61,6 +61,7 @@ import {
   useUpdateMoodboard,
 } from '../../features/moodboards/hooks.js';
 import { MoodboardAiPanel } from '../../features/moodboards/MoodboardAiPanel.jsx';
+import { registerOpenBoard } from '../../features/moodboards/boardBridge.js';
 import {
   ARROW_COLORS,
   ARROW_WIDTHS,
@@ -562,6 +563,34 @@ function Editor({ workspace, board }) {
     addItems([item]);
     if (!text) setEditingId(item.id);
   }
+
+  // Text sent here from the AI chat lands as a note in the middle of the view,
+  // sized to fit it.
+  const addNoteRef = useRef(null);
+  addNoteRef.current = (text) => {
+    const lines = text
+      .split('\n')
+      .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 30)), 0);
+    const at = viewCenter();
+    const h = Math.min(600, Math.max(160, 40 + lines * 20));
+    addItems([
+      {
+        id: newId(),
+        type: 'note',
+        x: Math.round(at.x - 130),
+        y: Math.round(at.y - h / 2),
+        w: 260,
+        h,
+        z: topZ(live.current.items),
+        text,
+        color: NOTE_COLORS[0],
+      },
+    ]);
+  };
+  useEffect(() => {
+    if (!editable) return undefined;
+    return registerOpenBoard(board.id, (text) => addNoteRef.current(text));
+  }, [editable, board.id]);
 
   function addText() {
     const at = viewCenter();

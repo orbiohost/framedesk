@@ -142,7 +142,7 @@ export class S3Driver {
     });
   }
 
-  // A plain download link for the Whisper service, valid long enough to sit in its queue.
+  // A plain download link for the speech-to-text (asr) service, valid long enough to sit in its queue.
   async createWorkerUrl(key, expiresInSeconds) {
     const command = new GetObjectCommand({ Bucket: this.bucket, Key: this.objectKey(key) });
     return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });

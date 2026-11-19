@@ -6,9 +6,9 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const DICTATION_TIMEOUT_MS = 5 * 60_000;
 
 async function call(path, { method = 'GET', body, headers = {}, timeoutMs = REQUEST_TIMEOUT_MS }) {
-  const response = await fetch(new URL(path, env.WHISPER_URL), {
+  const response = await fetch(new URL(path, env.ASR_URL), {
     method,
-    headers: { Authorization: `Bearer ${env.WHISPER_API_KEY}`, ...headers },
+    headers: { Authorization: `Bearer ${env.ASR_API_KEY}`, ...headers },
     body,
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -18,16 +18,16 @@ async function call(path, { method = 'GET', body, headers = {}, timeoutMs = REQU
 
 function serviceError(status, payload) {
   const detail = typeof payload?.detail === 'string' ? payload.detail : `HTTP ${status}`;
-  const error = new Error(`Whisper service: ${detail}`);
+  const error = new Error(`Speech-to-text service: ${detail}`);
   error.status = status;
   return error;
 }
 
-// The HTTP client for the whisper container. Everything goes through this one
-// object.
-export const whisper = {
+// The HTTP client for the asr container (Qwen3-ASR). Everything goes through
+// this one object.
+export const asr = {
   isEnabled() {
-    return Boolean(env.WHISPER_URL);
+    return Boolean(env.ASR_URL);
   },
 
   async health() {
@@ -35,14 +35,15 @@ export const whisper = {
     return ok ? payload : { status: 'error' };
   },
 
-  // Returns the job id. With local storage Whisper reads the file from the
+  // Returns the job id. With local storage the service reads the file from the
   // shared volume by its key; with S3 it downloads it from `url` instead.
-  async submitJob({ storageKey, url, language, task }) {
+  // It only transcribes: "translate" jobs are translated by the worker.
+  async submitJob({ storageKey, url, language }) {
     const source = url ? { url } : { storageKey };
     const { ok, status, payload } = await call('/jobs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...source, language: language ?? null, task }),
+      body: JSON.stringify({ ...source, language: language ?? null }),
     });
     if (!ok) throw serviceError(status, payload);
     return payload.id;
@@ -86,6 +87,12 @@ export const whisper = {
       );
     }
     if (status === 413) throw AppError.badRequest('Recordings can be up to 5 minutes', 'TOO_LONG');
+    if (status === 400 && /language/i.test(payload?.detail ?? '')) {
+      throw AppError.badRequest(
+        'Speech-to-text does not support that language',
+        'UNSUPPORTED_LANGUAGE',
+      );
+    }
     if (!ok) throw AppError.badRequest('Could not make out that recording', 'UNREADABLE_AUDIO');
     return { text: payload.text, language: payload.language };
   },

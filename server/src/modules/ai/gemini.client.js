@@ -197,6 +197,73 @@ export async function generateContent({
   throw lastError;
 }
 
+// Image models, tried in order after the one the admin chose. Like text
+// models, Google renames these over time; the admin can set a newer one.
+// The first is the default (fast, good quality); pro is slower and pricier.
+export const IMAGE_FALLBACK_MODELS = [
+  'gemini-3.1-flash-image',
+  'gemini-2.5-flash-image',
+  'gemini-3-pro-image',
+];
+export const IMAGE_ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9', '3:2', '2:3', '21:9'];
+
+/**
+ * Generates an image (Gemini "image out"), optionally from reference images
+ * in `parts` ({ inlineData } items before the prompt text).
+ * Returns { images: [{ mimeType, data (base64) }], text, model, totalTokens }.
+ */
+export async function generateImage({ model, parts, aspectRatio, timeoutMs = 3 * 60 * 1000 }) {
+  const all = [...new Set([model, ...IMAGE_FALLBACK_MODELS].filter(Boolean))];
+  const now = Date.now();
+  const ready = all.filter((candidate) => !(cooldownUntil.get(candidate) > now));
+  let lastError;
+  for (const candidate of ready.length ? ready : all) {
+    try {
+      const result = await call(`/v1beta/models/${encodeURIComponent(candidate)}:generateContent`, {
+        method: 'POST',
+        timeoutMs,
+        body: {
+          contents: [{ role: 'user', parts }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE'],
+            ...(aspectRatio && { imageConfig: { aspectRatio } }),
+          },
+        },
+      });
+      const candidateParts = result?.candidates?.[0]?.content?.parts ?? [];
+      const images = candidateParts
+        .map((part) => part.inlineData ?? part.inline_data)
+        .filter((data) => data?.data && /^image\//.test(data.mimeType ?? data.mime_type ?? ''))
+        .map((data) => ({ mimeType: data.mimeType ?? data.mime_type, data: data.data }));
+      const text = candidateParts
+        .filter((part) => typeof part.text === 'string' && !part.thought)
+        .map((part) => part.text)
+        .join('')
+        .trim();
+      if (images.length === 0) {
+        const reason =
+          result?.promptFeedback?.blockReason ?? result?.candidates?.[0]?.finishReason ?? 'EMPTY';
+        throw new GeminiError(422, `No image was made (${reason})${text ? `: ${text}` : ''}`);
+      }
+      return {
+        images,
+        text,
+        model: candidate,
+        totalTokens: result?.usageMetadata?.totalTokenCount ?? 0,
+      };
+    } catch (error) {
+      lastError = error;
+      if (!worthTryingAnother(error)) throw error;
+      coolDown(candidate, error);
+      logger.warn(
+        { model: candidate, status: error.status, err: error.message },
+        'Gemini image model unavailable, trying the next one',
+      );
+    }
+  }
+  throw lastError;
+}
+
 // Reads a server-sent-events body: yields each "data:" payload, parsed.
 async function* sseEvents(body) {
   const decoder = new TextDecoder();

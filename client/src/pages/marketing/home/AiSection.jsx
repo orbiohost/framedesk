@@ -312,8 +312,8 @@ export function AiSection() {
 
           <Card className="lg:col-span-5" delay={80}>
             <CardText icon={Captions} tint="bg-mint" title="Transcripts for every recording">
-              Pick the language or let it detect one, in English, Hindi and other Indian languages.
-              Click a line to jump to that second, or translate it to English.
+              Pick the language or let it detect one, in English, Hindi and 28 more languages. Click
+              a line to jump to that second, or translate it to English.
             </CardText>
             <TranscriptSnippet />
           </Card>

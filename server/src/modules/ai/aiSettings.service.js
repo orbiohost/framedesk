@@ -1,8 +1,10 @@
 import { env } from '../../config/env.js';
 import { cached } from '../../utils/cache.js';
 import { PLANS } from '../plans/plans.catalog.js';
+import { AppError } from '../../utils/AppError.js';
+import { MODEL_KINDS, modelOverrides, modelsFrom } from './aiModels.js';
 import { AI_SETTINGS_SCOPE, AiSettings } from './aiSettings.model.js';
-import { isGeminiConfigured } from './gemini.client.js';
+import { IMAGE_FALLBACK_MODELS, isGeminiConfigured } from './gemini.client.js';
 
 // Usage limits per plan until the admin sets their own, in credits (1 credit ≈
 // 10,000 Gemini tokens). A typical question uses 1–3 credits.
@@ -25,6 +27,10 @@ export const RESET_PRICE_CODES = ['free', 'trial', ...PLANS.map((plan) => plan.c
 export const SESSION_HOURS = 5;
 export const WEEK_DAYS = 7;
 
+// Reference images per image request, by plan code. Free gets 3; bigger plans more.
+const DEFAULT_REF_IMAGE_LIMITS = { free: 3, trial: 3, starter: 6, studio: 10, agency: 14 };
+export const MAX_REF_IMAGES = 14;
+
 export const DEFAULT_PACKS = [
   { code: 'pack-200', credits: 200, price: 199 },
   { code: 'pack-1000', credits: 1000, price: 799 },
@@ -44,6 +50,10 @@ export const EDITABLE_FIELDS = [
   'minAnalysisCredits',
   'maxAnalysisMB',
   'packs',
+  'imageModel',
+  'imageCredits',
+  'refImageLimits',
+  'models',
 ];
 
 function limitsFrom(saved, fallback) {
@@ -89,6 +99,20 @@ function toSettings(doc) {
       credits,
       price,
     })),
+    imageModel: doc?.imageModel || env.GEMINI_IMAGE_MODEL || IMAGE_FALLBACK_MODELS[0],
+    imageCredits: doc?.imageCredits ?? 5,
+    refImageLimits: Object.fromEntries(
+      RESET_PRICE_CODES.map((code) => {
+        const saved = Number(doc?.refImageLimits?.[code]);
+        return [
+          code,
+          Number.isFinite(saved) && saved >= 0
+            ? Math.min(saved, MAX_REF_IMAGES)
+            : (DEFAULT_REF_IMAGE_LIMITS[code] ?? 6),
+        ];
+      }),
+    ),
+    models: modelsFrom(doc?.models),
     updatedAt: doc?.updatedAt ?? null,
   };
 }
@@ -101,12 +125,22 @@ export async function getAiSettings() {
 }
 
 export async function updateAiSettings(input, adminId) {
-  const next = { ...(await getAiSettings()), ...input };
+  const current = await getAiSettings();
+  const next = { ...current, ...input };
+  // Only the models sent change; the rest keep what was saved.
+  const models = modelOverrides({ ...modelOverrides(current.models), ...(input.models ?? {}) });
+  const open = modelsFrom(models).filter((model) => model.status === 'available');
+  for (const kind of MODEL_KINDS) {
+    if (!open.some((model) => model.kind === kind)) {
+      throw AppError.badRequest(`Keep at least one ${kind} model available.`, 'MODEL_REQUIRED');
+    }
+  }
   const doc = await AiSettings.findOneAndUpdate(
     { key: 'default' },
     {
       $set: {
         ...Object.fromEntries(EDITABLE_FIELDS.map((field) => [field, next[field]])),
+        models,
         updatedBy: adminId,
       },
     },

@@ -667,6 +667,30 @@ self.addEventListener('push', (event) => {
     data = { body: event.data ? event.data.text() : '' };
   }
   const title = data.title || 'FrameDesk';
+  // Project alert: stays on screen until tapped, buzzes, and tells any open
+  // FrameDesk window to ring (a worker can't play sound itself).
+  if (data.kind === 'project-alert') {
+    event.waitUntil(
+      (async () => {
+        const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const client of windows) client.postMessage({ type: 'project-alert', alertId: data.alertId });
+        await self.registration.showNotification(title, {
+          body: data.body || '',
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: data.tag || undefined,
+          renotify: true,
+          requireInteraction: data.requireInteraction !== false,
+          silent: Boolean(data.silent),
+          vibrate: data.vibrate || [],
+          actions: [{ action: 'open', title: 'Open project' }],
+          data: { url: data.url || '/app', alertId: data.alertId },
+          timestamp: Date.now(),
+        });
+      })(),
+    );
+    return;
+  }
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',

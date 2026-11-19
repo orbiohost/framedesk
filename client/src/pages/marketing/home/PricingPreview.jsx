@@ -7,6 +7,7 @@ import { IntervalToggle } from '../../../features/billing/IntervalToggle.jsx';
 import { OfferCountdown } from '../../../features/billing/OfferCountdown.jsx';
 import { FreePlanCard, PlanCard, PlanGrid } from '../../../features/billing/PlanCard.jsx';
 import { cn } from '../../../lib/cn.js';
+import { gbLabel } from '../../../features/billing/pricing.js';
 import { formatInr } from '../../../lib/format.js';
 
 function SignupLink({ plan }) {
@@ -63,7 +64,7 @@ export function PricingPreview() {
             Priced by storage, because that&apos;s what video uses.
           </h2>
           <p className="text-muted md:text-right">
-            Prices in INR, plus GST. Start on the free plan with 2 GB, no card needed, and upgrade
+            Prices in INR, plus GST. Start on the free plan with 1 GB, no card needed, and upgrade
             when you need more. Need more space still? Add 100 GB packs to any plan.
           </p>
         </div>
@@ -108,7 +109,7 @@ export function PricingPreview() {
               <p className="text-muted mt-4 text-sm">
                 <span className="text-ink font-medium">Refer a studio:</span> they get{' '}
                 {pricing.referral.discountPercent}% off their first plan and you get{' '}
-                {pricing.referral.rewardGB} GB of extra storage.
+                {gbLabel(pricing.referral.rewardGB)} of extra storage.
               </p>
             )}
           </>

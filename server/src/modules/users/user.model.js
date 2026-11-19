@@ -39,6 +39,29 @@ const notificationPrefsSchema = new Schema(
   { _id: false },
 );
 
+// Project alerts this person receives (alerts/ module): how they ring.
+// Defaults live in alerts/alertSettings.js.
+const alertPrefsSchema = new Schema(
+  {
+    enabled: { type: Boolean },
+    sound: { type: String, maxlength: 20 },
+    volume: { type: Number, min: 0, max: 1 },
+    ringSeconds: { type: Number, min: 3, max: 300 },
+    repeatMinutes: { type: Number, min: 1, max: 1440 },
+    // 0: forever, until the project is opened.
+    maxRepeats: { type: Number, min: 0, max: 1000 },
+    vibrate: { type: Boolean },
+    // everyone: any workspace member who can edit; admins: owners and admins only.
+    allowFrom: { type: String, enum: ['everyone', 'admins'] },
+    quietHours: {
+      enabled: { type: Boolean },
+      start: { type: Number, min: 0, max: 23 },
+      end: { type: Number, min: 0, max: 23 },
+    },
+  },
+  { _id: false },
+);
+
 const userSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 80 },
@@ -52,6 +75,11 @@ const userSchema = new Schema(
     avatarUrl: { type: String, default: null },
     billingProfile: { type: billingProfileSchema, default: () => ({}) },
     notificationPrefs: { type: notificationPrefsSchema, default: () => ({}) },
+    alertPrefs: { type: alertPrefsSchema, default: () => ({}) },
+    // Audio and video this person drops into a project's "Notes & Briefs"
+    // folder are transcribed by themselves when no longer than this many
+    // minutes (0: never). Unset means the default (AUTO_TRANSCRIBE_DEFAULT_MINUTES).
+    autoTranscribeMinutes: { type: Number, min: 0, max: 600, default: undefined },
 
     emailVerifiedAt: { type: Date, default: null },
     emailVerification: { type: oneTimeTokenSchema, select: false },

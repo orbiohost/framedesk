@@ -8,3 +8,7 @@ export const VIEW_ROLES = ['owner', 'admin', 'manager', 'editor', 'viewer'];
 export const EDIT_ROLES = ['owner', 'admin', 'manager', 'editor'];
 export const MANAGE_ROLES = ['owner', 'admin', 'manager'];
 export const ADMIN_ROLES = ['owner', 'admin'];
+
+// Roles someone can be invited as, or changed to. There is one owner, set at
+// creation; clients get review links rather than membership.
+export const INVITE_ROLES = ['admin', 'manager', 'editor', 'viewer'];

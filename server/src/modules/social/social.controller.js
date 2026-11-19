@@ -27,7 +27,11 @@ export const lookupProfile = asyncHandler(async (req, res) => {
 });
 
 export const createPublicAccount = asyncHandler(async (req, res) => {
-  const account = await socialService.createPublicAccount(req.workspace._id, req.user._id, req.body);
+  const account = await socialService.createPublicAccount(
+    req.workspace._id,
+    req.user._id,
+    req.body,
+  );
   sendSuccess(res, { account }, { status: 201 });
 });
 
@@ -72,7 +76,11 @@ export const getAccount = asyncHandler(async (req, res) => {
 });
 
 export const createManualAccount = asyncHandler(async (req, res) => {
-  const account = await socialService.createManualAccount(req.workspace._id, req.user._id, req.body);
+  const account = await socialService.createManualAccount(
+    req.workspace._id,
+    req.user._id,
+    req.body,
+  );
   sendSuccess(res, { account }, { status: 201 });
 });
 

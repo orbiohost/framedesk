@@ -109,7 +109,12 @@ export async function clearAppCredentials(appId) {
     { key: 'default' },
     {
       $set: {
-        [`apps.${appId}`]: { clientId: null, clientSecret: null, updatedAt: new Date(), updatedBy: null },
+        [`apps.${appId}`]: {
+          clientId: null,
+          clientSecret: null,
+          updatedAt: new Date(),
+          updatedBy: null,
+        },
       },
     },
     { upsert: true },

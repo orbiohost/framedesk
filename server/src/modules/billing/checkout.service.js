@@ -113,8 +113,15 @@ async function itemFor(pool, { planCode, interval, packCode, product, couponCode
       offerCode: null,
     };
   }
-  const { amount: listAmount, offerCode } = await quote(planCode, interval);
-  const found = await discountFor({ pool, planCode, interval, amount: listAmount, couponCode });
+  const { amount: listAmount, offerCode, floor } = await quote(planCode, interval);
+  const found = await discountFor({
+    pool,
+    planCode,
+    interval,
+    amount: listAmount,
+    couponCode,
+    floor,
+  });
   const discount = found && {
     kind: found.kind,
     code: found.code,

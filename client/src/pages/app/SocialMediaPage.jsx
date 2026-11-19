@@ -110,13 +110,14 @@ export function SocialMediaPage() {
       <PageHeader
         title="Social Media Hub"
         subtitle="Link Instagram, YouTube, Facebook, TikTok and more, see what really performs, and get AI advice on what to post next."
-        breadcrumbs={[
-          { label: 'Workspace', to: `/w/${workspace.id}` },
-          { label: 'Social Media' },
-        ]}
+        breadcrumbs={[{ label: 'Workspace', to: `/w/${workspace.id}` }, { label: 'Social Media' }]}
         action={
           manager && (
-            <Button type="button" onClick={() => handleOpenConnect()} className="pill-active gap-1.5">
+            <Button
+              type="button"
+              onClick={() => handleOpenConnect()}
+              className="pill-active gap-1.5"
+            >
               <Plus className="h-4 w-4" /> Connect Account
             </Button>
           )
@@ -154,14 +155,19 @@ export function SocialMediaPage() {
               )}
             >
               <Icon
-                className={cn('h-4 w-4', tab.highlight && !isActive && 'text-purple-600 dark:text-purple-400')}
+                className={cn(
+                  'h-4 w-4',
+                  tab.highlight && !isActive && 'text-purple-600 dark:text-purple-400',
+                )}
               />
               <span>{tab.label}</span>
               {tab.badge && (
                 <span
                   className={cn(
                     'rounded-full px-1.5 text-[10px] font-bold tabular-nums',
-                    isActive ? 'bg-surface/25 text-current' : 'bg-lavender text-accent dark:text-ink',
+                    isActive
+                      ? 'bg-surface/25 text-current'
+                      : 'bg-lavender text-accent dark:text-ink',
                   )}
                 >
                   {tab.badge}
@@ -234,7 +240,11 @@ export function SocialMediaPage() {
       <Dialog
         open={Boolean(importAccount)}
         onClose={() => setImportAccount(null)}
-        title={importAccount ? `Import into ${PLATFORM_CONFIG[importAccount.platform]?.name} @${importAccount.handle}` : ''}
+        title={
+          importAccount
+            ? `Import into ${PLATFORM_CONFIG[importAccount.platform]?.name} @${importAccount.handle}`
+            : ''
+        }
         description="Screenshots of your stats or an exported CSV. AI reads the numbers, you check them, then they're saved."
         wide="xl"
       >

@@ -13,6 +13,8 @@ import {
 const KEY = ['notifications'];
 // The push address this browser last registered, to spot a rotated one.
 const ENDPOINT_KEY = 'push:endpoint';
+// Set when someone turns notifications off on this device: never re-enabled by itself.
+const OPT_OUT_KEY = 'push:optOut';
 
 // { pushAvailable, publicKey, settings, devices }
 export function useNotifications() {
@@ -46,6 +48,7 @@ export function useEnableThisDevice() {
     mutationFn: async (publicKey) => {
       const subscription = await subscribeThisDevice(publicKey);
       writeLocal(ENDPOINT_KEY, subscription.endpoint);
+      writeLocal(OPT_OUT_KEY, '0');
       return api.post('/notifications/devices', {
         ...subscription,
         label: deviceLabel(),
@@ -61,6 +64,7 @@ export function useRemoveDevice() {
   return useMutation({
     // No endpoint: this device (also unsubscribes it in the browser).
     mutationFn: async (endpoint) => {
+      if (!endpoint) writeLocal(OPT_OUT_KEY, '1');
       const target = endpoint ?? (await unsubscribeThisDevice());
       if (!target) return api.get('/notifications');
       if (endpoint) {
@@ -73,8 +77,9 @@ export function useRemoveDevice() {
   });
 }
 
+// options: { delaySeconds (0-30, time to close the app), kind: 'reminder' | 'alert' }.
 export function useSendTestNotification() {
-  return useMutation({ mutationFn: () => api.post('/notifications/test') });
+  return useMutation({ mutationFn: (options) => api.post('/notifications/test', options ?? {}) });
 }
 
 // This device's push address, if it has one and the server knows it.
@@ -88,10 +93,21 @@ export function useThisDeviceEndpoint() {
 
 let syncedThisSession = false;
 
-// Once per visit: registers this device's new push address when the browser
-// rotated it (the old one stops working), and keeps the time zone current so
-// reminders land at the right hour. A device removed from the settings on
-// another device stays removed.
+async function register(subscription, zone) {
+  writeLocal(ENDPOINT_KEY, subscription.endpoint);
+  return api.post('/notifications/devices', {
+    ...subscription.toJSON(),
+    label: deviceLabel(),
+    timeZone: zone,
+  });
+}
+
+// Once per visit, so alerts keep reaching this device while the app is closed:
+// - permission given but no push address (cleared site data, a new server key,
+//   the browser dropped it): subscribes again, no prompt needed;
+// - a new address (the browser rotated it): registers it with the server;
+// - keeps the time zone current so reminders land at the right hour.
+// Turning it off here, or removing this device from another one, is respected.
 export function useNotificationSync() {
   const { data } = useNotifications();
   const setOverview = useSetOverview();
@@ -100,20 +116,30 @@ export function useNotificationSync() {
     syncedThisSession = true;
     (async () => {
       const zone = browserTimeZone();
-      const subscription = await currentSubscription().catch(() => null);
+      const wanted =
+        data.pushAvailable &&
+        data.settings.push &&
+        data.publicKey &&
+        readLocal(OPT_OUT_KEY) !== '1' &&
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted';
+      let subscription = await currentSubscription().catch(() => null);
       const known = data.devices.some((device) => device.endpoint === subscription?.endpoint);
       const previous = readLocal(ENDPOINT_KEY);
-      const rotated = subscription && !known && previous && previous !== subscription.endpoint;
-      if (rotated && data.pushAvailable && data.settings.push) {
-        writeLocal(ENDPOINT_KEY, subscription.endpoint);
-        setOverview(
-          await api.post('/notifications/devices', {
-            ...subscription.toJSON(),
-            label: deviceLabel(),
-            timeZone: zone,
-          }),
-        );
-      } else if (zone && zone !== data.settings.timeZone) {
+      const removedElsewhere = subscription && !known && previous === subscription.endpoint;
+
+      if (wanted && !removedElsewhere && (!subscription || !known)) {
+        if (!subscription) {
+          // Permission is already granted, so this shows no prompt.
+          await subscribeThisDevice(data.publicKey);
+          subscription = await currentSubscription();
+        }
+        if (subscription) {
+          setOverview(await register(subscription, zone));
+          return;
+        }
+      }
+      if (zone && zone !== data.settings.timeZone) {
         setOverview(await api.patch('/notifications/settings', { timeZone: zone }));
       }
     })().catch(() => {});

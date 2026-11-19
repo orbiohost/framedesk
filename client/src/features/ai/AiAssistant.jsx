@@ -8,7 +8,11 @@ import {
   FileText,
   Film,
   History,
+  Image as ImageIcon,
+  LayoutGrid,
   Loader2,
+  MessageSquarePlus,
+  NotebookPen,
   Maximize2,
   PanelLeftClose,
   RotateCcw,
@@ -20,6 +24,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { cn } from '../../lib/cn.js';
+import { invalidateFeatures } from '../../lib/workspaceKeys.js';
 import { readLocal, removeLocal, writeLocal } from '../../lib/storage.js';
 import { useCurrentUser } from '../auth/hooks.js';
 import { PreviewDialog } from '../files/FileDialogs.jsx';
@@ -30,13 +35,25 @@ import { onAiRequest, setAiAvailable, takeAiRequest } from './aiBridge.js';
 import {
   AiComposer,
   FileChip,
+  IMAGE_STYLE_OPTIONS,
   MAX_ATTACHMENTS,
   MAX_NOTES,
+  MAX_SKILLS,
   NoteChip,
+  QuoteBlock,
   ScopeChip,
+  WHOLE_DRIVE,
+  SkillChip,
   categoryOf,
 } from './AiComposer.jsx';
+import { AgentBadge } from './AgentBadge.jsx';
+import { AiImageResult, ImagePending } from './AiImageResult.jsx';
+import { AgentPicker } from './AgentPicker.jsx';
+import { ModelPicker, pickModel, readModelChoice, writeModelChoice } from './ModelPicker.jsx';
+import { useAiAgents } from './studioHooks.js';
 import { SaveAnswerDialog } from './SaveAnswerDialog.jsx';
+import { SelectionMenu } from './SelectionMenu.jsx';
+import { SaveTextNoteDialog, SendToMoodboardDialog } from './SendTextDialogs.jsx';
 import { AiHistory } from './AiHistory.jsx';
 import { AiMessageText, toPlainText } from './AiMessageText.jsx';
 import { LimitReached, UsageButton } from './AiUsage.jsx';
@@ -45,6 +62,7 @@ import { AI_GRADIENT, AI_TEXT } from './aiStyle.js';
 import {
   aiKey,
   askAiStream,
+  createAiImage,
   fetchAiUploadFolder,
   useAiStatus,
   useAiThread,
@@ -78,6 +96,8 @@ const FILE_SUGGESTIONS = [
 
 // The chat each workspace was last on, so the corner panel and the AI page agree.
 const threadStorageKey = (workspaceId) => `ai:thread:${workspaceId}`;
+// The assistant new chats start with.
+const agentStorageKey = (workspaceId) => `ai:agent:${workspaceId}`;
 
 // The assistant's round avatar. `busy` adds a turning gradient ring.
 function AiAvatar({ busy = false, size = 'md' }) {
@@ -107,9 +127,48 @@ function libraryLine(library) {
   return `You have ${library.total} files; I read the ones you ask about.`;
 }
 
-function Welcome({ status, onPick, compact, scope, attachments }) {
+function AgentWelcome({ agent, onPick, compact }) {
+  const starters = agent.starters?.length
+    ? agent.starters
+    : ['What can you help me with?', 'Show me what you know'];
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 py-6 text-center">
+      <div className="relative animate-[ai-float_4s_ease-in-out_infinite]">
+        <AgentBadge agent={agent} size="xl" className="shadow-lg" />
+      </div>
+      <div className="max-w-md px-2">
+        <p className="text-xl font-semibold tracking-tight">{agent.name}</p>
+        <p className="text-muted mt-1.5 text-sm">
+          {agent.description || 'Your custom assistant. Ask it anything.'}
+        </p>
+        {agent.createdBy && agent.visibility === 'workspace' && (
+          <p className="text-muted/80 mt-1 text-xs">Made by {agent.createdBy.name}</p>
+        )}
+      </div>
+      <div className={cn('grid w-full gap-2', compact ? 'grid-cols-1' : 'sm:grid-cols-2')}>
+        {starters.map((text, index) => (
+          <button
+            key={text}
+            type="button"
+            onClick={() => onPick(text)}
+            style={{ animationDelay: `${index * 60}ms` }}
+            className="border-line/70 hover:border-accent/40 hover:bg-subtle/60 flex animate-[ai-rise_320ms_ease-out_both] items-center gap-3 rounded-2xl border px-3.5 py-3 text-left text-sm transition-colors"
+          >
+            <Wand2 className="text-accent h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="text-ink/85">{text}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Welcome({ status, onPick, compact, scope, attachments, agent }) {
   const { data: user } = useCurrentUser();
   const name = user?.name?.split(' ')[0];
+  if (agent && !scope && !attachments.length) {
+    return <AgentWelcome agent={agent} onPick={onPick} compact={compact} />;
+  }
   const suggestions = attachments.length
     ? FILE_SUGGESTIONS
     : scope
@@ -142,7 +201,7 @@ function Welcome({ status, onPick, compact, scope, attachments }) {
           ) : (
             <>
               {libraryLine(status.library)} Type <Kbd>/</Kbd> for a project, <Kbd>@</Kbd> for a
-              file, <Kbd>#</Kbd> for a saved note, or upload one.
+              file, <Kbd>#</Kbd> for a saved note or <Kbd>!</Kbd> for a skill.
             </>
           )}
         </p>
@@ -175,12 +234,37 @@ function Kbd({ children }) {
   );
 }
 
-function UserMessage({ message }) {
+function UserMessage({ message: raw }) {
+  // A question asked with "//" shows the Whole Drive chip.
+  const message = raw.wholeDrive && !raw.project ? { ...raw, project: WHOLE_DRIVE } : raw;
   return (
     <div className="flex animate-[ai-rise_220ms_ease-out_both] flex-col items-end gap-1.5">
-      {(message.project || message.attachments?.length > 0 || message.notes?.length > 0) && (
+      {message.quote && <QuoteBlock text={message.quote} className="max-w-[88%]" />}
+      {(message.kind === 'image' ||
+        message.project ||
+        message.attachments?.length > 0 ||
+        message.notes?.length > 0 ||
+        message.skills?.length > 0) && (
         <div className="flex max-w-[88%] flex-wrap justify-end gap-1.5">
+          {message.kind === 'image' && (
+            <span
+              className={cn(
+                AI_GRADIENT,
+                'inline-flex items-center gap-1.5 rounded-full py-1 pl-2 pr-2.5 text-xs font-medium text-white',
+              )}
+            >
+              <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              Image
+              {message.imageOptions?.aspectRatio && ` · ${message.imageOptions.aspectRatio}`}
+              {message.imageOptions?.style && message.imageOptions.style !== 'none'
+                ? ` · ${IMAGE_STYLE_OPTIONS.find((option) => option.value === message.imageOptions.style)?.label ?? ''}`
+                : ''}
+            </span>
+          )}
           {message.project && <ScopeChip project={message.project} />}
+          {message.skills?.map((skill) => (
+            <SkillChip key={skill.id} skill={skill} />
+          ))}
           {message.notes?.map((note) => (
             <NoteChip key={note.id} note={note} />
           ))}
@@ -253,13 +337,60 @@ function SaveNoteButton({ workspaceId, savedNoteId, onSave }) {
   );
 }
 
-function AiMessage({ message, files, onOpenFile, workspaceId, savedNoteId, onSave }) {
-  const savable = onSave && message.text !== '_Stopped._';
+function MessageAction({ label, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="text-muted hover:bg-subtle hover:text-ink grid h-7 w-7 place-items-center rounded-lg transition-colors"
+    >
+      {children}
+    </button>
+  );
+}
+
+function AiMessage({
+  message,
+  files,
+  onOpenFile,
+  workspaceId,
+  savedNoteId,
+  onSave,
+  onUseAsReference,
+  onRetryImage,
+  onNewChat,
+  onSendToBoard,
+}) {
+  const images = (message.images ?? []).map((id) => files.get(id)).filter(Boolean);
+  const isImage = message.kind === 'image';
+  const savable = onSave && message.text !== '_Stopped._' && !isImage;
   return (
     <div className="group flex animate-[ai-rise_260ms_ease-out_both] gap-3">
       <AiAvatar />
       <div className="min-w-0 flex-1 pt-0.5">
-        <AiMessageText text={message.text} files={files} onOpenFile={onOpenFile} />
+        {images.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {images.map((file) => (
+              <AiImageResult
+                key={file.id}
+                workspaceId={workspaceId}
+                file={file}
+                onOpen={onOpenFile}
+                onUseAsReference={onUseAsReference}
+                onRetry={onRetryImage}
+              />
+            ))}
+          </div>
+        )}
+        {isImage && message.images?.length > 0 && images.length === 0 && (
+          <p className="text-muted mb-1 text-xs italic">This image was deleted from Drive.</p>
+        )}
+        {/* Selecting text in here opens the selection menu. */}
+        <div data-ai-answer="">
+          <AiMessageText text={message.text} files={files} onOpenFile={onOpenFile} />
+        </div>
         <div
           className={cn(
             'text-muted mt-1 flex h-7 items-center gap-1 text-[11px] opacity-100 transition-opacity sm:group-hover:opacity-100',
@@ -271,7 +402,18 @@ function AiMessage({ message, files, onOpenFile, workspaceId, savedNoteId, onSav
           {savable && (
             <SaveNoteButton workspaceId={workspaceId} savedNoteId={savedNoteId} onSave={onSave} />
           )}
+          {savable && onSendToBoard && (
+            <MessageAction label="Send to moodboard" onClick={onSendToBoard}>
+              <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+            </MessageAction>
+          )}
+          {savable && onNewChat && (
+            <MessageAction label="New chat from this reply" onClick={onNewChat}>
+              <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden="true" />
+            </MessageAction>
+          )}
           {message.stopped && <span className="px-1">Stopped</span>}
+          {message.modelName && <span className="px-1">{message.modelName}</span>}
           {message.credits > 0 && (
             <span className="px-1">
               {message.credits} {message.credits === 1 ? 'credit' : 'credits'}
@@ -412,6 +554,57 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
   const [attached, setAttached] = useState([]);
   // Saved notes for the next question, picked with "#": { id, title }.
   const [pickedNotes, setPickedNotes] = useState([]);
+  // Skills for the next question, picked with "!": { id, name, emoji }.
+  const [pickedSkills, setPickedSkills] = useState([]);
+  // Text the next question is about: picked in an answer, or a whole earlier
+  // answer a new chat started from. { text } or null.
+  const [quote, setQuote] = useState(null);
+  // Text picked in an answer, being sent to Notes ({ text }) or a moodboard.
+  const [textNote, setTextNote] = useState(null);
+  const [boardText, setBoardText] = useState(null);
+  // "Create image" mode: the next send makes a picture; attachments are references.
+  const [imageMode, setImageModeState] = useState(false);
+  const [imageOptions, setImageOptions] = useState({ aspectRatio: '1:1', style: 'none' });
+  const canMakeImages = canEdit(workspace) && Boolean(status.images);
+  // The FrameDesk model for chat answers and for images, remembered per device.
+  const [modelChoice, setModelChoiceState] = useState(() => ({
+    chat: readModelChoice('chat'),
+    image: readModelChoice('image'),
+  }));
+  const chatModel = pickModel(status.models, 'chat', modelChoice.chat);
+  const imageModel = pickModel(status.models, 'image', modelChoice.image);
+  // Reference images per request: the plan's allowance, capped by the image
+  // model (Cloudflare FLUX takes 4).
+  const maxReferences = imageModel?.maxReferences ?? status.images?.maxReferences ?? 3;
+  const attachLimit = imageMode ? maxReferences : MAX_ATTACHMENTS;
+  function setModelChoice(kind, key) {
+    writeModelChoice(kind, key);
+    setModelChoiceState((current) => ({ ...current, [kind]: key }));
+    // A model with fewer reference slots drops the extra references.
+    const next = pickModel(status.models, kind, key);
+    if (kind === 'image' && imageMode && typeof next?.maxReferences === 'number') {
+      setAttached((current) => current.slice(0, next.maxReferences));
+    }
+  }
+
+  function setImageMode(on) {
+    setImageModeState(on);
+    if (on) {
+      // Only images can be references, and only as many as the plan allows.
+      setAttached((current) =>
+        current.filter((file) => (file.category ?? 'image') === 'image').slice(0, maxReferences),
+      );
+      setPickedSkills([]);
+      setPickedNotes([]);
+      setScope(null);
+      setQuote(null);
+    }
+  }
+  // The assistant a new chat is with (null: FrameDesk AI).
+  const [agentChoice, setAgentChoiceState] = useState(() =>
+    readLocal(agentStorageKey(workspace.id)),
+  );
+  const agents = useAiAgents(workspace.id);
   // The answer whose "Save to notes" dialog is open: { message, question }.
   const [saving, setSaving] = useState(null);
   const [uploadError, setUploadError] = useState(null);
@@ -426,6 +619,12 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
   const abortRef = useRef(null);
   const scrollRef = useRef(null);
   const stickToBottom = useRef(true);
+
+  function setAgentChoice(id) {
+    setAgentChoiceState(id);
+    if (id) writeLocal(agentStorageKey(workspace.id), id);
+    else removeLocal(agentStorageKey(workspace.id));
+  }
 
   const setThreadId = useCallback(
     (id) => {
@@ -484,6 +683,19 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
   );
 
   const messages = threadId ? (thread.data?.messages ?? []) : [];
+  // An open chat keeps its own assistant; a new one uses the choice.
+  const threadAgent = threadId ? (thread.data?.thread.agent ?? null) : undefined;
+  const agentList = agents.data ?? [];
+  const chosenAgent = agentList.find((agent) => agent.id === agentChoice) ?? null;
+  const activeAgent =
+    threadAgent === undefined
+      ? chosenAgent
+      : threadAgent
+        ? (agentList.find((agent) => agent.id === threadAgent.id) ?? {
+            ...threadAgent,
+            color: 'slate',
+          })
+        : null;
   const savedNotes = thread.data?.savedNotes ?? {};
   const files = useMemo(
     () => new Map((thread.data?.files ?? []).map((file) => [file.id, file])),
@@ -535,12 +747,97 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
     [queryClient, workspace.id],
   );
 
+  // "Create image": not streamed; a placeholder shows until the picture is back.
+  async function sendImage(text, options = imageOptions, references = attachments) {
+    if (references.some((file) => file.status && file.status !== 'ready')) return;
+    const prompt = text.trim();
+    if (prompt.length < 3 || working || limited) return;
+    const refs = references.filter((file) => file.id);
+    const sentAttachments = attached;
+    setDraft('');
+    setAttached([]);
+    setUploadError(null);
+    stickToBottom.current = true;
+    setStream({
+      question: {
+        text: prompt,
+        kind: 'image',
+        imageOptions: options,
+        attachments: refs.map(({ id, name, category }) => ({ id, name, category })),
+      },
+      image: true,
+      ratio: options.aspectRatio,
+      text: '',
+      status: refs.length
+        ? `Creating your image from ${refs.length} ${refs.length === 1 ? 'reference' : 'references'}…`
+        : 'Creating your image…',
+      done: false,
+      result: null,
+      error: null,
+    });
+    try {
+      const result = await createAiImage(workspace.id, {
+        prompt,
+        ...(threadId && { threadId }),
+        ...(!threadId && chosenAgent && { agentId: chosenAgent.id }),
+        ...(refs.length && { referenceFileIds: refs.map((file) => file.id) }),
+        aspectRatio: options.aspectRatio,
+        style: options.style,
+        ...(imageModel && { modelKey: imageModel.key }),
+      });
+      if (result.created) setThreadId(result.thread.id);
+      commit(result);
+      // The new picture is in Drive now.
+      invalidateFeatures(queryClient, workspace.id, ['files', 'folders']);
+    } catch (error) {
+      if (error.code === 'MODEL_COMING_SOON') setModelChoice('image', null);
+      if (
+        ['NO_CREDITS', 'REF_LIMIT', 'MODEL_COMING_SOON'].includes(error.code) ||
+        error.status === 503
+      ) {
+        queryClient.invalidateQueries({ queryKey: aiKey(workspace.id, 'status') });
+      }
+      setDraft((current) => current || prompt);
+      setAttached((current) => (current.length ? current : sentAttachments));
+      setStream((current) => current && { ...current, error });
+    }
+  }
+
+  // Tries the same image request again (the "another version" button).
+  function retryImage(message) {
+    const index = messages.findIndex((item) => item.id === message.id);
+    const question = messages.slice(0, index).findLast((item) => item.role === 'user');
+    if (!question) return;
+    const options = { ...imageOptions, ...(question.imageOptions ?? {}) };
+    setImageMode(true);
+    setImageOptions(options);
+    sendImage(
+      question.text,
+      options,
+      (question.attachments ?? []).map((file) => ({ ...file, key: file.id, status: 'ready' })),
+    );
+  }
+
+  function addAsReference(file) {
+    setImageMode(true);
+    setAttached((current) =>
+      current.some((item) => item.id === file.id) || current.length >= maxReferences
+        ? current
+        : [...current, { key: file.id, id: file.id, name: file.name, category: 'image' }],
+    );
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
   async function send(text = draft) {
+    if (imageMode) return sendImage(text);
     const files = attachments.filter((file) => file.status === 'ready');
     if (attachments.some((file) => file.status !== 'ready')) return;
     const notes = pickedNotes;
+    const skills = pickedSkills;
+    const quoted = quote?.text ?? '';
     const question =
       text.trim() ||
+      (quoted ? 'Tell me more about this' : '') ||
       (files.length === 1
         ? 'What is in this file?'
         : files.length
@@ -556,6 +853,8 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
     setDraft('');
     setAttached([]);
     setPickedNotes([]);
+    setPickedSkills([]);
+    setQuote(null);
     setUploadError(null);
     stickToBottom.current = true;
     const controller = new AbortController();
@@ -566,6 +865,8 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
         project,
         attachments: files.map(({ id, name, category }) => ({ id, name, category })),
         notes,
+        skills,
+        quote: quoted || null,
       },
       text: '',
       status: 'Thinking',
@@ -579,9 +880,15 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
         {
           text: question,
           ...(threadId && { threadId }),
-          ...(project && { projectId: project.id }),
+          ...(project?.wholeDrive
+            ? { wholeDrive: true }
+            : project && { projectId: project.id }),
           ...(files.length && { fileIds: files.map((file) => file.id) }),
           ...(notes.length && { noteIds: notes.map((note) => note.id) }),
+          ...(skills.length && { skillIds: skills.map((skill) => skill.id) }),
+          ...(quoted && { quote: quoted.slice(0, 12000) }),
+          ...(!threadId && chosenAgent && { agentId: chosenAgent.id }),
+          ...(chatModel && { modelKey: chatModel.key }),
         },
         {
           signal: controller.signal,
@@ -599,12 +906,18 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
               setStream((current) => current && { ...current, text: current.text + data.text });
             } else if (event === 'done') {
               setStream((current) => current && { ...current, done: true, result: data });
+              // Memory is learnt just after the answer; refresh it shortly.
+              setTimeout(
+                () => queryClient.invalidateQueries({ queryKey: aiKey(workspace.id, 'memory') }),
+                6000,
+              );
             }
           },
         },
       );
     } catch (error) {
       if (controller.signal.aborted) return;
+      if (error.code === 'MODEL_COMING_SOON') setModelChoice('chat', null);
       if (error.code === 'NO_CREDITS' || error.status === 403 || error.status === 503) {
         queryClient.invalidateQueries({ queryKey: aiKey(workspace.id, 'status') });
       }
@@ -612,6 +925,12 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
       setDraft((current) => current || text.trim());
       setAttached((current) => (current.length ? current : sentAttachments));
       setPickedNotes((current) => (current.length ? current : notes));
+      setPickedSkills((current) => (current.length ? current : skills));
+      if (quoted) setQuote((current) => current ?? { text: quoted });
+      if (error.code === 'AGENT_NOT_FOUND') {
+        setAgentChoice(null);
+        queryClient.invalidateQueries({ queryKey: aiKey(workspace.id, 'agents') });
+      }
       setStream((current) => current && { ...current, error });
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
@@ -632,15 +951,34 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
     }, 1200);
   }
 
-  function newChat() {
+  function newChat(fromText = null) {
     if (working) stop();
     setThreadId(null);
     setStream(null);
     setScope(null);
     setAttached([]);
     setPickedNotes([]);
+    setPickedSkills([]);
+    setQuote(fromText ? { text: fromText } : null);
+    setImageModeState(false);
     setUploadError(null);
     setHistoryOpen(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  // Picked text (or a reply) as context for the next question in this chat.
+  function askAbout(text) {
+    setQuote({ text });
+    setImageModeState(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  function addSkill(skill) {
+    setPickedSkills((current) =>
+      current.some((item) => item.id === skill.id) || current.length >= MAX_SKILLS
+        ? current
+        : [...current, skill],
+    );
   }
 
   function addNote(note) {
@@ -653,7 +991,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
 
   function attach(file) {
     setAttached((current) =>
-      current.some((item) => item.id === file.id) || current.length >= MAX_ATTACHMENTS
+      current.some((item) => item.id === file.id) || current.length >= attachLimit
         ? current
         : [...current, { key: file.id, ...file }],
     );
@@ -662,10 +1000,17 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
   // Files picked, dropped or pasted: uploaded to the Drive's "AI uploads"
   // folder and attached to the next question.
   async function uploadFiles(list) {
-    const room = MAX_ATTACHMENTS - attached.length;
-    const files = list.slice(0, Math.max(room, 0));
+    const usable = imageMode ? list.filter((file) => file.type.startsWith('image/')) : list;
+    const room = attachLimit - attached.length;
+    const files = usable.slice(0, Math.max(room, 0));
     setUploadError(
-      list.length > files.length ? `Up to ${MAX_ATTACHMENTS} files per question.` : null,
+      usable.length < list.length
+        ? 'Only images can be used as references.'
+        : list.length > files.length
+          ? imageMode
+            ? `Your plan allows up to ${attachLimit} reference images per request.`
+            : `Up to ${attachLimit} files per question.`
+          : null,
     );
     if (files.length === 0) return;
     try {
@@ -702,6 +1047,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
       setScope(request.project ?? null);
       setAttached(request.file ? [{ key: request.file.id, ...request.file }] : []);
       setPickedNotes(request.note ? [request.note] : []);
+      setQuote(null);
       setUploadError(null);
       requestAnimationFrame(() => inputRef.current?.focus());
     };
@@ -734,7 +1080,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
       isPending={threads.isPending}
       activeId={threadId}
       onSelect={selectThread}
-      onNew={newChat}
+      onNew={() => newChat()}
       onRename={(id, title) => renameThread.mutate({ threadId: id, title })}
       onDelete={removeThread}
       className="h-full"
@@ -799,15 +1145,14 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
       )}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        {/* A soft colour wash behind the header. */}
-        <div
-          className={cn(
-            AI_GRADIENT,
-            'pointer-events-none absolute inset-x-0 top-0 h-24 opacity-[0.07]',
-          )}
-          aria-hidden="true"
-        />
-        <header className="border-line/60 relative flex items-center gap-1.5 border-b px-2.5 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:gap-2 sm:px-3">
+        {/* z-10 keeps the assistant menu above the messages. */}
+        <header className="border-line/60 bg-surface relative z-10 flex shrink-0 items-center gap-1.5 border-b px-2.5 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:gap-2 sm:px-3">
+          {/* A soft colour wash, kept inside the header so it never spills
+              over the messages below. */}
+          <span
+            className={cn(AI_GRADIENT, 'pointer-events-none absolute inset-0 -z-10 opacity-[0.07]')}
+            aria-hidden="true"
+          />
           <IconButton
             label="Chat history"
             onClick={() => setHistoryOpen(true)}
@@ -815,15 +1160,44 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
           >
             <History className="h-4 w-4" aria-hidden="true" />
           </IconButton>
-          <AiAvatar busy={busy} />
-          <div className="min-w-0 flex-1 pl-0.5">
-            <p className="truncate text-sm font-semibold leading-tight">
-              {threadId ? (thread.data?.thread.title ?? 'FrameDesk AI') : 'FrameDesk AI'}
-            </p>
-            <p className="text-muted truncate text-[11px] leading-tight">
-              {busy ? 'Working on it…' : 'Knows your videos, images and docs'}
-            </p>
-          </div>
+          {threadId ? (
+            <>
+              {activeAgent ? (
+                <span className="relative">
+                  {busy && (
+                    <span
+                      className="ai-orbit absolute -inset-[3px] rounded-full"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <AgentBadge agent={activeAgent} className={cn(busy && 'ring-surface ring-2')} />
+                </span>
+              ) : (
+                <AiAvatar busy={busy} />
+              )}
+              <div className="min-w-0 flex-1 pl-0.5">
+                <p className="truncate text-sm font-semibold leading-tight">
+                  {thread.data?.thread.title ?? activeAgent?.name ?? 'FrameDesk AI'}
+                </p>
+                <p className="text-muted truncate text-[11px] leading-tight">
+                  {busy
+                    ? 'Working on it…'
+                    : activeAgent
+                      ? `with ${activeAgent.name}`
+                      : 'Knows your videos, images and docs'}
+                </p>
+              </div>
+            </>
+          ) : (
+            <AgentPicker
+              workspaceId={workspace.id}
+              agents={agentList}
+              value={chosenAgent?.id ?? null}
+              onChange={setAgentChoice}
+              subtitle={busy ? 'Working on it…' : undefined}
+              onNavigate={isPage ? undefined : onClose}
+            />
+          )}
           <UsageButton
             credits={credits}
             workspaceId={workspace.id}
@@ -833,7 +1207,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
             }
           />
           {(threadId || messages.length > 0) && (
-            <IconButton label="New chat" onClick={newChat}>
+            <IconButton label="New chat" onClick={() => newChat()}>
               <SquarePen className="h-4 w-4" aria-hidden="true" />
             </IconButton>
           )}
@@ -872,6 +1246,7 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
                 compact={!isPage}
                 scope={scope}
                 attachments={attachments}
+                agent={activeAgent}
               />
             ) : (
               <>
@@ -897,6 +1272,18 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
                               })
                           : undefined
                       }
+                      onUseAsReference={canMakeImages ? addAsReference : undefined}
+                      onNewChat={() => newChat(toPlainText(message.text))}
+                      onSendToBoard={
+                        canEdit(workspace)
+                          ? () => setBoardText(toPlainText(message.text))
+                          : undefined
+                      }
+                      onRetryImage={
+                        canMakeImages && message.kind === 'image' && !working
+                          ? () => retryImage(message)
+                          : undefined
+                      }
                     />
                   ),
                 )}
@@ -908,7 +1295,9 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
                         <p role="alert" className="text-danger">
                           {stream.error.message}
                         </p>
-                        {stream.error.code !== 'NO_CREDITS' && (
+                        {!['NO_CREDITS', 'REF_LIMIT', 'IMAGE_QUOTA', 'MODEL_COMING_SOON'].includes(
+                          stream.error.code,
+                        ) && (
                           <button
                             type="button"
                             onClick={() => {
@@ -920,6 +1309,13 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
                             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Retry
                           </button>
                         )}
+                      </div>
+                    ) : stream.image ? (
+                      <div className="flex gap-3">
+                        <AiAvatar busy />
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          <ImagePending ratio={stream.ratio} status={stream.status} />
+                        </div>
                       </div>
                     ) : stream.text ? (
                       <StreamingAnswer
@@ -977,6 +1373,27 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
             onRemoveNote={(id) =>
               setPickedNotes((current) => current.filter((note) => note.id !== id))
             }
+            quote={quote}
+            onClearQuote={() => setQuote(null)}
+            skills={pickedSkills}
+            onAddSkill={addSkill}
+            onRemoveSkill={(id) =>
+              setPickedSkills((current) => current.filter((skill) => skill.id !== id))
+            }
+            imageMode={imageMode}
+            onImageMode={canMakeImages ? setImageMode : undefined}
+            imageOptions={imageOptions}
+            onImageOptions={setImageOptions}
+            maxAttachments={attachLimit}
+            modelPicker={
+              <ModelPicker
+                models={status.models}
+                kind={imageMode ? 'image' : 'chat'}
+                value={(imageMode ? imageModel : chatModel)?.key ?? null}
+                onChange={(key) => setModelChoice(imageMode ? 'image' : 'chat', key)}
+                disabled={working}
+              />
+            }
             onUpload={uploadFiles}
             canUpload={canEdit(workspace)}
             notice={uploadError}
@@ -1002,6 +1419,32 @@ export function AiChat({ workspace, status, onClose, variant = 'panel' }) {
           onSaved={() => setSaving(null)}
         />
       )}
+      {textNote && (
+        <SaveTextNoteDialog
+          workspaceId={workspace.id}
+          text={textNote.text}
+          projectId={scope && !scope.wholeDrive ? scope.id : null}
+          onClose={() => setTextNote(null)}
+        />
+      )}
+      {boardText !== null && (
+        <SendToMoodboardDialog
+          workspaceId={workspace.id}
+          text={boardText}
+          onClose={() => setBoardText(null)}
+        />
+      )}
+      <SelectionMenu
+        containerRef={scrollRef}
+        actions={[
+          { label: 'Ask AI', icon: Sparkles, onPick: askAbout },
+          { label: 'Add to notes', icon: NotebookPen, onPick: (text) => setTextNote({ text }) },
+          ...(canEdit(workspace)
+            ? [{ label: 'Moodboard', icon: LayoutGrid, onPick: setBoardText }]
+            : []),
+          { label: 'New chat', icon: MessageSquarePlus, onPick: (text) => newChat(text) },
+        ]}
+      />
     </section>
   );
 }

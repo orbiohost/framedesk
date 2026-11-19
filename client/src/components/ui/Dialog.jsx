@@ -102,7 +102,13 @@ export function Dialog({ open, onClose, title, description, wide = false, childr
         'dialog-panel border-line/70 bg-surface text-ink overflow-hidden border p-0 shadow-2xl',
         // Phones: a sheet along the bottom edge, full width. Larger: centred.
         'mx-0 mb-0 mt-auto w-full max-w-none rounded-t-[22px] pb-[env(safe-area-inset-bottom)] sm:m-auto sm:w-[calc(100%-1.5rem)] sm:rounded-[22px] sm:pb-0',
-        wide === 'xl' ? 'sm:max-w-5xl' : wide ? 'sm:max-w-xl' : 'sm:max-w-lg',
+        wide === 'xl'
+          ? 'sm:max-w-5xl'
+          : wide === 'lg'
+            ? 'sm:max-w-3xl'
+            : wide
+              ? 'sm:max-w-xl'
+              : 'sm:max-w-lg',
       )}
     >
       {open && (

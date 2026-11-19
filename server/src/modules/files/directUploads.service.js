@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { markBriefStale } from '../briefs/briefStale.js';
+import { autoTranscribeIfInBriefs } from '../briefs/briefTranscribe.js';
 import { getStorageDriver } from '../../storage/storageDriver.js';
 import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../utils/logger.js';
@@ -196,6 +197,10 @@ export async function completeDirectUpload(user, uploadId) {
       language: metadata.transcribeLanguage || null,
       task: metadata.transcribe,
     }).catch((err) => logger.error({ err }, 'Could not queue a transcript for an upload'));
+  } else {
+    // A clip in a Notes & Briefs folder: transcribed by itself (measuring its
+    // length can take a moment, so the upload doesn't wait for it).
+    void autoTranscribeIfInBriefs(file.workspaceId, file._id);
   }
   return { fileId: String(file._id) };
 }

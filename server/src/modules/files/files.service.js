@@ -1,6 +1,7 @@
 import { deleteInsightsForFiles } from '../ai/aiInsight.model.js';
 import { requeueForAnalysis } from '../ai/analysisWorker.js';
 import { isInBriefsFolder, markBriefStale } from '../briefs/briefStale.js';
+import { autoTranscribeIfInBriefs } from '../briefs/briefTranscribe.js';
 import { storageConfig } from '../../config/storage.js';
 import { getStorageDriver } from '../../storage/storageDriver.js';
 import { AppError } from '../../utils/AppError.js';
@@ -184,6 +185,8 @@ export async function updateFile(
     (await isInBriefsFolder(workspaceId, folderId)) &&
     !(await isInBriefsFolder(workspaceId, file.folderId))
   ) {
+    // Decided first, so the AI waits for the transcript of a clip.
+    await autoTranscribeIfInBriefs(workspaceId, fileId);
     await requeueForAnalysis(workspaceId, fileId, ['done', 'skipped', 'failed', 'no_credits']);
   }
   // A file moved in or out of a project's briefs folder, or renamed or noted there.
@@ -222,7 +225,10 @@ export async function restoreFile(workspaceId, fileId, viewer = null) {
     { $set: { deletedAt: null, deletedBy: null, folderId } },
   );
   if (result.modifiedCount !== 1) await releaseStorage(workspaceId, file.size);
-  else await markBriefStale(workspaceId, folderId);
+  else {
+    await markBriefStale(workspaceId, folderId);
+    void autoTranscribeIfInBriefs(workspaceId, fileId);
+  }
   return getFileDto(workspaceId, fileId);
 }
 

@@ -1,10 +1,14 @@
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AI_GRADIENT } from '../../../features/ai/aiStyle.js';
+import { usePricing } from '../../../features/billing/hooks.js';
+import { gbLabel } from '../../../features/billing/pricing.js';
 import { cn } from '../../../lib/cn.js';
 
 // Dark in both themes, like the connectors panel, so its colours are fixed.
 export function FinalCta() {
+  const { data: pricing } = usePricing();
+  const referral = pricing?.referral;
   return (
     <section className="relative mx-3 mb-6 overflow-hidden rounded-[36px] bg-[#16151b] text-white sm:mx-5">
       <div
@@ -37,14 +41,20 @@ export function FinalCta() {
             Start free
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
-          <a
-            href="#pricing"
+          <Link
+            to="/pricing"
             className="rounded-full border border-white/20 px-6 py-3.5 text-sm font-semibold text-white hover:bg-white/10"
           >
             See pricing
-          </a>
+          </Link>
         </div>
         <p className="mt-5 text-sm text-white/50">Set up in about two minutes. No card needed.</p>
+        {referral && (
+          <p className="mt-8 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/75">
+            Invited by a friend? You get {referral.discountPercent}% off your first plan, and they
+            get {gbLabel(referral.rewardGB)} of extra storage.
+          </p>
+        )}
       </div>
     </section>
   );

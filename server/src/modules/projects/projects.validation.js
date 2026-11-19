@@ -23,6 +23,7 @@ const projectFields = {
   description: optionalText(10000),
   tags: tags.optional(),
   reminders: reminderOffsets,
+  aiClipSource: z.enum(['transcript', 'video']).optional(),
 };
 
 function dueAfterStart(project) {

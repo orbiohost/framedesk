@@ -271,6 +271,13 @@ function rowActions({ workspaceId, transcript, editable, enabled, onOpen, onActi
         icon: Languages,
         onSelect: () => onAction('translate', transcript),
       });
+    } else if (transcript.hasOriginal) {
+      editing.push({
+        key: 'original',
+        label: 'Show original language',
+        icon: Languages,
+        onSelect: () => onAction('original', transcript),
+      });
     }
   }
   if (editable && inTrash) {
@@ -466,18 +473,27 @@ function History({ workspace, editable, enabled }) {
           await fetchTranscriptText(workspaceId, transcript.fileId),
         );
         setNotice({ tone: 'success', text: `Copied the text of ${name}.` });
-      } else if (type === 'rerun' || type === 'translate') {
+      } else if (type === 'rerun' || type === 'translate' || type === 'original') {
+        // Translate / original reuse the existing text (the AI translates it);
+        // only "rerun" sends the recording through speech-to-text again.
         await rerun.mutateAsync({
           fileId: transcript.fileId,
           language: transcript.language,
-          task: type === 'translate' ? 'translate' : transcript.task,
+          task:
+            type === 'translate'
+              ? 'translate'
+              : type === 'original'
+                ? 'transcribe'
+                : transcript.task,
         });
         setNotice({
           tone: 'success',
           text:
             type === 'translate'
-              ? `Translating ${name} to English.`
-              : `Transcribing ${name} again.`,
+              ? `Translating ${name} to English with AI.`
+              : type === 'original'
+                ? `Showing ${name} in its original language.`
+                : `Transcribing ${name} again.`,
         });
       } else if (type === 'restore') {
         await runFileAction(transcript, 'restore', `Restored ${name} from the Trash.`);

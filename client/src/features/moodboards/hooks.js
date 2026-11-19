@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/apiClient.js';
 import { toQueryString } from '../../lib/queryString.js';
 import { featureKey, invalidateFeatures } from '../../lib/workspaceKeys.js';
+import { openBoardAdder } from './boardBridge.js';
 
 const FEATURE = 'moodboards';
 
@@ -92,6 +93,27 @@ export function useAnalyseMoodboard(workspaceId, boardId) {
 
 export function useAskMoodboard(workspaceId, boardId) {
   return useBoardAi(workspaceId, boardId, 'ask');
+}
+
+// Adds a sticky note with this text to a board: into the open editor when the
+// board is on screen, otherwise on the server (the board reloads when opened).
+export function useSendToMoodboard(workspaceId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ boardId, text }) => {
+      const addLocally = openBoardAdder(boardId);
+      if (addLocally) {
+        addLocally(text);
+        return { local: true };
+      }
+      return api.post(path(workspaceId, boardId, 'notes'), { text });
+    },
+    onSuccess: (result, { boardId }) => {
+      if (result.local) return;
+      queryClient.removeQueries({ queryKey: boardKey(workspaceId, boardId) });
+      queryClient.invalidateQueries({ queryKey: featureKey(workspaceId, FEATURE, 'list') });
+    },
+  });
 }
 
 export function useSaveMoodboardNote(workspaceId, boardId) {

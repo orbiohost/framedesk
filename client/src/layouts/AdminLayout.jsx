@@ -12,6 +12,7 @@ import {
   Sparkles,
   Tags,
   Users,
+  Wallet,
 } from 'lucide-react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { Logo } from '../components/ui/Logo.jsx';
@@ -24,6 +25,7 @@ const NAV = [
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
   { to: '/admin/sales', label: 'Sales', icon: IndianRupee },
+  { to: '/admin/expenses', label: 'Expenses & costs', icon: Wallet },
   { to: '/admin/plans', label: 'Plans & coupons', icon: Tags },
   { to: '/admin/invoicing', label: 'Invoicing', icon: ReceiptText },
   { to: '/admin/ai', label: 'AI assistant', icon: Sparkles },

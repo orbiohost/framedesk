@@ -1,4 +1,15 @@
-import { Check, Copy, Download, Loader2, RotateCcw, Search, Trash2 } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Download,
+  Eye,
+  Languages,
+  Loader2,
+  RotateCcw,
+  Search,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../lib/cn.js';
 import { formatTime } from '../media/MediaPlayer.jsx';
@@ -10,6 +21,7 @@ import {
   useDeleteTranscript,
   useRequestTranscript,
   useTranscript,
+  useWatchVideo,
 } from './hooks.js';
 
 // Styled for the dark file viewer it sits in.
@@ -195,6 +207,10 @@ function CopyButton({ segments }) {
 
 function Toolbar({ workspaceId, file, transcript, canEdit, onRetry }) {
   const remove = useDeleteTranscript(workspaceId, file.id);
+  // Both reuse the text already there (the AI translates it), so the video
+  // isn't run through speech-to-text again.
+  const switchText = useRequestTranscript(workspaceId, file.id);
+  const translated = transcript.task === 'translate';
   return (
     <div className="flex flex-wrap gap-2">
       <CopyButton segments={transcript.segments} />
@@ -211,6 +227,27 @@ function Toolbar({ workspaceId, file, transcript, canEdit, onRetry }) {
       ))}
       {canEdit && (
         <>
+          {(!translated || transcript.hasOriginal) && (
+            <button
+              type="button"
+              className={darkButton}
+              disabled={switchText.isPending}
+              title={
+                translated
+                  ? 'Back to the original language'
+                  : 'Translate these lines to English with AI'
+              }
+              onClick={() =>
+                switchText.mutate({
+                  language: transcript.language,
+                  task: translated ? 'transcribe' : 'translate',
+                })
+              }
+            >
+              <Languages className="h-3.5 w-3.5" aria-hidden="true" />
+              {translated ? 'Original' : 'Translate'}
+            </button>
+          )}
           <button type="button" className={darkButton} onClick={onRetry}>
             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
             Redo
@@ -225,6 +262,9 @@ function Toolbar({ workspaceId, file, transcript, canEdit, onRetry }) {
             Delete
           </button>
         </>
+      )}
+      {switchText.error && (
+        <p className="w-full text-xs text-red-300">{switchText.error.message}</p>
       )}
     </div>
   );
@@ -243,6 +283,48 @@ function summary(transcript) {
  * Speech-to-text for one video or audio file, shown beside the player.
  * getMedia(): the <video>/<audio> element, for seeking and following along.
  */
+// How the AI read this clip, and (for a video read only from its words) a way
+// to have it watch the picture too.
+function AiReadNote({ workspaceId, file, transcript, canEdit }) {
+  const watch = useWatchVideo(workspaceId, file.id);
+  if (transcript.aiWatching || watch.isSuccess) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-white/60">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        The AI is watching the video now…
+      </p>
+    );
+  }
+  if (transcript.aiReadFrom !== 'transcript') return null;
+  return (
+    <div className="space-y-2 rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
+      <p className="flex items-start gap-1.5 text-xs leading-5 text-white/70">
+        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        {file.category === 'video'
+          ? 'The AI read this video from its transcript (fast, few credits). It has not watched the picture.'
+          : 'The AI read this clip from its transcript.'}
+      </p>
+      {file.category === 'video' && canEdit && (
+        <button
+          type="button"
+          className={darkButton}
+          disabled={watch.isPending}
+          onClick={() => watch.mutate()}
+          title="For shots, people, products and on-screen text. Uses more credits."
+        >
+          {watch.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+          Watch the video too
+        </button>
+      )}
+      {watch.error && <p className="text-xs text-red-300">{watch.error.message}</p>}
+    </div>
+  );
+}
+
 export function TranscriptPanel({ workspaceId, file, canEdit, getMedia, className }) {
   const { data: transcript, isPending, error } = useTranscript(workspaceId, file.id);
   const request = useRequestTranscript(workspaceId, file.id);
@@ -289,6 +371,12 @@ export function TranscriptPanel({ workspaceId, file, canEdit, getMedia, classNam
               transcript={transcript}
               canEdit={canEdit}
               onRetry={() => setRedo(true)}
+            />
+            <AiReadNote
+              workspaceId={workspaceId}
+              file={file}
+              transcript={transcript}
+              canEdit={canEdit}
             />
           </>
         )}

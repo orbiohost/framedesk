@@ -10,8 +10,11 @@ import {
   listCoupons,
   updateCoupon,
 } from '../billing/discounts.service.js';
+import { storageConfig } from '../../config/storage.js';
+import { getAiSettings } from '../ai/aiSettings.service.js';
 import { PLAN_CODES } from '../plans/plans.catalog.js';
 import { BILLING_INTERVALS, getCatalog, updateCatalog } from '../plans/plans.service.js';
+import { CostSettings } from './adminCosts.model.js';
 import { recordAudit } from './auditLog.service.js';
 
 // Mounted at /admin (superadmins only): the price list and coupons.
@@ -56,6 +59,7 @@ const catalogSchema = z.object({
       discountPercent: z.number().int().min(0).max(90),
     })
     .optional(),
+  pricing: z.object({ maxDiscountPercent: z.number().int().min(0).max(90) }).optional(),
 });
 
 const couponSchema = z.object({
@@ -73,10 +77,35 @@ const couponSchema = z.object({
 });
 const couponParams = z.object({ couponId: objectId });
 
+// What a paying account costs to run, for the profit calculator on the plans
+// page. Prices come from Admin → Expenses; AI limits from Admin → AI.
+async function costModel() {
+  const [costs, ai] = await Promise.all([
+    CostSettings.findOne({ key: 'global' }).lean(),
+    getAiSettings(),
+  ]);
+  return {
+    usdToInr: costs?.usdToInr ?? 88,
+    s3PricePerGbMonthUsd: costs?.s3PricePerGbMonthUsd ?? 0.023,
+    // AWS S3 charges ~$0.09/GB for downloads; R2 and the like (an endpoint is set) charge none.
+    egressPricePerGbUsd: storageConfig.s3.endpoint ? 0 : 0.09,
+    aiPricePerMillionTokensUsd: costs?.aiPricePerMillionTokensUsd ?? 0.4,
+    aiFreeTier: costs?.aiFreeTier ?? true,
+    tokensPerCredit: ai.tokensPerCredit,
+    weeklyCredits: Object.fromEntries(
+      PLAN_CODES.map((code) => [code, ai.planLimits[code]?.weekly ?? 0]),
+    ),
+  };
+}
+
+async function adminCatalog(catalog) {
+  return { ...(catalog ?? (await getCatalog())), costModel: await costModel() };
+}
+
 router.get(
   '/plans',
   asyncHandler(async (req, res) => {
-    sendSuccess(res, { catalog: await getCatalog() });
+    sendSuccess(res, { catalog: await adminCatalog() });
   }),
 );
 
@@ -86,7 +115,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const catalog = await updateCatalog(req.body, req.user._id);
     await recordAudit({ actorId: req.user._id, action: 'plans.update', details: req.body });
-    sendSuccess(res, { catalog });
+    sendSuccess(res, { catalog: await adminCatalog(catalog) });
   }),
 );
 

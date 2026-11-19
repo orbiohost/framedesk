@@ -5,7 +5,8 @@ import { PageHeader } from '../../components/ui/PageHeader.jsx';
 import { Skeleton } from '../../components/ui/Skeleton.jsx';
 import { BILLING_STATUS, compactInr, dateTime, percent } from '../../features/admin/adminFormat.js';
 import { BarChart } from '../../features/admin/BarChart.jsx';
-import { useAdminDashboard } from '../../features/admin/hooks.js';
+import { Link } from 'react-router-dom';
+import { useAdminCosts, useAdminDashboard } from '../../features/admin/hooks.js';
 import { StatTile } from '../../features/admin/StatTile.jsx';
 import { StorageMeter } from '../../features/workspaces/StorageMeter.jsx';
 import { formatBytes, formatInr } from '../../lib/format.js';
@@ -92,6 +93,37 @@ function Charts({ metrics }) {
   );
 }
 
+// The S3 bucket's real size and what it costs (from Admin → Expenses).
+function BucketLine() {
+  const { data: costs } = useAdminCosts();
+  if (!costs) return null;
+  const { storage, totals } = costs;
+  const bytes = storage.bucketBytes !== null ? storage.bucketBytes + storage.incompleteBytes : null;
+  return (
+    <div className="border-line bg-subtle/40 rounded-lg border p-3 text-sm">
+      <p>
+        Amazon S3 bucket:{' '}
+        <span className="font-medium">
+          {bytes !== null ? formatBytes(bytes) : 'not measured yet'}
+        </span>
+        {storage.objects > 0 && (
+          <span className="text-muted"> · {storage.objects.toLocaleString('en-IN')} objects</span>
+        )}
+      </p>
+      <p className="mt-0.5">
+        Storage cost: <span className="font-medium">{formatInr(storage.monthlyInr)} a month</span>
+        <span className="text-muted">
+          {' '}
+          · all running costs {formatInr(totals.totalInr)}/month ·{' '}
+        </span>
+        <Link to="/admin/expenses" className="text-accent hover:underline">
+          Expenses
+        </Link>
+      </p>
+    </div>
+  );
+}
+
 function StorageCard({ metrics }) {
   const { disk, subscriptions } = metrics;
   return (
@@ -105,6 +137,7 @@ function StorageCard({ metrics }) {
             Files are kept in an S3 bucket, which has no fixed size.
           </p>
         )}
+        <BucketLine />
         <p className="text-sm">
           Customer files:{' '}
           <span className="font-medium">{formatBytes(subscriptions.storageUsedBytes)}</span>

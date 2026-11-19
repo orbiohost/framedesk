@@ -10,10 +10,13 @@ import { AiAssistant, useAiEnabled } from '../features/ai/AiAssistant.jsx';
 import { useCurrentUser } from '../features/auth/hooks.js';
 import { VerifyEmailBanner } from '../features/auth/VerifyEmailBanner.jsx';
 import { PlanStatusBanner } from '../features/billing/PlanStatusBanner.jsx';
-import { QuickNoteButton } from '../features/quickNotes/QuickNoteButton.jsx';
+import { NotesMenu } from '../features/quickNotes/NotesMenu.jsx';
+import { PinnedNotes } from '../features/quickNotes/PinnedNotes.jsx';
 import { UploadTray } from '../features/files/UploadTray.jsx';
+import { DevicePermissions } from '../features/install/DevicePermissions.jsx';
 import { InstallApp } from '../features/install/InstallApp.jsx';
 import { useNotificationSync } from '../features/notifications/hooks.js';
+import { AlertCenter } from '../features/alerts/AlertCenter.jsx';
 import { useWorkspace } from '../features/workspaces/hooks.js';
 import { rememberWorkspace } from '../features/workspaces/lastWorkspace.js';
 import { canView } from '../features/workspaces/roles.js';
@@ -93,7 +96,7 @@ function TopBar({ workspace }) {
           <span className="hidden sm:block md:hidden">
             <ThemeToggle compact />
           </span>
-          {team && <QuickNoteButton workspaceId={workspace.id} />}
+          {team && <NotesMenu workspaceId={workspace.id} />}
           {team && <NotificationsMenu workspaceId={workspace.id} />}
           {user && (
             <NavLink
@@ -160,6 +163,8 @@ export function AppLayout() {
 
   return (
     <div>
+      {/* Project alerts from teammates: rings and pops up over everything. */}
+      <AlertCenter />
       {/* The app frame fills the whole window, edge to edge. */}
       <div className="bg-surface flex min-h-[100dvh] flex-col sm:min-h-screen sm:p-3 lg:h-screen lg:min-h-0">
         <TopBar workspace={workspace} />
@@ -208,7 +213,9 @@ export function AppLayout() {
       />
       <AiAssistant key={workspace.id} workspace={workspace} />
       <UploadTray raised={aiEnabled} />
+      {canView(workspace) && <PinnedNotes key={workspace.id} workspaceId={workspace.id} />}
       <InstallApp />
+      <DevicePermissions />
     </div>
   );
 }

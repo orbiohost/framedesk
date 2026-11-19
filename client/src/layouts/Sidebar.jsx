@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/ui/Avatar.jsx';
 import { AI_GRADIENT, AI_TEXT } from '../features/ai/aiStyle.js';
@@ -104,37 +105,76 @@ function CountBadge({ count, active }) {
   );
 }
 
+// Hover/focus label for the collapsed rail. Rendered into <body> with fixed
+// positioning, so the sidebar's scroll area can never clip it.
+function useRailTooltip(label, enabled) {
+  const [pos, setPos] = useState(null);
+  const show = useCallback(
+    (event) => {
+      if (!enabled) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      setPos({ left: rect.right + 12, top: rect.top + rect.height / 2 });
+    },
+    [enabled],
+  );
+  const hide = useCallback(() => setPos(null), []);
+  const tooltip =
+    enabled &&
+    pos &&
+    createPortal(
+      <span
+        role="tooltip"
+        className="bg-ink text-surface shadow-lift pointer-events-none fixed z-[60] -translate-y-1/2 animate-[fade-in_100ms_ease-out] whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium"
+        style={{ left: pos.left, top: pos.top }}
+      >
+        {label}
+      </span>,
+      document.body,
+    );
+  const handlers = enabled
+    ? { onMouseEnter: show, onMouseLeave: hide, onFocus: show, onBlur: hide, onClick: hide }
+    : {};
+  return [handlers, tooltip];
+}
+
 function NavItem({ to, label, icon: Icon, end, count, compact }) {
+  const [tipHandlers, tooltip] = useRailTooltip(count ? `${label} · ${count}` : label, compact);
   return (
-    <NavLink
-      to={to}
-      end={end}
-      title={compact ? label : undefined}
-      aria-label={compact ? label : undefined}
-      className={({ isActive }) =>
-        cn(
-          'relative flex items-center rounded-full text-[13px] font-medium transition-all duration-150',
-          compact ? 'mx-auto h-9 w-9 justify-center' : 'gap-2.5 px-3 py-2',
-          isActive ? 'pill-active shadow-sm' : 'text-ink/75 hover:bg-subtle hover:text-ink',
-        )
-      }
-    >
-      {({ isActive }) => (
-        <>
-          <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-          {compact ? (
-            count > 0 && (
-              <span className="bg-accent absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ring-2 ring-surface" />
-            )
-          ) : (
-            <>
-              <span className="truncate">{label}</span>
-              <CountBadge count={count} active={isActive} />
-            </>
-          )}
-        </>
-      )}
-    </NavLink>
+    <>
+      <NavLink
+        to={to}
+        end={end}
+        aria-label={compact ? label : undefined}
+        {...tipHandlers}
+        className={({ isActive }) =>
+          cn(
+            'relative flex items-center rounded-full text-[13px] font-medium transition-all duration-150',
+            compact ? 'mx-auto h-10 w-10 justify-center' : 'gap-2.5 px-3 py-2',
+            isActive ? 'pill-active shadow-sm' : 'text-ink/75 hover:bg-subtle hover:text-ink',
+          )
+        }
+      >
+        {({ isActive }) => (
+          <>
+            <Icon
+              className={cn('shrink-0', compact ? 'h-[18px] w-[18px]' : 'h-4 w-4')}
+              aria-hidden="true"
+            />
+            {compact ? (
+              count > 0 && (
+                <span className="bg-accent ring-surface absolute right-1.5 top-1.5 h-2 w-2 rounded-full ring-2" />
+              )
+            ) : (
+              <>
+                <span className="truncate">{label}</span>
+                <CountBadge count={count} active={isActive} />
+              </>
+            )}
+          </>
+        )}
+      </NavLink>
+      {tooltip}
+    </>
   );
 }
 
@@ -142,23 +182,28 @@ function NavItem({ to, label, icon: Icon, end, count, compact }) {
 // how much of the current 5-hour session is used. Hidden while the assistant is off.
 function AiSection({ workspace, compact }) {
   const status = useAiStatus(workspace.id, { enabled: canView(workspace) });
+  const sessionPercent = status.data?.credits?.session?.percent ?? 0;
+  const [tipHandlers, tooltip] = useRailTooltip(`Ask AI · ${sessionPercent}% used`, compact);
   if (!status.data?.enabled) return null;
   const to = `/w/${workspace.id}/ai`;
-  const sessionPercent = status.data.credits?.session?.percent ?? 0;
 
   if (compact) {
     return (
-      <NavLink
-        to={to}
-        title="Ask AI"
-        aria-label="Ask AI"
-        className={cn(
-          AI_GRADIENT,
-          'mx-auto mt-2 grid h-9 w-9 place-items-center rounded-full text-white shadow-sm shadow-fuchsia-500/30 transition-transform hover:scale-105 active:scale-95',
-        )}
-      >
-        <Sparkles className="h-4 w-4" aria-hidden="true" />
-      </NavLink>
+      <>
+        <div className="border-line/70 mx-auto my-2 w-6 border-t" />
+        <NavLink
+          to={to}
+          aria-label="Ask AI"
+          {...tipHandlers}
+          className={cn(
+            AI_GRADIENT,
+            'mx-auto grid h-10 w-10 place-items-center rounded-full text-white shadow-sm shadow-fuchsia-500/30 transition-transform hover:scale-105 active:scale-95',
+          )}
+        >
+          <Sparkles className="h-[18px] w-[18px]" aria-hidden="true" />
+        </NavLink>
+        {tooltip}
+      </>
     );
   }
 
@@ -170,7 +215,7 @@ function AiSection({ workspace, compact }) {
           cn(
             'group flex items-center gap-2.5 rounded-full py-1.5 pl-2 pr-2.5 text-[13px] transition-all',
             isActive
-              ? 'bg-subtle/90 shadow-soft ring-1 ring-accent/30 font-medium'
+              ? 'bg-subtle/90 shadow-soft ring-accent/30 font-medium ring-1'
               : 'text-ink/75 hover:bg-subtle hover:text-ink',
           )
         }
@@ -242,7 +287,7 @@ function WorkspaceProjects({ workspace, openProjects }) {
               cn(
                 'group flex items-center gap-2.5 rounded-full py-1.5 pl-3 pr-2 text-xs transition-colors',
                 isActive
-                  ? 'bg-lavender/70 dark:bg-lavender/30 text-ink font-medium shadow-xs'
+                  ? 'bg-lavender/70 dark:bg-lavender/30 text-ink shadow-xs font-medium'
                   : 'text-ink/70 hover:bg-subtle hover:text-ink',
               )
             }
@@ -259,7 +304,7 @@ function WorkspaceProjects({ workspace, openProjects }) {
         <li>
           <Link
             to={`${base}/projects`}
-            className="text-accent hover:text-accent/80 block px-3 py-1 text-xs font-medium hover:underline transition-colors"
+            className="text-accent hover:text-accent/80 block px-3 py-1 text-xs font-medium transition-colors hover:underline"
           >
             View all {openProjects.length}
           </Link>
@@ -283,7 +328,9 @@ function MiniMeter({ label, value, percent, tone, onClick, title }) {
     >
       <span className="flex items-baseline justify-between gap-2 text-[11px]">
         <span className="text-ink/80 font-medium">{label}</span>
-        <span className={cn('truncate tabular-nums', tone === 'danger' ? 'text-danger' : 'text-muted')}>
+        <span
+          className={cn('truncate tabular-nums', tone === 'danger' ? 'text-danger' : 'text-muted')}
+        >
           {value}
         </span>
       </span>
@@ -337,7 +384,7 @@ function PlanCard({ workspace, compact }) {
 
   if (compact) {
     const iconButton =
-      'text-muted hover:bg-subtle hover:text-ink mx-auto grid h-9 w-9 place-items-center rounded-full transition-colors';
+      'text-muted hover:bg-subtle hover:text-ink mx-auto grid h-10 w-10 place-items-center rounded-full transition-colors';
     return (
       <div className="mb-2 space-y-1">
         <div className="border-line/70 mx-auto mb-1.5 w-6 border-t" />
@@ -383,7 +430,7 @@ function PlanCard({ workspace, compact }) {
         {showUpgrade && (
           <Link
             to={upgradeTo}
-            className="text-accent hover:text-accent/80 inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold hover:underline transition-colors"
+            className="text-accent hover:text-accent/80 inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold transition-colors hover:underline"
           >
             <Sparkles className="h-3 w-3" aria-hidden="true" />
             Upgrade
@@ -435,8 +482,9 @@ function AccountFooter({ workspace, compact }) {
         <div
           role="menu"
           className={cn(
-            'border-line/70 bg-surface/95 shadow-lift animate-[fade-in_120ms_ease-out] absolute bottom-full z-20 mb-2 rounded-2xl border p-1.5 backdrop-blur-md',
-            compact ? 'left-0 w-60' : 'inset-x-0',
+            'border-line/70 bg-surface shadow-lift absolute z-50 animate-[fade-in_120ms_ease-out] rounded-2xl border p-1.5',
+            // Collapsed rail: open beside it so the menu is never cut off.
+            compact ? 'bottom-0 left-full ml-3 w-64' : 'inset-x-0 bottom-full mb-2',
           )}
         >
           <Link to={`${base}/account`} onClick={close} role="menuitem" className={MENU_LINK}>
@@ -452,6 +500,17 @@ function AccountFooter({ workspace, compact }) {
             <Receipt className="h-4 w-4" aria-hidden="true" />
             Billing &amp; invoices
           </Link>
+          {canView(workspace) && (
+            <Link
+              to={`${base}/account?tab=ai`}
+              onClick={close}
+              role="menuitem"
+              className={MENU_LINK}
+            >
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              AI assistant
+            </Link>
+          )}
           <Link
             to={`${base}/account?tab=connectors`}
             onClick={close}
@@ -606,9 +665,11 @@ export function Sidebar({ workspace, isOpen, onClose }) {
         className={cn(
           'bg-surface/95 fixed inset-y-0 left-0 z-40 flex w-[min(18.5rem,85vw)] shrink-0 flex-col overflow-hidden px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] shadow-2xl backdrop-blur-xl',
           // Desktop: its own panel beside the page, so the two never run together.
-          'transition-[transform,width] duration-200 lg:static lg:z-auto lg:translate-x-0',
+          // Visible overflow on desktop so menus that open beside the collapsed
+          // rail are not clipped; z-20 keeps them above the page content.
+          'transition-[transform,width] duration-200 ease-out lg:relative lg:z-20 lg:translate-x-0 lg:overflow-visible',
           'lg:bg-surface/85 lg:border-line/70 lg:shadow-soft lg:rounded-3xl lg:border lg:p-2.5 lg:backdrop-blur-xl',
-          compact ? 'lg:w-[3.75rem]' : 'lg:w-60',
+          compact ? 'lg:w-[4rem] lg:px-2' : 'lg:w-64',
           isOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >

@@ -67,3 +67,30 @@ export function useToggleNoteTodo(workspaceId) {
     onSettled: () => invalidateFeatures(queryClient, workspaceId, [FEATURE]),
   });
 }
+
+// Saves as you type (sticky notes, the header panel). Puts the saved note
+// straight into the lists instead of refetching them on every keystroke pause.
+export function useAutosaveQuickNote(workspaceId) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...input }) => {
+      const response = id
+        ? await api.patch(`${basePath(workspaceId)}/${id}`, input)
+        : await api.post(basePath(workspaceId), input);
+      return response.note;
+    },
+    onSuccess: (saved, { id }) => {
+      if (!id) {
+        // Show the new note at once in the full list, then refresh every list.
+        queryClient.setQueryData(featureKey(workspaceId, FEATURE, 'list', {}), (notes) =>
+          notes && !notes.some((note) => note.id === saved.id) ? [saved, ...notes] : notes,
+        );
+        invalidateFeatures(queryClient, workspaceId, [FEATURE]);
+        return;
+      }
+      queryClient.setQueriesData({ queryKey: featureKey(workspaceId, FEATURE, 'list') }, (notes) =>
+        notes?.map((note) => (note.id === saved.id ? saved : note)),
+      );
+    },
+  });
+}

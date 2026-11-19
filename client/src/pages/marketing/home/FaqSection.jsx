@@ -35,15 +35,23 @@ const QUESTIONS = [
   },
   {
     q: 'What if a payment fails?',
-    a: 'Plans don’t renew by themselves. When one ends you get 7 days with full access to renew; after that the account moves to the free plan. Your files stay put, and uploads continue once you are under the free 2 GB or renew.',
+    a: 'Plans don’t renew by themselves. When one ends you get 7 days with full access to renew; after that the account moves to the free plan. Your files stay put, and uploads continue once you are under the free 1 GB or renew.',
+  },
+  {
+    q: 'What else is included besides files and review?',
+    a: 'Notes & Briefs (meeting recordings turned into a brief and a task list), Moodboards, a Social Media hub for Instagram, Facebook, YouTube and TikTok, AI Studio for your own assistants and image creation, a task board, calendar, client list, team chat, reminders and backups. All plans include them.',
+  },
+  {
+    q: 'Does the transcription work for Hindi?',
+    a: 'Yes. Recordings in Hindi, English or a mix of both are transcribed. You can correct any line by hand and type Hindi in English letters; it suggests the Hindi words as you go.',
   },
   {
     q: 'Can I earn more free storage?',
-    a: 'Yes. Share your referral link from your account page. When a studio signs up with it and verifies their email, you get extra storage on any plan, free included, and they get a discount on their first paid plan.',
+    a: 'Yes. Share your referral link from your account page. When a studio signs up with it and verifies their email, you get 500 MB of extra storage, for up to two friends (1 GB in all), on any plan, free included. They get a discount on their first paid plan.',
   },
   {
     q: 'Is there a free plan?',
-    a: 'Yes. Every account starts free with 2 GB of storage and a smaller AI limit, for as long as you like, no card needed. Upgrade whenever you need more; your projects carry over.',
+    a: 'Yes. Every account starts free with 1 GB of storage and a smaller AI limit, for as long as you like, no card needed. Upgrade whenever you need more; your projects carry over.',
   },
 ];
 

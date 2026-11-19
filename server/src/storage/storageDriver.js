@@ -12,7 +12,7 @@
  * @property {(key: string, options: SignedUrlOptions) => Promise<string>} createSignedUrl
  *   A short-lived link the browser opens directly.
  * @property {(key: string, expiresInSeconds: number) => Promise<string>} createWorkerUrl
- *   A download link for the Whisper service, which can't read the bucket itself.
+ *   A download link for the speech-to-text (asr) service, which can't read the bucket itself.
  *
  * @typedef {object} SignedUrlOptions
  * @property {string} fileName      Name the browser should save the file as.

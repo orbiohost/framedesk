@@ -1,23 +1,25 @@
-# Local development: runs only the Whisper container, next to `npm run dev`.
+# Local development: runs only the speech-to-text (Qwen3-ASR) container, next to `npm run dev`.
 #   docker compose -f docker-compose.dev.yml up -d --build
-# The API (on your machine) reaches it at http://localhost:9000; set WHISPER_URL
-# and WHISPER_API_KEY in server/.env. It downloads files from signed S3 links.
+# The API (on your machine) reaches it at http://localhost:9000; set ASR_URL
+# and ASR_API_KEY in server/.env. It downloads files from signed S3 links.
 name: framedesk-dev
 
 services:
-  whisper:
-    build: ./whisper
+  asr:
+    build: ./asr
     restart: unless-stopped
     environment:
-      WHISPER_API_KEY: ${WHISPER_API_KEY:?Set WHISPER_API_KEY in .env next to this file}
-      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3-turbo}
-      WHISPER_DEVICE: cpu
-      WHISPER_CPU_THREADS: ${WHISPER_CPU_THREADS:-0}
+      ASR_API_KEY: ${ASR_API_KEY:?Set ASR_API_KEY in .env next to this file}
+      ASR_MODEL: ${ASR_MODEL:-Qwen/Qwen3-ASR-1.7B}
+      ASR_ALIGNER: ${ASR_ALIGNER-Qwen/Qwen3-ForcedAligner-0.6B}
+      ASR_DEVICE: cpu
+      ASR_DTYPE: ${ASR_DTYPE:-float32}
+      ASR_CPU_THREADS: ${ASR_CPU_THREADS:-0}
     ports:
       # Only this computer can reach it.
       - '127.0.0.1:9000:9000'
     volumes:
-      - whisper_models:/models
+      - asr_models:/models
 
 volumes:
-  whisper_models:
+  asr_models:

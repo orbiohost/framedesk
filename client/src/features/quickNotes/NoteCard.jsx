@@ -4,10 +4,12 @@ import {
   FolderKanban,
   ListChecks,
   Lock,
+  Maximize2,
   Pencil,
   Pin,
   PinOff,
   Sparkles,
+  PictureInPicture2,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -18,8 +20,9 @@ import { openAi, useAiAvailable } from '../ai/aiBridge.js';
 import { ActionMenu } from '../files/ActionMenu.jsx';
 import { ConfirmDialog } from '../files/FileDialogs.jsx';
 import { useDeleteQuickNote, useSaveQuickNote, useToggleNoteTodo } from './hooks.js';
-import { NoteComposer } from './NoteComposer.jsx';
+import { NoteWindow } from './NoteWindow.jsx';
 import { checklistProgress } from './noteFormat.js';
+import { usePinnedNotes } from './pinnedNotes.js';
 import { NoteMarkdown } from './NoteMarkdown.jsx';
 
 // Taller than this, a card folds with "Show more".
@@ -33,8 +36,18 @@ function timeAgo(iso) {
 /**
  * compact: the dashboard's smaller card (no footer details, folds sooner).
  */
-export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact = false }) {
-  const [isEditing, setIsEditing] = useState(false);
+export function NoteCard({
+  workspaceId,
+  note,
+  onTagClick,
+  hideProjectId,
+  compact = false,
+  // Opens the note in the page instead of the pop-up window (the Notes page).
+  onOpen,
+}) {
+  // Open in the note window (the full editor; read-only for a teammate's note).
+  const [isOpen, setIsOpenState] = useState(false);
+  const setIsOpen = (open) => (open && onOpen ? onOpen(note) : setIsOpenState(open));
   const [isDeleting, setIsDeleting] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const save = useSaveQuickNote(workspaceId);
@@ -42,18 +55,7 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
   const toggleTodo = useToggleNoteTodo(workspaceId);
   const [copied, setCopied] = useState(false);
   const aiAvailable = useAiAvailable();
-
-  if (isEditing) {
-    return (
-      <NoteComposer
-        workspaceId={workspaceId}
-        note={note}
-        autoFocus
-        onDone={() => setIsEditing(false)}
-        onCancel={() => setIsEditing(false)}
-      />
-    );
-  }
+  const screen = usePinnedNotes(workspaceId);
 
   const shared = note.visibility === 'workspace';
   const lineCount = note.body.split('\n').length;
@@ -81,6 +83,17 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
     icon: Copy,
     onSelect: copyText,
   };
+  // A floating sticky over every page, for quick edits while working.
+  const screenItem = {
+    key: 'screen',
+    label: screen.isPinned(note.id)
+      ? 'Take off screen'
+      : screen.full
+        ? 'Pin to screen (6 max: close one first)'
+        : 'Pin to screen',
+    icon: PictureInPicture2,
+    onSelect: () => (screen.isPinned(note.id) ? screen.unpin(note.id) : screen.pin(note.id)),
+  };
   // A new AI chat with this note already added (as if picked with "#").
   const askItem = aiAvailable && {
     key: 'ask-ai',
@@ -96,9 +109,10 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
   };
   const menuItems = note.isMine
     ? [
-        { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => setIsEditing(true) },
+        { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => setIsOpen(true) },
         askItem,
         copyItem,
+        screenItem,
         {
           key: 'pin',
           label: note.pinned ? 'Unpin' : 'Pin to top',
@@ -121,31 +135,45 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
           onSelect: () => setIsDeleting(true),
         },
       ].filter(Boolean)
-    : [askItem, copyItem].filter(Boolean);
+    : [
+        { key: 'open', label: 'Open', icon: Maximize2, onSelect: () => setIsOpen(true) },
+        askItem,
+        copyItem,
+        screenItem,
+      ].filter(Boolean);
+
+  // A click anywhere on the card opens it, except on its own controls (to-dos,
+  // #tags, links, the menu, "Show more") or while selecting text to copy.
+  function openFromClick(event) {
+    // Clicks from portals (the menu's sheet on phones) bubble here through React.
+    if (!event.currentTarget.contains(event.target)) return;
+    if (event.target.closest('button, a, input, label, [role="checkbox"], [role="menu"], dialog')) {
+      return;
+    }
+    if (window.getSelection()?.toString()) return;
+    setIsOpen(true);
+  }
   // AI chats are private, so only the person who saved the answer can open its chat.
   const fromAi = note.source?.kind === 'ai';
 
   return (
     <article
+      onClick={openFromClick}
       className={cn(
-        'border-line/70 bg-surface group rounded-2xl border shadow-sm transition-shadow hover:shadow-md',
+        'border-line/70 bg-surface hover:border-line group relative cursor-pointer rounded-2xl border shadow-sm transition-[box-shadow,border-color] hover:shadow-md',
         compact ? 'p-3' : 'p-4',
         note.pinned && 'ring-accent/25 ring-2',
       )}
     >
-      <header className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          {note.title && (
-            <h3 className="mb-1 break-words text-[15px] font-semibold leading-snug">
-              {note.title}
-            </h3>
-          )}
-        </div>
+      {/* In the corner, so a note without a title starts right at the top. */}
+      <div
+        className={cn(
+          'absolute flex items-center gap-1',
+          compact ? 'right-1.5 top-1.5' : 'right-2.5 top-2.5',
+        )}
+      >
         {note.pinned && (
-          <Pin
-            className="text-accent dark:text-ink mt-1 h-3.5 w-3.5 shrink-0"
-            aria-label="Pinned"
-          />
+          <Pin className="text-accent dark:text-ink h-3.5 w-3.5 shrink-0" aria-label="Pinned" />
         )}
         {menuItems.length > 0 && (
           <ActionMenu
@@ -153,18 +181,22 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
             title={note.title ?? 'Note'}
             items={menuItems}
             revealOnHover
-            className="-mr-1.5 -mt-1"
           />
         )}
-      </header>
+      </div>
+      {note.title && (
+        <h3 className="mb-1 break-words pr-14 text-[15px] font-semibold leading-snug">
+          {note.title}
+        </h3>
+      )}
 
       <div
         className={cn(
           'relative',
           folded && (compact ? 'max-h-36 overflow-hidden' : 'max-h-80 overflow-hidden'),
         )}
-        onDoubleClick={note.isMine ? () => setIsEditing(true) : undefined}
-        title={note.isMine ? 'Double-click to edit' : undefined}
+        // The text runs under the corner menu only when there's a title above it.
+        style={note.title ? undefined : { paddingRight: '3.5rem' }}
       >
         <NoteMarkdown
           text={note.body}
@@ -269,6 +301,12 @@ export function NoteCard({ workspaceId, note, onTagClick, hideProjectId, compact
         <p className="text-danger mt-2 text-xs">{(save.error ?? toggleTodo.error).message}</p>
       )}
 
+      <NoteWindow
+        workspaceId={workspaceId}
+        noteId={isOpen ? note.id : null}
+        note={note}
+        onClose={() => setIsOpen(false)}
+      />
       <ConfirmDialog
         open={isDeleting}
         title="Delete this note?"

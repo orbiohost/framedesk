@@ -129,7 +129,11 @@ async function testApp(id) {
   try {
     if (id === 'facebook') {
       const url = new URL('https://graph.facebook.com/oauth/access_token');
-      url.search = new URLSearchParams({ client_id: clientId, client_secret: secret, grant_type: 'client_credentials' });
+      url.search = new URLSearchParams({
+        client_id: clientId,
+        client_secret: secret,
+        grant_type: 'client_credentials',
+      });
       const body = await readJson(await fetch(url, { signal }));
       return body.access_token
         ? { ok: true, message: 'Meta accepted the App ID and secret.' }
@@ -151,20 +155,31 @@ async function testApp(id) {
         signal,
       });
       const body = await readJson(response);
-      if (body.error === 'invalid_grant') return { ok: true, message: 'Google accepted the client ID and secret.' };
-      return { ok: false, message: body.error_description || body.error || 'Google refused these keys.' };
+      if (body.error === 'invalid_grant')
+        return { ok: true, message: 'Google accepted the client ID and secret.' };
+      return {
+        ok: false,
+        message: body.error_description || body.error || 'Google refused these keys.',
+      };
     }
     if (id === 'tiktok') {
       const response = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ client_key: clientId, client_secret: secret, grant_type: 'client_credentials' }),
+        body: new URLSearchParams({
+          client_key: clientId,
+          client_secret: secret,
+          grant_type: 'client_credentials',
+        }),
         signal,
       });
       const body = await readJson(response);
       return body.access_token
         ? { ok: true, message: 'TikTok accepted the client key and secret.' }
-        : { ok: false, message: body.error_description || body.error || 'TikTok refused these keys.' };
+        : {
+            ok: false,
+            message: body.error_description || body.error || 'TikTok refused these keys.',
+          };
     }
     if (id === 'instagram') {
       // A made-up code: Instagram says "Invalid platform app" when the ID isn't
@@ -186,7 +201,11 @@ async function testApp(id) {
       const message = String(body.error_message ?? body.error?.message ?? '');
       if (/platform app|client_id|app id/i.test(message)) {
         const metaUrl = new URL('https://graph.facebook.com/oauth/access_token');
-        metaUrl.search = new URLSearchParams({ client_id: clientId, client_secret: secret, grant_type: 'client_credentials' });
+        metaUrl.search = new URLSearchParams({
+          client_id: clientId,
+          client_secret: secret,
+          grant_type: 'client_credentials',
+        });
         const meta = await readJson(await fetch(metaUrl, { signal }));
         return {
           ok: false,
@@ -196,13 +215,23 @@ async function testApp(id) {
         };
       }
       if (/secret/i.test(message)) {
-        return { ok: false, message: 'Instagram knows the app ID but the secret is wrong. Copy the "Instagram app secret" again.' };
+        return {
+          ok: false,
+          message:
+            'Instagram knows the app ID but the secret is wrong. Copy the "Instagram app secret" again.',
+        };
       }
       return { ok: true, message: 'Instagram accepted the app ID and secret.' };
     }
     return { ok: null, message: 'This platform can only be checked by logging in.' };
   } catch (error) {
-    return { ok: false, message: error?.name === 'TimeoutError' ? 'The platform did not answer in time.' : 'Could not reach the platform.' };
+    return {
+      ok: false,
+      message:
+        error?.name === 'TimeoutError'
+          ? 'The platform did not answer in time.'
+          : 'Could not reach the platform.',
+    };
   }
 }
 
@@ -223,7 +252,8 @@ async function testYoutubeKey() {
 
 const router = Router();
 const appParam = validate({ params: z.object({ app: z.enum(APP_IDS) }) });
-const keyText = (label) => z.string().trim().min(4, `Enter the ${label}`).max(500).regex(/^\S+$/, 'No spaces');
+const keyText = (label) =>
+  z.string().trim().min(4, `Enter the ${label}`).max(500).regex(/^\S+$/, 'No spaces');
 
 router.get(
   '/',
@@ -233,7 +263,9 @@ router.get(
 router.put(
   '/apps/:app',
   appParam,
-  validate({ body: z.object({ clientId: keyText('ID'), clientSecret: keyText('secret').optional() }) }),
+  validate({
+    body: z.object({ clientId: keyText('ID'), clientSecret: keyText('secret').optional() }),
+  }),
   asyncHandler(async (req, res) => {
     const { app } = req.params;
     const saved = await savedAppSummary();
@@ -251,7 +283,11 @@ router.delete(
   appParam,
   asyncHandler(async (req, res) => {
     await clearAppCredentials(req.params.app);
-    await recordAudit({ actorId: req.user._id, action: 'social.app_keys_cleared', details: { app: req.params.app } });
+    await recordAudit({
+      actorId: req.user._id,
+      action: 'social.app_keys_cleared',
+      details: { app: req.params.app },
+    });
     sendSuccess(res, await overview());
   }),
 );

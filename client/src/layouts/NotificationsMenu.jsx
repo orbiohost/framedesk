@@ -1,7 +1,8 @@
-import { addDays, startOfDay } from 'date-fns';
-import { Bell, BellRing, CalendarClock, CircleAlert, Settings } from 'lucide-react';
+import { addDays, formatDistanceToNowStrict, startOfDay } from 'date-fns';
+import { Bell, BellRing, CalendarClock, CheckCheck, CircleAlert, Send, Settings } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAlertInbox } from '../features/alerts/hooks.js';
 import { itemLabel } from '../features/calendar/calendarMeta.js';
 import { useCalendarFeed } from '../features/calendar/hooks.js';
 import { useNotifications, useThisDeviceEndpoint } from '../features/notifications/hooks.js';
@@ -22,8 +23,38 @@ function useAlerts(workspaceId) {
     from,
     to: addDays(from, LOOKAHEAD_DAYS + 1),
   });
+  const { data: projectAlerts = [] } = useAlertInbox(workspaceId);
 
   return useMemo(() => {
+    // Project alerts from teammates (and answers to mine) come first.
+    const rung = projectAlerts.map((alert) => {
+      const ago = formatDistanceToNowStrict(new Date(alert.createdAt), { addSuffix: true });
+      const to = `/w/${workspaceId}/projects/${alert.projectId}`;
+      if (alert.kind === 'sent') {
+        const parts = [
+          alert.opened.length && `Opened by ${alert.opened.join(', ')}`,
+          alert.waiting && `${alert.waiting} not opened yet`,
+        ].filter(Boolean);
+        return {
+          id: `a-${alert.id}`,
+          tone: alert.waiting ? 'alertSent' : 'alertDone',
+          title: `Your alert · ${alert.projectTitle}`,
+          detail: `${parts.join(' · ') || 'Nobody could be alerted'} · ${ago}`,
+          to,
+        };
+      }
+      const ringing = alert.status === 'ringing';
+      const answer = { opened: 'Opened', dismissed: 'Dismissed', expired: 'Missed' };
+      return {
+        id: `a-${alert.id}`,
+        tone: ringing ? 'alert' : 'alertDone',
+        title: `${alert.sender || 'A teammate'} alerted you · ${alert.projectTitle}`,
+        detail: `${ringing ? 'Needs you now' : (answer[alert.status] ?? 'Alert')}${
+          alert.message ? ` · “${alert.message}”` : ''
+        } · ${ago}`,
+        to,
+      };
+    });
     const overdue = myTasks
       .filter((task) => task.status !== 'done' && isOverdue(task.dueDate))
       .map((task) => ({
@@ -44,8 +75,8 @@ function useAlerts(workspaceId) {
         }`,
         to: `/w/${workspaceId}/calendar`,
       }));
-    return [...overdue, ...soon];
-  }, [workspaceId, myTasks, upcoming]);
+    return [...rung, ...overdue, ...soon];
+  }, [workspaceId, myTasks, upcoming, projectAlerts]);
 }
 
 // Offers device reminders until this device has them (or can't have them).
@@ -87,6 +118,9 @@ export function NotificationsMenu({ workspaceId }) {
   const close = useCallback(() => setIsOpen(false), []);
   useDismiss(containerRef, isOpen, close);
   const alerts = useAlerts(workspaceId);
+  const ringingCount = alerts.filter((alert) => alert.tone === 'alert').length;
+  // Answered alerts are history, not something new.
+  const newCount = alerts.filter((alert) => alert.tone !== 'alertDone').length;
 
   return (
     <div ref={containerRef} className="relative">
@@ -94,12 +128,22 @@ export function NotificationsMenu({ workspaceId }) {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
-        aria-label={`Notifications${alerts.length ? `, ${alerts.length} new` : ''}`}
+        aria-label={`Notifications${newCount ? `, ${newCount} new` : ''}`}
         className="bg-subtle hover:text-ink text-ink/80 relative grid h-10 w-10 place-items-center rounded-full"
       >
-        <Bell className="h-4 w-4" aria-hidden="true" />
-        {alerts.length > 0 && (
-          <span className="bg-danger ring-surface absolute right-2 top-2 h-2 w-2 rounded-full ring-2" />
+        {ringingCount > 0 ? (
+          <BellRing className="h-4 w-4 animate-bounce text-amber-600" aria-hidden="true" />
+        ) : (
+          <Bell className="h-4 w-4" aria-hidden="true" />
+        )}
+        {ringingCount > 0 ? (
+          <span className="ring-surface absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white ring-2">
+            {ringingCount}
+          </span>
+        ) : (
+          newCount > 0 && (
+            <span className="bg-danger ring-surface absolute right-2 top-2 h-2 w-2 rounded-full ring-2" />
+          )
         )}
       </button>
 
@@ -113,7 +157,13 @@ export function NotificationsMenu({ workspaceId }) {
           )}
           <ul className="max-h-80 space-y-1 overflow-y-auto">
             {alerts.map((alert) => {
-              const Icon = alert.tone === 'danger' ? CircleAlert : CalendarClock;
+              const Icon =
+                {
+                  danger: CircleAlert,
+                  alert: BellRing,
+                  alertSent: Send,
+                  alertDone: CheckCheck,
+                }[alert.tone] ?? CalendarClock;
               return (
                 <li key={alert.id}>
                   <Link
@@ -126,7 +176,13 @@ export function NotificationsMenu({ workspaceId }) {
                         'grid h-8 w-8 shrink-0 place-items-center rounded-full',
                         alert.tone === 'danger'
                           ? 'bg-pink text-danger dark:text-ink'
-                          : 'bg-lavender text-accent dark:text-ink',
+                          : alert.tone === 'alert'
+                            ? 'bg-amber-400 text-amber-950'
+                            : alert.tone === 'alertSent'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-200'
+                              : alert.tone === 'alertDone'
+                                ? 'bg-subtle text-muted'
+                                : 'bg-lavender text-accent dark:text-ink',
                       )}
                     >
                       <Icon className="h-4 w-4" aria-hidden="true" />

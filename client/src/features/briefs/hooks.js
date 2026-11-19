@@ -52,3 +52,19 @@ export function useBriefTasks(workspaceId, projectId) {
     onSuccess: () => invalidateFeatures(queryClient, workspaceId, [FEATURE, 'tasks', 'projects']),
   });
 }
+
+const CLIP_BUSY = ['queued', 'processing'];
+
+// Every audio/video clip in the folder with its transcript. Polls while
+// speech-to-text is still writing one, so new lines appear as they come.
+export function useBriefTranscripts(workspaceId, projectId, { enabled = true } = {}) {
+  return useQuery({
+    queryKey: featureKey(workspaceId, FEATURE, projectId, 'transcripts'),
+    queryFn: () => api.get(`${basePath(workspaceId, projectId)}/transcripts`),
+    enabled: enabled && Boolean(projectId),
+    refetchInterval: (query) =>
+      query.state.data?.clips?.some((clip) => CLIP_BUSY.includes(clip.transcript?.status))
+        ? 4000
+        : false,
+  });
+}

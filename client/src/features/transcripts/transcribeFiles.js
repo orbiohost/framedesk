@@ -1,4 +1,4 @@
-// What Whisper can read and the viewer can play. Camera RAW (.r3d, .braw) and
+// What speech-to-text (ffmpeg + Qwen3-ASR) can read and the viewer can play. Camera RAW (.r3d, .braw) and
 // .mxf are left out: they upload fine to the Drive but can't be transcribed here.
 const AUDIO = 'wav mp3 aac m4a aif aiff flac ogg oga opus weba wma amr ac3 mka';
 const VIDEO = 'mp4 mov m4v avi mkv webm mts m2ts ts mpeg mpg m2v vob 3gp 3g2 ogv wmv flv';

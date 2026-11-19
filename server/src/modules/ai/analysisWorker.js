@@ -1,11 +1,13 @@
 import { getStorageDriver } from '../../storage/storageDriver.js';
 import { logger } from '../../utils/logger.js';
 import { markBriefStale } from '../briefs/briefStale.js';
+import { isClip } from '../briefs/briefTranscribe.js';
 import { StoredFile } from '../files/file.model.js';
 import { correctedMime } from '../files/fileTypes.js';
 import { Folder } from '../files/folder.model.js';
 import { briefsRootOf } from '../files/folders.service.js';
 import { Project } from '../projects/project.model.js';
+import { asr } from '../transcripts/asrClient.js';
 import { Transcript } from '../transcripts/transcript.model.js';
 import { findPoolWorkspace } from '../workspaces/storagePool.js';
 import { Workspace } from '../workspaces/workspace.model.js';
@@ -34,6 +36,12 @@ const HOUSEKEEPING_MS = 10 * 60 * 1000;
 const INLINE_IMAGE_BYTES = 15 * 1024 * 1024;
 const TEXT_BYTES = 300 * 1024;
 const TRANSCRIPT_CHARS = 200_000;
+// A Notes & Briefs clip waits this long at most for its transcript (a long
+// speech-to-text queue), then the AI reads the media itself.
+const TRANSCRIPT_WAIT_MS = 6 * 60 * 60 * 1000;
+// ...and this long for the decision whether to transcribe it at all.
+const DECISION_WAIT_MS = 10 * 60 * 1000;
+const RECHECK_MS = 60 * 1000;
 
 // What Gemini accepts, keyed by the mime we store.
 // https://ai.google.dev/gemini-api/docs/video-understanding (and audio, image, document pages)
@@ -157,16 +165,25 @@ async function setState(file, state, extra = {}) {
   );
 }
 
+// Whether a clip with a finished transcript is read from its words rather
+// than sent whole to the AI: always for audio and meeting material; for other
+// video unless its project, or someone for this one file, asked to watch it.
+function readsFromTranscript(file, project, meetingMaterial) {
+  if (file.category === 'audio' || meetingMaterial) return true;
+  if (file.category !== 'video') return false;
+  return !file.aiWatchVideo && project?.aiClipSource !== 'video';
+}
+
 async function contextFor(file) {
   const [folder, project, transcript, briefsRoot] = await Promise.all([
     Folder.findOne({ _id: file.folderId, workspaceId: file.workspaceId }).select('name').lean(),
     file.projectId
       ? Project.findOne({ _id: file.projectId, workspaceId: file.workspaceId })
-          .select('title')
+          .select('title aiClipSource')
           .lean()
       : null,
-    Transcript.findOne({ workspaceId: file.workspaceId, fileId: file._id, status: 'done' })
-      .select('segments')
+    Transcript.findOne({ workspaceId: file.workspaceId, fileId: file._id })
+      .select('segments status createdAt')
       .lean(),
     briefsRootOf(file.workspaceId, file.folderId).catch(() => null),
   ]);
@@ -175,7 +192,15 @@ async function contextFor(file) {
   if (folder) lines.push(`Folder: ${folder.name}`);
   if (file.note) lines.push(`Team note: ${truncate(file.note, 1000)}`);
   if (file.tags?.length) lines.push(`Team tags: ${file.tags.join(', ')}`);
-  return { header: lines.join('\n'), transcript, meetingMaterial: Boolean(briefsRoot) };
+  return {
+    header: lines.join('\n'),
+    transcript: transcript?.status === 'done' ? transcript : null,
+    transcriptPending: ['queued', 'processing'].includes(transcript?.status),
+    transcriptQueuedAt: transcript?.createdAt ?? null,
+    hasTranscriptRow: Boolean(transcript),
+    meetingMaterial: Boolean(briefsRoot),
+    readFromTranscript: readsFromTranscript(file, project, Boolean(briefsRoot)),
+  };
 }
 
 async function readText(file) {
@@ -199,6 +224,20 @@ async function inputFor(file, settings, context) {
   const mime = correctedMime(file.mime, file.extension);
   const geminiMime = GEMINI_MIME[mime];
   const maxBytes = settings.maxAnalysisMB * 1024 * 1024;
+
+  // A clip speech-to-text already wrote out: the AI reads the words instead of
+  // listening to it again. Much faster and a fraction of the credits.
+  if (context.readFromTranscript && context.transcript?.segments?.length) {
+    const kind = file.category === 'video' ? 'recording' : 'audio';
+    return {
+      source: 'transcript',
+      parts: [
+        {
+          text: `Transcript of this ${kind} (local speech-to-text, with timestamps):\n${transcriptText(context.transcript.segments, TRANSCRIPT_CHARS)}`,
+        },
+      ],
+    };
+  }
 
   if (TEXT_EXTENSIONS.has(file.extension)) {
     const text = await readText(file);
@@ -263,6 +302,20 @@ function parseResult(text) {
   }
 }
 
+// A clip that is being transcribed right now (and will be read from its
+// words) waits for the transcript instead of being sent whole to the AI.
+function shouldWaitForTranscript(file, context) {
+  if (!isClip(file) || !asr.isEnabled() || !context.readFromTranscript) return false;
+  const age = Date.now() - new Date(file.createdAt).getTime();
+  if (context.transcriptPending) {
+    const since = context.transcriptQueuedAt ?? file.createdAt;
+    return Date.now() - new Date(since).getTime() < TRANSCRIPT_WAIT_MS;
+  }
+  if (!context.meetingMaterial) return false;
+  // Not decided yet whether it gets transcribed (briefs/briefTranscribe.js).
+  return !context.hasTranscriptRow && !file.autoTranscribe && age < DECISION_WAIT_MS;
+}
+
 // askedBy: who the credits are charged to (the person asking, or the uploader).
 async function analyse(file, settings, askedBy = null) {
   const workspace = await Workspace.findById(file.workspaceId).lean();
@@ -274,7 +327,18 @@ async function analyse(file, settings, askedBy = null) {
   }
 
   const context = await contextFor(file);
+  if (shouldWaitForTranscript(file, context)) {
+    // Not an attempt: checked again shortly, or woken when the transcript is done.
+    return setState(file, null, { aiRetryAt: new Date(Date.now() + RECHECK_MS) });
+  }
   const input = await inputFor(file, settings, context);
+  // Watching a video that has a transcript: the exact words help too.
+  if (input.source === 'media' && isClip(file) && context.transcript?.segments?.length) {
+    input.parts.push({
+      text: `Its transcript (local speech-to-text, with timestamps):
+${transcriptText(context.transcript.segments, TRANSCRIPT_CHARS)}`,
+    });
+  }
   if (input.skip) {
     await AiInsight.updateOne(
       { workspaceId: file.workspaceId, fileId: file._id },

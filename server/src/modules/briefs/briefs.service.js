@@ -2,10 +2,16 @@ import { AppError } from '../../utils/AppError.js';
 import { getAiSettings, isAiLive } from '../ai/aiSettings.service.js';
 import { StoredFile } from '../files/file.model.js';
 import { assertFolderAccess } from '../files/folderAccess.js';
+import { toFileDto } from '../files/files.service.js';
 import { briefsFolderTree, ensureBriefsFolder } from '../files/folders.service.js';
 import { assertProjectExists } from '../projects/projects.service.js';
 import { createNote } from '../quickNotes/quickNotes.service.js';
 import { createTask } from '../tasks/tasks.service.js';
+import { asr } from '../transcripts/asrClient.js';
+import { Transcript } from '../transcripts/transcript.model.js';
+import { briefPercent } from './briefProgress.js';
+import { startBriefRun } from './briefStale.js';
+import { isClip } from './briefTranscribe.js';
 import { BRIEF_DEBOUNCE_MS } from './briefWorker.js';
 import { ProjectBrief } from './projectBrief.model.js';
 
@@ -62,7 +68,30 @@ function toBriefDto(brief, { folder, files, progress, aiEnabled }) {
     })),
     // Whether the brief was written from exactly what is there now.
     upToDate: sameIds(brief?.sourceFileIds, files),
+    // The audio and video here, for the Transcripts tab.
+    clips: clipsSummary(files),
   };
+}
+
+function clipsSummary(files) {
+  const clips = files.filter(isClip);
+  return {
+    total: clips.length,
+    transcribed: clips.filter((file) => file.transcript?.status === 'done').length,
+    transcribing: clips.filter((file) => ['queued', 'processing'].includes(file.transcript?.status))
+      .length,
+  };
+}
+
+// Puts each clip's transcript state (no text) on it as `transcript`.
+async function withTranscriptState(workspaceId, files) {
+  const clipIds = files.filter(isClip).map((file) => file._id);
+  if (clipIds.length === 0) return files;
+  const rows = await Transcript.find({ workspaceId, fileId: { $in: clipIds } })
+    .select('fileId status progress startedAt finishedAt durationSec')
+    .lean();
+  const byFile = new Map(rows.map((row) => [String(row.fileId), row]));
+  return files.map((file) => ({ ...file, transcript: byFile.get(String(file._id)) ?? null }));
 }
 
 function sameIds(sourceIds, files) {
@@ -78,9 +107,10 @@ async function briefsFolderFor(workspaceId, projectId, viewer) {
   return folder;
 }
 
-function progressOf(files) {
+function progressOf(brief, files) {
   const readable = files.filter((file) => ANALYSABLE.includes(file.category));
   return {
+    ...briefPercent(brief, files, BRIEF_DEBOUNCE_MS),
     total: files.length,
     read: readable.filter((file) => file.aiState === 'done').length,
     reading: readable.filter((file) => [null, 'processing'].includes(file.aiState)).length,
@@ -107,18 +137,22 @@ async function queue(workspaceId, projectId, folderId, { force = false } = {}) {
     },
     { upsert: true },
   );
+  await startBriefRun({ workspaceId, projectId });
 }
 
 export async function getBrief(workspaceId, projectId, viewer) {
   const folder = await briefsFolderFor(workspaceId, projectId, viewer);
   const folderIds = await briefsFolderTree(workspaceId, folder);
-  const [files, settings] = await Promise.all([
+  const [found, settings] = await Promise.all([
     StoredFile.find({ workspaceId, folderId: { $in: folderIds }, deletedAt: null })
-      .select('displayName category extension folderId aiState createdAt')
+      .select(
+        'displayName category extension folderId aiState aiRetryAt size mediaDurationSec createdAt updatedAt',
+      )
       .sort({ createdAt: 1 })
       .lean(),
     getAiSettings(),
   ]);
+  const files = await withTranscriptState(workspaceId, found);
   let brief = await ProjectBrief.findOne({ workspaceId, projectId }).lean();
   const aiEnabled = isAiLive(settings);
 
@@ -131,7 +165,7 @@ export async function getBrief(workspaceId, projectId, viewer) {
       brief = await ProjectBrief.findOne({ workspaceId, projectId }).lean();
     }
   }
-  return toBriefDto(brief, { folder, files, progress: progressOf(files), aiEnabled });
+  return toBriefDto(brief, { folder, files, progress: progressOf(brief, files), aiEnabled });
 }
 
 export async function regenerateBrief(workspaceId, projectId, viewer) {
@@ -238,4 +272,54 @@ export async function createTasksFromBrief(workspaceId, userId, projectId, itemI
 
 export async function deleteBriefForProject(workspaceId, projectId) {
   await ProjectBrief.deleteMany({ workspaceId, projectId });
+}
+
+/**
+ * Every audio and video file in the project's Notes & Briefs folder with its
+ * transcript, oldest first: the brief's Transcripts tab.
+ */
+export async function listBriefTranscripts(workspaceId, projectId, viewer) {
+  const folder = await briefsFolderFor(workspaceId, projectId, viewer);
+  const folderIds = await briefsFolderTree(workspaceId, folder);
+  const files = await StoredFile.find({
+    workspaceId,
+    folderId: { $in: folderIds },
+    deletedAt: null,
+    category: { $in: ['audio', 'video'] },
+  })
+    .sort({ createdAt: 1 })
+    .populate('uploadedBy', 'name')
+    .lean();
+  const transcripts = await Transcript.find({
+    workspaceId,
+    fileId: { $in: files.map((file) => file._id) },
+  })
+    .select(
+      'fileId status progress segments detectedLanguage durationSec error autoMaxSec editedAt',
+    )
+    .lean();
+  const byFile = new Map(transcripts.map((row) => [String(row.fileId), row]));
+  return {
+    enabled: asr.isEnabled(),
+    clips: files.map((file) => {
+      const transcript = byFile.get(String(file._id));
+      return {
+        file: toFileDto(file),
+        durationSec: transcript?.durationSec ?? file.mediaDurationSec ?? null,
+        // queued / too_long / off / null (not looked at yet).
+        autoTranscribe: file.autoTranscribe ?? null,
+        transcript: transcript
+          ? {
+              status: transcript.status,
+              progress: transcript.progress,
+              language: transcript.detectedLanguage,
+              error: transcript.error,
+              auto: Boolean(transcript.autoMaxSec),
+              editedAt: transcript.editedAt ?? null,
+              segments: transcript.segments.map(({ start, end, text }) => ({ start, end, text })),
+            }
+          : null,
+      };
+    }),
+  };
 }

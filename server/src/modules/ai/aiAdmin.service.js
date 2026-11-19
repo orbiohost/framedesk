@@ -11,6 +11,7 @@ import { Workspace } from '../workspaces/workspace.model.js';
 import { getAiSettings, updateAiSettings } from './aiSettings.service.js';
 import { CreditLedger } from './creditLedger.model.js';
 import { addCredits, creditBalance, listLedger, resetUsageWindows } from './credits.service.js';
+import { isCloudflareConfigured } from './cloudflare.client.js';
 import { geminiKeyHint, isGeminiConfigured } from './gemini.client.js';
 
 const ALL = { crossWorkspace: true };
@@ -54,6 +55,8 @@ export async function getAiAdminOverview() {
   return {
     settings: await getAiSettings(),
     gemini: { configured: isGeminiConfigured(), keyHint: geminiKeyHint() },
+    // Cloudflare Workers AI runs "Create image" (FLUX); chat stays on Gemini.
+    cloudflare: { configured: isCloudflareConfigured() },
     plans: PLANS.map((plan) => ({ code: plan.code, name: plan.name })),
     usage: await usage(),
   };
